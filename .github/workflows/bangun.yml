@@ -1,0 +1,44 @@
+name: Android Fast Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # Menggunakan action resmi Gradle untuk caching otomatis yang sangat agresif
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+          # Cache hanya diperbarui jika build terjadi di branch main (mencegah cache bloat dari PR)
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Grant Execute Permission for Gradlew
+        run: chmod +x ./gradlew
+
+      # Build APK dengan flag optimasi kecepatan maksimal
+      - name: Build APK (Parallel & Cached)
+        run: ./gradlew assembleDebug --parallel --build-cache --configuration-cache
+        env:
+          # Menonaktifkan Daemon karena tidak efisien untuk single-run CI/CD
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pos-offline-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7
