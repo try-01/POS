@@ -6,11 +6,12 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * Persisted sale record. Items are serialized into [itemsJson] via kotlinx
- * serialization; the converter lives in [Converters]. For low-volume POS
- * (hundreds of tx/day) this is faster and simpler than a separate
- * transaction_items table + JOIN. Switch to a relational layout when item
- * lists grow large or you need per-item queries.
+ * Persisted sale record. Items are serialized into [itemsJson] via
+ * kotlinx.serialization inside [com.example.posoffline.data.repository.TransactionRepository]
+ * before insert. For low-volume POS (hundreds of tx/day) this is faster
+ * and simpler than a separate transaction_items table + JOIN. Switch to
+ * a relational layout when item lists grow large or you need per-item
+ * queries.
  */
 @Entity(
     tableName = "transactions",

@@ -92,7 +92,7 @@ class TransactionRepository(
         val entity = TransactionEntity(
             id = UUID.randomUUID().toString(),
             invoiceNo = invoiceNo,
-            itemsJson = "", // filled by Converters on insert
+            itemsJson = "", // filled in below, before insert
             subtotal = totals.subtotal,
             discount = totals.discount,
             taxRate = taxRate,

@@ -86,7 +86,6 @@ android-pos/
         │   ├── PosApplication.kt        # App + AppContainer (manual DI)
         │   ├── data/                    # ── "Room" layer ──
         │   │   ├── PosDatabase.kt
-        │   │   ├── Converters.kt
         │   │   ├── SettingsRepository.kt
         │   │   ├── dao/
         │   │   │   ├── ProductDao.kt

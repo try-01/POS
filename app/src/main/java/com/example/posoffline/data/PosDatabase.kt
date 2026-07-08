@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.posoffline.data.dao.ProductDao
 import com.example.posoffline.data.dao.TransactionDao
@@ -17,6 +16,13 @@ import com.example.posoffline.data.entity.TransactionEntity
  * Singleton: built once per process via [getInstance]. We pass the application
  * context to avoid leaking activities (a classic Android memory leak source).
  *
+ * Note on @TypeConverters:
+ *  - The transaction's `itemsJson` field is already a `String`, so Room
+ *    does not invoke any TypeConverter for it. The JSON encoding is done
+ *    by `TransactionRepository.checkout()` *before* insert. That keeps the
+ *    schema simple and avoids a converter that would have to round-trip
+ *    through kotlinx.serialization inside the Room generated code.
+ *
  * Why we disable destructive migration in production:
  *  - Sales data must never be silently lost on a schema bump. Use proper
  *    migrations instead. The seed data is idempotent, but a real shop
@@ -27,7 +33,6 @@ import com.example.posoffline.data.entity.TransactionEntity
     version = 1,
     exportSchema = true
 )
-@TypeConverters(Converters::class)
 abstract class PosDatabase : RoomDatabase() {
 
     abstract fun productDao(): ProductDao
