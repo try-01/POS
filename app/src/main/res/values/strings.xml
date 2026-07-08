@@ -1,6 +1,3 @@
 <resources>
-    <string name="app_name">POS Offline</string>
-    <string name="tab_pos">Kasir</string>
-    <string name="tab_inventory">Inventaris</string>
-    <string name="tab_history">Riwayat</string>
+    <string name="app_name">KasirKu POS</string>
 </resources>

@@ -1,17 +1,20 @@
-# Keep Room generated code
--keep class androidx.room.** { *; }
+# Add project specific ProGuard rules here.
+
+# Room
 -keep class * extends androidx.room.RoomDatabase
+-keep @androidx.room.Entity class *
+-dontwarn androidx.room.paging.**
 
-# Kotlin serialization
--keepattributes *Annotation*, InnerClasses
--dontnote kotlinx.serialization.AnnotationsKt
--keep,includedescriptorclasses class com.example.posoffline.**$$serializer { *; }
--keepclassmembers class com.example.posoffline.** {
-    *** Companion;
-}
--keepclasseswithmembers class com.example.posoffline.** {
-    kotlinx.serialization.KSerializer serializer(...);
-}
+# Hilt
+-keep class dagger.hilt.** { *; }
+-keep class javax.inject.** { *; }
+-keep class * extends dagger.hilt.android.internal.managers.ComponentSupplier { *; }
 
-# Keep our entities (Room maps them by name)
--keep class com.example.posoffline.data.entity.** { *; }
+# Coroutines
+-keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
+-keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
+
+# Keep data classes
+-keepclassmembers class * {
+    @com.google.gson.annotations.SerializedName <fields>;
+}
