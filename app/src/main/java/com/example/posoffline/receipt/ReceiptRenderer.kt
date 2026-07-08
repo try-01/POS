@@ -39,19 +39,20 @@ object ReceiptRenderer {
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
         }
         fun lineH(size: Float): Float = size + 4
-        fun advance(size: Float, extra: Int = 0) { y += (size + 2).toInt() + extra }
+        // Advance the cursor in *pixels*. We use Int because y itself is Int.
+        fun advance(px: Int, extra: Int = 0) { y += px + extra }
         fun center(text: String, size: Float, weight: Int) {
             paint.textSize = size
             paint.typeface = Typeface.create(Typeface.SANS_SERIF, weight)
             val w = paint.measureText(text)
             tmpC.drawText(text, (widthPx - w) / 2f, y.toFloat(), paint)
-            advance(size.toInt())
+            advance(size.toInt() + 4)
         }
         fun left(text: String, size: Float, weight: Int) {
             paint.textSize = size
             paint.typeface = Typeface.create(Typeface.SANS_SERIF, weight)
             tmpC.drawText(text, padding.toFloat(), y.toFloat(), paint)
-            advance(size.toInt())
+            advance(size.toInt() + 2)
         }
         fun divider() { y += 10 }
         fun row(l: String, r: String, bold: Boolean = false) {
@@ -60,7 +61,7 @@ object ReceiptRenderer {
             tmpC.drawText(l, padding.toFloat(), y.toFloat(), paint)
             val w = paint.measureText(r)
             tmpC.drawText(r, (widthPx - padding - w).toFloat(), y.toFloat(), paint)
-            advance(13, 2)
+            advance(15, 2) // 13px text height + 2px leading
         }
         // measure
         center(s.storeName, 17f, Typeface.BOLD)

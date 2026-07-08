@@ -47,7 +47,12 @@ fun HistoryScreen(container: AppContainer, onBack: () -> Unit) {
         factory = TransactionViewModel.Factory(container.transactionRepository)
     )
     val list by vm.list.collectAsStateWithLifecycle()
-    val (todayList, today) by vm.today.collectAsStateWithLifecycle()
+    // `vm.today` is a StateFlow<Pair<List<TransactionEntity>, TodaySummary>>.
+    // We can't destructure through `by` with collectAsStateWithLifecycle, so
+    // we read the Pair explicitly and pull the parts we need.
+    val todayData by vm.today.collectAsStateWithLifecycle()
+    val todayList = todayData.first
+    val today = todayData.second
 
     Column(
         modifier = Modifier
