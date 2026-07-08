@@ -212,14 +212,18 @@ common "controllers / models / views" layout.
 
 ```bash
 cd android-pos
-chmod +x gradlew
+chmod +x gradlew        # only needed the very first time
 ./gradlew :app:assembleDebug          # debug APK → app/build/outputs/apk/debug/
 ./gradlew :app:assembleRelease        # release APK (minify+shrink enabled)
 ./gradlew :app:installDebug           # build + install on a connected device
 ```
 
-> The first run will download the Gradle distribution and the
-> Compose / Room / KSP artifacts. Allow ~5–10 minutes on a clean
+> The `gradle-wrapper.jar` is committed alongside `gradlew`, so the
+> project is buildable immediately on a fresh clone.
+>
+> The first run will download the Gradle 8.11.1 distribution into
+> `~/.gradle/wrapper/dists/` (cached for all subsequent builds) and
+> the Compose / Room / KSP artifacts. Allow ~5–10 minutes on a clean
 > machine.
 
 ### C. Build & run from Android Studio

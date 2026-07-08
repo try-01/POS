@@ -1,17 +1,11 @@
 #!/bin/sh
 # gradlew shim.
 #
-# The Gradle wrapper jar (gradle/wrapper/gradle-wrapper.jar) is not
-# committed because it's a binary. You have two easy options:
-#
-#   1. Open the project in Android Studio once — it will generate the
-#      wrapper jar automatically during Gradle sync.
-#
-#   2. Run `gradle wrapper --gradle-version 8.11.1` from the project
-#      root with a system Gradle (brew install gradle / apt install gradle).
-#
-# Once the jar exists, this script simply invokes it with the JVM you
-# have configured.
+# The Gradle wrapper jar (gradle/wrapper/gradle-wrapper.jar) IS
+# committed in this repo (matching the standard Android project layout).
+# On first run it will download the Gradle 8.11.1 distribution itself
+# into ~/.gradle/wrapper/dists/, then cache it for all subsequent
+# builds. You only need a JDK 17 on your machine.
 
 set -e
 DIR=$(cd "$(dirname "$0")" && pwd)
