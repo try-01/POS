@@ -1,0 +1,26 @@
+# Gradle
+.gradle/
+build/
+out/
+local.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Captures
+captures/
+
+# Room generated schemas (kept on disk; exclude from git)
+# app/schemas/  <-- actually keep these for migration testing
+
+# Keystores
+*.jks
+*.keystore
+
+# Build outputs
+*.apk
+*.aab
+*.aar
