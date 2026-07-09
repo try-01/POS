@@ -1,20 +1,15 @@
-# Add project specific ProGuard rules here.
+# ProGuard Rules — KasirPOS
+# Optimasi: shrink + obfuscate + optimize untuk APK minim
 
-# Room
--keep class * extends androidx.room.RoomDatabase
--keep @androidx.room.Entity class *
--dontwarn androidx.room.paging.**
+# ── Room ───────────────────────────────────────────────────────
+-keep class com.example.kasirpos.data.local.entity.** { *; }
 
-# Hilt
--keep class dagger.hilt.** { *; }
--keep class javax.inject.** { *; }
--keep class * extends dagger.hilt.android.internal.managers.ComponentSupplier { *; }
-
-# Coroutines
+# ── Coroutines ─────────────────────────────────────────────────
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
 
-# Keep data classes
--keepclassmembers class * {
-    @com.google.gson.annotations.SerializedName <fields>;
-}
+# ── Compose ────────────────────────────────────────────────────
+-dontwarn androidx.compose.**
+
+# ── Bluetooth (reflection oleh Android OS) ────────────────────
+-keep class android.bluetooth.** { *; }

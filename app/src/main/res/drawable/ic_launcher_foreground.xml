@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Ikon kasir: kombinasi keranjang + receipt, centered di safe zone (72dp) -->
+    <group
+        android:translateX="18"
+        android:translateY="18">
+
+        <!-- Badan mesin kasir -->
+        <path
+            android:fillColor="#38BDF8"
+            android:pathData="M20,40 L52,40 L52,68 L20,68 Z" />
+
+        <!-- Layar kasir -->
+        <path
+            android:fillColor="#0F172A"
+            android:pathData="M22,42 L50,42 L50,52 L22,52 Z" />
+
+        <!-- Teks di layar (simulasi) -->
+        <path
+            android:fillColor="#34D399"
+            android:pathData="M26,46 L46,46 M26,49 L40,49"
+            android:strokeWidth="1.5"
+            android:strokeColor="#34D399" />
+
+        <!-- Laci uang -->
+        <path
+            android:fillColor="#38BDF8"
+            android:pathData="M24,54 L48,54 L48,66 L24,66 Z" />
+
+        <!-- Garis laci -->
+        <path
+            android:fillColor="#0F172A"
+            android:pathData="M24,58 L48,58"
+            android:strokeWidth="1"
+            android:strokeColor="#0F172A" />
+
+        <!-- Receipt keluar -->
+        <path
+            android:fillColor="#F8FAFC"
+            android:pathData="M30,30 L42,30 L42,42 L30,42 Z" />
+
+        <!-- Garis receipt -->
+        <path
+            android:fillColor="#0F172A"
+            android:pathData="M33,34 L39,34 M33,37 L38,37"
+            android:strokeWidth="1"
+            android:strokeColor="#0F172A" />
+
+        <!-- Koin / pembayaran -->
+        <circle
+            android:fillColor="#FB923C"
+            android:cx="54"
+            android:cy="52"
+            android:radius="6" />
+        <circle
+            android:fillColor="#34D399"
+            android:cx="60"
+            android:cy="58"
+            android:radius="5" />
+    </group>
+</vector>
