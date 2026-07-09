@@ -74,7 +74,8 @@ private val bottomNavItems = listOf(
     BottomNavItem("pos", "Kasir", Icons.Filled.PointOfSale, Icons.Outlined.PointOfSale),
     BottomNavItem("inventory", "Inventaris", Icons.Filled.Inventory2, Icons.Outlined.Inventory2),
     BottomNavItem("report", "Laporan", Icons.Filled.BarChart, Icons.Outlined.BarChart),
-    BottomNavItem("receipt", "Struk", Icons.AutoMirrored.Filled.ReceiptLong, Icons.AutoMirrored.Outlined.ReceiptLong)
+    @Suppress("DEPRECATION")
+    BottomNavItem("receipt", "Struk", Icons.Filled.ReceiptLong, Icons.Outlined.ReceiptLong)
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
