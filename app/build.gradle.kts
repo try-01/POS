@@ -27,6 +27,10 @@ android {
         }
     }
 
+    room {
+        schemaDirectory("$projectDir/schemas")
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
