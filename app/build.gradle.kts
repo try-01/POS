@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose") // Kotlin 2.x Compose Compiler plugin
     id("com.google.dagger.hilt.android")
-    id("kotlin-kapt")
+    id("com.google.devtools.ksp")
     id("androidx.room")
 }
 
@@ -17,14 +17,6 @@ android {
         targetSdk = 36   // Android 16
         versionCode = 1
         versionName = "1.0.0"
-
-        // Room schema export -> dibutuhkan untuk migrasi database yang aman di rilis berikutnya
-        javaCompileOptions {
-            annotationProcessorOptions {
-                arguments["room.schemaLocation"] = "$projectDir/schemas"
-                arguments["room.incremental"] = "true"
-            }
-        }
     }
 
     room {
@@ -72,11 +64,11 @@ dependencies {
     // --- Room (Database lokal offline) ---
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1") // dukungan Coroutines & Flow
-    kapt("androidx.room:room-compiler:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
 
     // --- Hilt (Dependency Injection) ---
     implementation("com.google.dagger:hilt-android:2.52")
-    kapt("com.google.dagger:hilt-compiler:2.52")
+    ksp("com.google.dagger:hilt-compiler:2.52")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     // --- Coroutines ---
