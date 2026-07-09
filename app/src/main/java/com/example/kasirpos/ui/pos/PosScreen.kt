@@ -522,7 +522,7 @@ private fun SummaryRow(
     amount: Long,
     color: Color,
     isBold: Boolean = false,
-    fontSize: Int = 14
+    fontSize: androidx.compose.ui.unit.TextUnit = 14.sp
 ) {
     Row(
         modifier = Modifier
@@ -534,13 +534,13 @@ private fun SummaryRow(
             label,
             color = if (isBold) TextPrimary else TextSecondary,
             fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
-            fontSize = fontSize.sp
+            fontSize = fontSize
         )
         Text(
             "Rp ${"%,d".format(amount)}",
             color = color,
             fontWeight = if (isBold) FontWeight.Bold else FontWeight.Medium,
-            fontSize = fontSize.sp
+            fontSize = fontSize
         )
     }
 }

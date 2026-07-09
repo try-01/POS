@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.kasirpos.data.local.entity.TransactionEntity
 import com.example.kasirpos.data.local.entity.TransactionItemEntity
 import com.example.kasirpos.data.repository.TransactionRepository
-import com.example.kasirpos.util.PdfExportUtil
 import com.example.kasirpos.util.PrinterUtil
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch

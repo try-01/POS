@@ -98,7 +98,7 @@ object PrinterUtil {
         buffer.write(byteArrayOf(0x1B, 0x21, 0x30.toByte())) // ESC ! 48
 
         val lines = text.split("\n")
-        for ((index, line) in lines) {
+        for ((index, line) in lines.withIndex()) {
             // Baris pertama = judul toko (bold besar), sisanya normal
             if (index == 1) {
                 // Reset format setelah judul
