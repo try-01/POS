@@ -27,7 +27,7 @@ import java.util.*
 @Composable
 fun ReceiptScreen(viewModel: ReceiptViewModel) {
     val state by viewModel.uiState.collectAsState()
-    val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("id")) }
+    val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("id-ID")) }
 
     Scaffold(containerColor = PrimaryDark) { padding ->
         Column(
@@ -234,4 +234,4 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
 )
 
 private fun String.format(vararg args: Any?): String =
-    java.lang.String.format(java.util.Locale("id"), this, *args)
+    java.lang.String.format(java.util.Locale.forLanguageTag("id-ID"), this, *args)

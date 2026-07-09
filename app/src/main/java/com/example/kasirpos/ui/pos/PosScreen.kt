@@ -752,7 +752,7 @@ private fun ReceiptDialog(
                 }
 
                 Text(
-                    "🕐 ${java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale("id")).format(java.util.Date(transaction.createdAt))}",
+                    "🕐 ${java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.forLanguageTag("id-ID")).format(java.util.Date(transaction.createdAt))}",
                     color = TextMuted,
                     fontSize = 12.sp,
                     modifier = Modifier.fillMaxWidth(),

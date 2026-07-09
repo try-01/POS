@@ -24,7 +24,7 @@ import java.util.*
 @Composable
 fun ReportScreen(viewModel: ReportViewModel) {
     val state by viewModel.uiState.collectAsState()
-    val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("id")) }
+    val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("id-ID")) }
 
     Scaffold(containerColor = PrimaryDark) { padding ->
         Column(

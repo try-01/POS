@@ -28,8 +28,7 @@ class KasirApp : Application() {
         TransactionRepository(
             database.transactionDao(),
             database.cartDao(),
-            database.productDao(),
-            database // Untuk atomic `withTransaction` di checkout
+            database.productDao()
         )
     }
 }

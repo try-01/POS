@@ -47,7 +47,9 @@ object DatabaseSeeder {
                 """INSERT OR IGNORE INTO products 
                    (id, name, sku, price, stock, imageUri, createdAt, updatedAt) 
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                arrayOf(
+                // Explicit type annotation: Array<Any?> untuk menghindari
+                // intersection type inference pada Comparable & Serializable
+                arrayOf<Any?>(
                     (i + 1).toLong(), p.name, p.sku, p.price, p.stock,
                     null, now, now
                 )

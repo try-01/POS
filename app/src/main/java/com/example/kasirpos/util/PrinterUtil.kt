@@ -45,6 +45,7 @@ object PrinterUtil {
                 )
             }
 
+            @Suppress("DEPRECATION")
             val adapter = BluetoothAdapter.getDefaultAdapter()
                 ?: return@withContext Result.failure(Exception("Bluetooth tidak tersedia"))
 

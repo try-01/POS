@@ -59,7 +59,7 @@ class ReceiptViewModel(
             val receiptText = PrinterUtil.formatReceiptText(
                 storeName = storeName,
                 transactionId = tx.id,
-                date = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale("id"))
+                date = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.forLanguageTag("id-ID"))
                     .format(java.util.Date(tx.createdAt)),
                 items = itemTuples,
                 subtotal = tx.subtotal,
