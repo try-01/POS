@@ -1,39 +1,48 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Izin Bluetooth untuk cetak struk -->
-    <!-- Untuk Android 12+ (API 31+), izin Bluetooth baru tidak perlu jika pakai SPP -->
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <!-- Tidak ada izin INTERNET: aplikasi didesain 100% offline -->
+
+    <!-- Diperlukan untuk cetak struk via printer Bluetooth ESC/POS (Android 12+/API 31+) -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-
-    <!-- Izin akses penyimpanan untuk ekspor PDF (Android 10-) -->
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
-
-    <!-- Fitur yang diperlukan / opsional -->
-    <uses-feature
-        android:name="android.hardware.bluetooth"
-        android:required="false" />
+    <!-- Kompatibilitas printer Bluetooth di perangkat lawas -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
 
     <application
-        android:name=".KasirApp"
-        android:allowBackup="true"
+        android:name=".KasirApplication"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
-        android:label="KasirPOS"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.KasirPOS">
+        android:label="KasirKu"
+        android:theme="@style/Theme.KasirKu"
+        android:hardwareAccelerated="true"
+        android:largeHeap="false">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
-            android:windowSoftInputMode="adjustResize">
+            android:theme="@style/Theme.KasirKu"
+            android:screenOrientation="unspecified">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- FileProvider untuk ekspor dan share PDF Struk offline secara aman -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

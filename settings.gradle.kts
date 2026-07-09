@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "KasirPOS"
+rootProject.name = "KasirKu"
 include(":app")
