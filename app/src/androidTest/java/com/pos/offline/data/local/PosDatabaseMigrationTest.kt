@@ -41,7 +41,7 @@ class PosDatabaseMigrationTest {
     @get:Rule
     val helper: MigrationTestHelper = MigrationTestHelper(
         InstrumentationRegistry.getInstrumentation(),
-        PosDatabase::class.java
+        PosDatabase::class.java.canonicalName
     )
 
     @Test

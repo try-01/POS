@@ -63,7 +63,7 @@ jobs:
   # -----------------------------------------------------------------
   migration-test:
     needs: build-and-verify
-    runs-on: ubuntu-latest       # PERUBAHAN UTAMA: Pindah ke Linux yang bebas antre
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -78,19 +78,34 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # PERBAIKAN 1: Berikan hak akses KVM secara paksa kepada user runner
+      - name: Enable KVM permissions
+        run: sudo chown $USER /dev/kvm
+
       - name: Run Room migration instrumentation test
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30          # API 30 sangat stabil dengan KVM di Ubuntu
-          target: aosp_atd       # Image ringan tanpa Google APIs
-          arch: x86_64           # Arsitektur Intel (akan diakselerasi oleh KVM Linux)
+          api-level: 30
+          target: aosp_atd
+          arch: x86_64
           disable-animations: true
-          # Hapus '-gpu swiftshader-indirect', di Linux biasanya tidak wajib tapi aman ditambahkan jika QEMU minta
-          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none -gpu swiftshader-indirect
-          script: >
-            ./gradlew :app:connectedDebugAndroidTest
-            -Pandroid.testInstrumentationRunnerArguments.class=com.pos.offline.data.local.PosDatabaseMigrationTest
-            --parallel --build-cache --stacktrace
+          # PERBAIKAN 2: Hapus '-gpu swiftshader-indirect' karena tidak didukung di environment ini
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: |
+            set -e
+            echo "===== 1) Bangun androidTest APK (regenerasi skema 2.json) ====="
+            ./gradlew :app:assembleDebugAndroidTest --stacktrace
+
+            echo "===== 2) Pohon skema pada app/schemas ====="
+            find app/schemas -type f -name "*.json" | sort
+
+            echo "===== 3) Aset androidTest yang ter-merge (path di dalam APK) ====="
+            find app/build/intermediates/android_test_assets -type f -name "*.json" 2>/dev/null | sort || true
+
+            echo "===== 4) Jalankan uji migrasi ====="
+            ./gradlew :app:connectedDebugAndroidTest \
+              -Pandroid.testInstrumentationRunnerArguments.class=com.pos.offline.data.local.PosDatabaseMigrationTest \
+              --parallel --build-cache --stacktrace
 
       - name: Upload test reports
         if: always()

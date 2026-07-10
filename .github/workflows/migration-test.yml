@@ -91,10 +91,21 @@ jobs:
           disable-animations: true
           # PERBAIKAN 2: Hapus '-gpu swiftshader-indirect' karena tidak didukung di environment ini
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
-          script: >
-            ./gradlew :app:connectedDebugAndroidTest
-            -Pandroid.testInstrumentationRunnerArguments.class=com.pos.offline.data.local.PosDatabaseMigrationTest
-            --parallel --build-cache --stacktrace
+          script: |
+            set -e
+            echo "===== 1) Bangun androidTest APK (regenerasi skema 2.json) ====="
+            ./gradlew :app:assembleDebugAndroidTest --parallel --build-cache --stacktrace
+
+            echo "===== 2) Pohon skema pada app/schemas ====="
+            find app/schemas -type f -name "*.json" | sort
+
+            echo "===== 3) Aset androidTest yang ter-merge (path di dalam APK) ====="
+            find app/build/intermediates/android_test_assets -type f -name "*.json" 2>/dev/null | sort || true
+
+            echo "===== 4) Jalankan uji migrasi ====="
+            ./gradlew :app:connectedDebugAndroidTest \
+              -Pandroid.testInstrumentationRunnerArguments.class=com.pos.offline.data.local.PosDatabaseMigrationTest \
+              --parallel --build-cache --stacktrace
 
       - name: Upload test reports
         if: always()
