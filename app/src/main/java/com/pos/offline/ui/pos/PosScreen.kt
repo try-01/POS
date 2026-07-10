@@ -156,7 +156,8 @@ fun PosScreen(
                         onClear = viewModel::clearCart,
                         onCheckout = viewModel::checkout,
                         canCheckout = !isCartEmpty && !isProcessing,
-                        isProcessing = isProcessing
+                        isProcessing = isProcessing,
+                        isWideLayout = true // <--- TAMBAHKAN INI UNTUK TABLET
                     )
                 }
             } else {
@@ -168,8 +169,9 @@ fun PosScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     CartPane(
-                        // UBAH BARIS INI: Ganti heightIn dengan weight(1f)
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        // UBAH KEMBALI: Ganti weight(1f) menjadi wrapContentHeight() 
+                        // agar tinggi panel memprioritaskan keamanan form input di bawahnya.
+                        modifier = Modifier.wrapContentHeight().fillMaxWidth(),
                         cart = cart,
                         totals = totals,
                         discount = discount,
@@ -185,7 +187,8 @@ fun PosScreen(
                         onClear = viewModel::clearCart,
                         onCheckout = viewModel::checkout,
                         canCheckout = !isCartEmpty && !isProcessing,
-                        isProcessing = isProcessing
+                        isProcessing = isProcessing,
+                        isWideLayout = false // <--- TAMBAHKAN INI UNTUK HP
                     )
                 }
             }
@@ -301,7 +304,7 @@ private fun ProductCard(product: ProductEntity, onAdd: () -> Unit) {
 // ============================ PANEL KERANJANG ============================
 
 @Composable
-@Suppress("LongParameterList") // Parameter dipisah eksplisit agar fungsi composable stabil & testable.
+@Suppress("LongParameterList")
 private fun CartPane(
     modifier: Modifier,
     cart: List<CartItemEntity>,
@@ -319,13 +322,17 @@ private fun CartPane(
     onClear: () -> Unit,
     onCheckout: () -> Unit,
     canCheckout: Boolean,
-    isProcessing: Boolean
+    isProcessing: Boolean,
+    isWideLayout: Boolean // <--- 1. TAMBAHKAN PARAMETER INI DI SINI
 ) {
     GlassCard(
         modifier = modifier.padding(12.dp),
         contentPadding = PaddingValues(12.dp)
     ) {
-        Column(Modifier.fillMaxSize()) {
+        // 2. UBAH Modifier Column: Hanya gunakan fillMaxSize jika di tablet, 
+        // sisanya biarkan mengikuti wrapContentHeight dari induknya.
+        Column(if (isWideLayout) Modifier.fillMaxSize() else Modifier.fillMaxWidth()) {
+            
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.ShoppingCart, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
@@ -340,9 +347,15 @@ private fun CartPane(
             }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
-            // Daftar item; weight(1f) agar total tetap menempel di bawah.
+            // 3. UBAH Modifier LazyColumn: 
             LazyColumn(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        // Di tablet list mengambil sisa ruang utuh.
+                        // Di HP list dibatasi tinggi maksimalnya (240.dp) agar form di bawah tidak terpotong.
+                        if (isWideLayout) Modifier.weight(1f) else Modifier.heightIn(max = 240.dp)
+                    ),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(cart, key = { it.id }, contentType = { "cart" }) { item ->
@@ -358,7 +371,7 @@ private fun CartPane(
             Spacer(Modifier.height(8.dp))
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
-            // ---- Input & ringkasan total ----
+            // (Kode TotalsSummary dan Button Bayar di bawah sini tetap sama, biarkan utuh)
             TotalsSummary(
                 totals = totals,
                 change = change,
@@ -369,7 +382,7 @@ private fun CartPane(
                 onTaxRateChange = onTaxRateChange,
                 onPaidChange = onPaidChange
             )
-
+ 
             Spacer(Modifier.height(12.dp))
             Button(
                 onClick = onCheckout,
