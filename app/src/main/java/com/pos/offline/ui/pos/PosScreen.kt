@@ -168,7 +168,8 @@ fun PosScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     CartPane(
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                        // UBAH BARIS INI: Ganti heightIn dengan weight(1f)
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                         cart = cart,
                         totals = totals,
                         discount = discount,
