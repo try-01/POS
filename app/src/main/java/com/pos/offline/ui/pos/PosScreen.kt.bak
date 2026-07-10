@@ -236,10 +236,10 @@ private fun ProductPane(
 private fun ProductCard(product: ProductEntity, onAdd: () -> Unit) {
     val outOfStock = product.stock <= 0
     GlassCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = !outOfStock, onClick = onAdd),
-        contentPadding = PaddingValues(14.dp)
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(12.dp), // Sedikit dikurangi agar lebih compact
+        enabled = !outOfStock,
+        onClick = onAdd // Pindahkan onClick ke sini agar ripple rapi
     ) {
         Column {
             Text(
@@ -248,13 +248,13 @@ private fun ProductCard(product: ProductEntity, onAdd: () -> Unit) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
             Text(
                 text = product.sku,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -270,21 +270,25 @@ private fun ProductCard(product: ProductEntity, onAdd: () -> Unit) {
                         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
-                // Tombol tambah bulat — area sentuh cukup besar (aksesibilitas).
-                Surface(
-                    shape = CircleShape,
-                    color = if (outOfStock) MaterialTheme.colorScheme.surfaceVariant
-                    else MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(40.dp).clip(CircleShape)
-                ) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.clickable(onClick = onAdd)) {
-                        Icon(
-                            Icons.Rounded.Add,
-                            contentDescription = "Tambah ${product.name}",
-                            tint = if (outOfStock) MaterialTheme.colorScheme.onSurfaceVariant
-                            else MaterialTheme.colorScheme.onPrimary
+                
+                // Tombol Add diubah agar ukurannya pas dan tidak memakan ruang ekstra
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(36.dp) // Lebih compact dari sebelumnya (40.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (outOfStock) MaterialTheme.colorScheme.surfaceVariant
+                            else MaterialTheme.colorScheme.primary
                         )
-                    }
+                ) {
+                    Icon(
+                        Icons.Rounded.Add,
+                        contentDescription = "Tambah ${product.name}",
+                        tint = if (outOfStock) MaterialTheme.colorScheme.onSurfaceVariant
+                        else MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }
@@ -394,11 +398,18 @@ private fun CartRow(
     onRemove: () -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp), // Jarak antar baris yang konsisten
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text(item.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                item.name, 
+                style = MaterialTheme.typography.bodyLarge, 
+                maxLines = 1, 
+                overflow = TextOverflow.Ellipsis
+            )
             Text(
                 "${item.unitPrice.toRupiah()} × ${item.quantity}",
                 style = MaterialTheme.typography.bodySmall,
@@ -410,24 +421,64 @@ private fun CartRow(
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold
         )
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(12.dp))
+        
         QuantityStepper(item.quantity, onDecrease, onIncrease)
-        IconButton(onClick = onRemove) {
-            Icon(Icons.Rounded.Close, contentDescription = "Hapus", modifier = Modifier.size(18.dp))
+        
+        Spacer(Modifier.width(8.dp))
+        
+        // Tombol hapus kustom tanpa padding siluman 48dp
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f))
+                .clickable(onClick = onRemove),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Rounded.Close, 
+                contentDescription = "Hapus", 
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onErrorContainer
+            )
         }
     }
 }
 
 @Composable
 private fun QuantityStepper(qty: Int, onDecrease: () -> Unit, onIncrease: () -> Unit) {
+    // Membuang IconButton dan menggantinya dengan Box kustom agar tingginya terkontrol
     Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onDecrease) {
-            Icon(Icons.Rounded.Remove, contentDescription = "Kurangi", modifier = Modifier.size(18.dp))
-        }
-        Text("$qty", modifier = Modifier.width(28.dp), fontWeight = FontWeight.SemiBold)
-        IconButton(onClick = onIncrease) {
-            Icon(Icons.Rounded.Add, contentDescription = "Tambah", modifier = Modifier.size(18.dp))
-        }
+        CompactActionBox(icon = Icons.Rounded.Remove, contentDescription = "Kurangi", onClick = onDecrease)
+        
+        Text(
+            text = "$qty", 
+            modifier = Modifier.width(32.dp), 
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center
+        )
+        
+        CompactActionBox(icon = Icons.Rounded.Add, contentDescription = "Tambah", onClick = onIncrease)
+    }
+}
+
+// Komponen pembantu untuk tombol stepper yang sangat compact
+@Composable
+private fun CompactActionBox(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(16.dp))
     }
 }
 
@@ -569,27 +620,32 @@ private fun SuccessDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Button(onClick = onDismiss) { Text("Selesai") }
-        },
-        title = { Text("Transaksi Berhasil ✓") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("No. Struk: ${result.transaction.id}")
-                Text("Total: ${result.transaction.total.toRupiah()}", fontWeight = FontWeight.SemiBold)
-                Text("Bayar: ${result.transaction.paidAmount.toRupiah()}")
-                Text("Kembali: ${result.transaction.change.toRupiah()}", color = MaterialTheme.colorScheme.primary)
+            Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { 
+                Text("Selesai") 
             }
         },
-        // Tombol aksi struk (disusun vertikal agar mudah disentuh).
-        dismissButton = {
-            Column(horizontalAlignment = Alignment.End) {
-                FilledTonalButton(onClick = onPrint, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Rounded.Print, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp)); Text("Cetak Bluetooth")
+        title = { Text("Transaksi Berhasil ✓") },
+        // Pindahkan tombol cetak/ekspor ke dalam 'text' agar tidak merusak layout slot
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("No. Struk: ${result.transaction.id}")
+                    Text("Total: ${result.transaction.total.toRupiah()}", fontWeight = FontWeight.SemiBold)
+                    Text("Bayar: ${result.transaction.paidAmount.toRupiah()}")
+                    Text("Kembali: ${result.transaction.change.toRupiah()}", color = MaterialTheme.colorScheme.primary)
                 }
-                Spacer(Modifier.height(6.dp))
-                OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) {
-                    Text("Ekspor PDF")
+                
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalButton(onClick = onPrint, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Rounded.Print, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Cetak Bluetooth")
+                    }
+                    OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) {
+                        Text("Ekspor PDF")
+                    }
                 }
             }
         }
