@@ -59,11 +59,11 @@ jobs:
         run: ./gradlew :app:testDebugUnitTest --parallel --build-cache --stacktrace
 
   # -----------------------------------------------------------------
-  # JOB 2 — uji migrasi di emulator
+  # JOB 2 — uji migrasi di emulator (Ubuntu dengan Akselerasi KVM)
   # -----------------------------------------------------------------
   migration-test:
     needs: build-and-verify
-    runs-on: macos-13            # WAJIB: Gunakan mesin Intel yang mendukung akselerasi hardware
+    runs-on: ubuntu-latest       # PERUBAHAN UTAMA: Pindah ke Linux yang bebas antre
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -81,12 +81,12 @@ jobs:
       - name: Run Room migration instrumentation test
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30          # API 30 sangat stabil di arsitektur x86_64
-          target: aosp_atd       # Menggunakan image ringan khusus CI (jika gagal, ganti ke google_apis)
-          arch: x86_64           # Arsitektur Intel
+          api-level: 30          # API 30 sangat stabil dengan KVM di Ubuntu
+          target: aosp_atd       # Image ringan tanpa Google APIs
+          arch: x86_64           # Arsitektur Intel (akan diakselerasi oleh KVM Linux)
           disable-animations: true
-          # Tambahan -gpu swiftshader-indirect sangat penting untuk stabilitas mesin Intel di GitHub Actions
-          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader-indirect -camera-back none -camera-front none
+          # Hapus '-gpu swiftshader-indirect', di Linux biasanya tidak wajib tapi aman ditambahkan jika QEMU minta
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none -gpu swiftshader-indirect
           script: >
             ./gradlew :app:connectedDebugAndroidTest
             -Pandroid.testInstrumentationRunnerArguments.class=com.pos.offline.data.local.PosDatabaseMigrationTest
