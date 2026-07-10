@@ -38,7 +38,7 @@ private data class SeedProduct(
         TransactionEntity::class,
         TransactionItemEntity::class
     ],
-    version = 1,
+    version = 2,
     // exportSchema = true: Room mengekspor riwayat skema ke app/schemas (JSON)
     // melalui plugin "androidx.room" di build.gradle.kts. Berkas tersebut wajib
     // di-commit ke VCS supaya migrasi versi database dapat dibangkitkan & diuji.
