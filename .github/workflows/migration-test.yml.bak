@@ -14,11 +14,11 @@
 name: Database Migration Test
 
 on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch: {} # bisa dijalankan manual dari tab Actions
+#  push:
+#    branches: [ main, master ]
+#  pull_request:
+#    branches: [ main, master ]
+  workflow_dispatch: # bisa dijalankan manual dari tab Actions
 
 # Batalkan run lama yang masih jalan pada branch/PR yang sama (hemat minutes).
 concurrency:
