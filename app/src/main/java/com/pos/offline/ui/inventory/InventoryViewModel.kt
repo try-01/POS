@@ -27,7 +27,7 @@ data class ProductFormState(
     val name: String = "",
     val sku: String = "",
     val price: Long = 0L,
-//    val cost: Long = 0L,        // harga modal/beli (kolom `cost`, ditambah di v2)
+    val cost: Long = 0L,        // harga modal/beli (kolom `cost`, ditambah di v2)
     val stock: Int = 0,
     val createdAt: Long = System.currentTimeMillis()
 ) {
@@ -82,7 +82,7 @@ class InventoryViewModel(
             name = product.name,
             sku = product.sku,
             price = product.price,
-//            cost = product.cost,
+            cost = product.cost,
             stock = product.stock,
             createdAt = product.createdAt
         )
@@ -110,7 +110,7 @@ class InventoryViewModel(
             name = name,
             sku = sku,
             price = state.price,
-//            cost = state.cost,
+            cost = state.cost,
             stock = state.stock,
             active = true,
             // Pertahankan createdAt asli saat edit; pakai sekarang saat baru.
