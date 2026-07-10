@@ -27,8 +27,8 @@ data class ProductEntity(
     val price: Long,            // Harga jual (Rupiah). Long = presisi uang.
     // Harga modal/beli (Rupiah). Ditambahkan di v2 (lihat MIGRATION_1_2).
     // defaultValue "0" wajib agar default konsisten antara fresh-install & migrasi.
-//    @ColumnInfo(name = "cost", defaultValue = "0")
-//    val cost: Long = 0L,
+    @ColumnInfo(name = "cost", defaultValue = "0")
+    val cost: Long = 0L,
     val stock: Int,             // Stok aktif yang tersedia untuk dijual
     val active: Boolean = true, // soft-delete: false = disembunyikan dari katalog
     val createdAt: Long = System.currentTimeMillis(),
