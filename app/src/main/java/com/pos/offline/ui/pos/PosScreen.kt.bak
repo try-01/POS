@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -124,7 +126,8 @@ fun PosScreen(
                     )
                 }
             )
-        }
+        },
+        contentWindowInsets = WindowInsets.statusBars
     ) { inner ->
         BoxWithConstraints(
             modifier = Modifier
@@ -132,6 +135,8 @@ fun PosScreen(
                 .padding(inner)
         ) {
             val isWide = maxWidth >= 840.dp
+            val maxH = maxHeight // Ambil tinggi pasti dari layar
+
             if (isWide) {
                 Row(Modifier.fillMaxSize()) {
                     ProductPane(
@@ -164,16 +169,19 @@ fun PosScreen(
             } else {
                 Column(Modifier.fillMaxSize()) {
                     ProductPane(
-                        // MEMBERIKAN BOBOT 1.2f: Katalog Produk mendapat porsi ~55% layar tetap
-                        modifier = Modifier.weight(1.2f).fillMaxWidth(),
+                        // Produk akan mengambil SEMUA sisa ruang setelah keranjang digambar
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                         products = products,
                         onAdd = viewModel::addToCart
                     )
-                    
+                    Spacer(Modifier.height(8.dp))
                     CartPane(
-                        // MEMBERIKAN BOBOT 1f: Keranjang mendapat porsi ~45% layar tetap
-                        // Keranjang tidak akan pernah bisa mendesak Produk lagi!
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        // RAHASIA 1: wrapContentHeight (mengecil jika kosong)
+                        // + heightIn(max = maxH * 0.65f) (maksimal 65% layar jika penuh)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight()
+                            .heightIn(max = maxH * 0.65f),
                         cart = cart,
                         totals = totals,
                         discount = discount,
@@ -190,7 +198,6 @@ fun PosScreen(
                         onCheckout = viewModel::checkout,
                         canCheckout = !isCartEmpty && !isProcessing,
                         isProcessing = isProcessing
-                        // HAPUS isWideLayout dari sini
                     )
                 }
             }
@@ -328,12 +335,12 @@ private fun CartPane(
     // Parameter isWideLayout SUDAH DIHAPUS
 ) {
     GlassCard(
-        // PERBAIKAN CELAH BAWAH: Set padding bottom ke 0.dp agar merapat ke navigasi
-        modifier = modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 0.dp),
+        // Padding bottom dikembalikan ke 12.dp karena celah bawah sudah dibasmi oleh Scaffold
+        modifier = modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
         contentPadding = PaddingValues(12.dp)
     ) {
-        // SELALU gunakan fillMaxSize. Ia akan patuh pada parent constraint.
-        Column(Modifier.fillMaxSize()) {
+        // HAPUS Modifier.fillMaxSize()! Biarkan Column beradaptasi.
+        Column(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.ShoppingCart, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
@@ -350,9 +357,9 @@ private fun CartPane(
 
             // DAFTAR ITEM BELANJA
             LazyColumn(
-                // GUNAKAN weight(1f): Daftar ini akan mengambil seluruh sisa ruang di tengah keranjang
-                // dan akan otomatis men-scroll dirinya sendiri jika itemnya banyak.
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                // RAHASIA 2: weight(1f, fill = false). 
+                // List tidak akan rakus memakan ruang, tapi akan otomatis scroll jika item terlalu banyak!
+                modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(cart, key = { it.id }, contentType = { "cart" }) { item ->
@@ -368,7 +375,7 @@ private fun CartPane(
             Spacer(Modifier.height(8.dp))
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
-            // ---- Input & ringkasan total (Akan selalu menempel di dasar keranjang) ----
+            // ---- Input & ringkasan total ----
             TotalsSummary(
                 totals = totals,
                 change = change,

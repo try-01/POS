@@ -332,35 +332,37 @@ private fun CartPane(
     onCheckout: () -> Unit,
     canCheckout: Boolean,
     isProcessing: Boolean
-    // Parameter isWideLayout SUDAH DIHAPUS
 ) {
     GlassCard(
-        // Padding bottom dikembalikan ke 12.dp karena celah bawah sudah dibasmi oleh Scaffold
         modifier = modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
-        contentPadding = PaddingValues(12.dp)
+        // 1. PANGKAS PADDING DALAM KARTU
+        contentPadding = PaddingValues(10.dp) 
     ) {
-        // HAPUS Modifier.fillMaxSize()! Biarkan Column beradaptasi.
         Column(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.ShoppingCart, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Keranjang", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                Icon(Icons.Rounded.ShoppingCart, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(6.dp))
+                // 2. KECILKAN UKURAN JUDUL
+                Text("Keranjang", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 if (cart.isNotEmpty()) {
-                    TextButton(onClick = onClear) {
-                        Icon(Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    TextButton(
+                        onClick = onClear, 
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Icon(Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Kosongkan")
+                        Text("Kosongkan", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            // 3. TIPISKAN JARAK GARIS PEMBATAS
+            HorizontalDivider(Modifier.padding(vertical = 4.dp)) 
 
-            // DAFTAR ITEM BELANJA
             LazyColumn(
-                // RAHASIA 2: weight(1f, fill = false). 
-                // List tidak akan rakus memakan ruang, tapi akan otomatis scroll jika item terlalu banyak!
                 modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                // 4. RAPATKAN JARAK ANTAR ITEM KERANJANG
+                verticalArrangement = Arrangement.spacedBy(4.dp) 
             ) {
                 items(cart, key = { it.id }, contentType = { "cart" }) { item ->
                     CartRow(
@@ -372,10 +374,9 @@ private fun CartPane(
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            // 5. TIPISKAN JARAK GARIS PEMBATAS BAWAH
+            HorizontalDivider(Modifier.padding(vertical = 4.dp)) 
 
-            // ---- Input & ringkasan total ----
             TotalsSummary(
                 totals = totals,
                 change = change,
@@ -387,12 +388,13 @@ private fun CartPane(
                 onPaidChange = onPaidChange
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(6.dp))
             Button(
                 onClick = onCheckout,
                 enabled = canCheckout,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(14.dp)
+                // 6. PAKSA TOMBOL LEBIH PENDEK (Dari 52.dp menjadi 42.dp)
+                modifier = Modifier.fillMaxWidth().height(42.dp), 
+                shape = RoundedCornerShape(12.dp)
             ) {
                 if (isProcessing) {
                     CircularProgressIndicator(
@@ -401,8 +403,8 @@ private fun CartPane(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Icon(Icons.Rounded.Check, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text("Bayar · ${totals.total.toRupiah()}")
                 }
             }
@@ -514,23 +516,30 @@ private fun TotalsSummary(
     onTaxRateChange: (Double) -> Unit,
     onPaidChange: (Long) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    // 1. NOL-KAN JARAK ANTAR BARIS (Diatur rapat)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) { 
         SummaryLine("Subtotal", totals.subtotal.toRupiah())
-        // Input diskon (Rupiah) & pajak (%).
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp), 
+            modifier = Modifier.padding(vertical = 2.dp)
+        ) {
             MoneyField(
-                label = "Diskon (Rp)",
+                label = "Diskon", 
                 value = discount,
                 onValueChange = onDiscountChange,
-                modifier = Modifier.weight(1f)
+                // 2. PAKSA TINGGI INPUT DISKON MENJADI 46.dp
+                modifier = Modifier.weight(1f).height(46.dp) 
             )
             DecimalField(
-                label = "Pajak (%)",
+                label = "Pajak", 
                 value = taxRate * 100.0,
                 onValueChange = { pct -> onTaxRateChange((pct / 100.0).coerceIn(0.0, 100.0)) },
-                modifier = Modifier.weight(1f)
+                // 3. PAKSA TINGGI INPUT PAJAK MENJADI 46.dp
+                modifier = Modifier.weight(1f).height(46.dp) 
             )
         }
+        
         if (totals.discount > 0) SummaryLine("Diskon", "- ${totals.discount.toRupiah()}")
         if (totals.tax > 0) SummaryLine("Pajak", totals.tax.toRupiah())
 
@@ -538,10 +547,11 @@ private fun TotalsSummary(
         SummaryLine("Total", totals.total.toRupiah(), emphasize = true)
 
         MoneyField(
-            label = "Uang dibayar (Rp)",
+            label = "Uang dibayar", 
             value = paid,
             onValueChange = onPaidChange,
-            modifier = Modifier.fillMaxWidth()
+            // 4. PAKSA TINGGI INPUT PEMBAYARAN MENJADI 46.dp
+            modifier = Modifier.fillMaxWidth().height(46.dp).padding(top = 2.dp) 
         )
         if (paid > 0) SummaryLine("Kembalian", change.toRupiah(), color = MaterialTheme.colorScheme.primary)
     }
