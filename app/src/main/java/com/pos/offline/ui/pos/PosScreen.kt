@@ -157,22 +157,23 @@ fun PosScreen(
                         onClear = viewModel::clearCart,
                         onCheckout = viewModel::checkout,
                         canCheckout = !isCartEmpty && !isProcessing,
-                        isProcessing = isProcessing,
-                        isWideLayout = true // <--- TAMBAHKAN INI UNTUK TABLET
+                        isProcessing = isProcessing
+                        // HAPUS isWideLayout dari sini
                     )
                 }
             } else {
                 Column(Modifier.fillMaxSize()) {
                     ProductPane(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        // MEMBERIKAN BOBOT 1.2f: Katalog Produk mendapat porsi ~55% layar tetap
+                        modifier = Modifier.weight(1.2f).fillMaxWidth(),
                         products = products,
                         onAdd = viewModel::addToCart
                     )
-                    Spacer(Modifier.height(8.dp))
+                    
                     CartPane(
-                        // UBAH KEMBALI: Ganti weight(1f) menjadi wrapContentHeight() 
-                        // agar tinggi panel memprioritaskan keamanan form input di bawahnya.
-                        modifier = Modifier.wrapContentHeight().fillMaxWidth(),
+                        // MEMBERIKAN BOBOT 1f: Keranjang mendapat porsi ~45% layar tetap
+                        // Keranjang tidak akan pernah bisa mendesak Produk lagi!
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                         cart = cart,
                         totals = totals,
                         discount = discount,
@@ -188,8 +189,8 @@ fun PosScreen(
                         onClear = viewModel::clearCart,
                         onCheckout = viewModel::checkout,
                         canCheckout = !isCartEmpty && !isProcessing,
-                        isProcessing = isProcessing,
-                        isWideLayout = false // <--- TAMBAHKAN INI UNTUK HP
+                        isProcessing = isProcessing
+                        // HAPUS isWideLayout dari sini
                     )
                 }
             }
@@ -323,17 +324,16 @@ private fun CartPane(
     onClear: () -> Unit,
     onCheckout: () -> Unit,
     canCheckout: Boolean,
-    isProcessing: Boolean,
-    isWideLayout: Boolean // <--- 1. TAMBAHKAN PARAMETER INI DI SINI
+    isProcessing: Boolean
+    // Parameter isWideLayout SUDAH DIHAPUS
 ) {
     GlassCard(
-        modifier = modifier.padding(12.dp),
+        // PERBAIKAN CELAH BAWAH: Set padding bottom ke 0.dp agar merapat ke navigasi
+        modifier = modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 0.dp),
         contentPadding = PaddingValues(12.dp)
     ) {
-        // 2. UBAH Modifier Column: Hanya gunakan fillMaxSize jika di tablet, 
-        // sisanya biarkan mengikuti wrapContentHeight dari induknya.
-        Column(if (isWideLayout) Modifier.fillMaxSize() else Modifier.fillMaxWidth()) {
-            
+        // SELALU gunakan fillMaxSize. Ia akan patuh pada parent constraint.
+        Column(Modifier.fillMaxSize()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.ShoppingCart, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
@@ -348,15 +348,11 @@ private fun CartPane(
             }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
-            // 3. UBAH Modifier LazyColumn: 
+            // DAFTAR ITEM BELANJA
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(
-                        // Di tablet list mengambil sisa ruang utuh.
-                        // Di HP list dibatasi tinggi maksimalnya (240.dp) agar form di bawah tidak terpotong.
-                        if (isWideLayout) Modifier.weight(1f) else Modifier.heightIn(max = 240.dp)
-                    ),
+                // GUNAKAN weight(1f): Daftar ini akan mengambil seluruh sisa ruang di tengah keranjang
+                // dan akan otomatis men-scroll dirinya sendiri jika itemnya banyak.
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(cart, key = { it.id }, contentType = { "cart" }) { item ->
@@ -372,7 +368,7 @@ private fun CartPane(
             Spacer(Modifier.height(8.dp))
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
-            // (Kode TotalsSummary dan Button Bayar di bawah sini tetap sama, biarkan utuh)
+            // ---- Input & ringkasan total (Akan selalu menempel di dasar keranjang) ----
             TotalsSummary(
                 totals = totals,
                 change = change,
@@ -383,7 +379,7 @@ private fun CartPane(
                 onTaxRateChange = onTaxRateChange,
                 onPaidChange = onPaidChange
             )
- 
+
             Spacer(Modifier.height(12.dp))
             Button(
                 onClick = onCheckout,
