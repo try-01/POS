@@ -47,20 +47,21 @@ android {
 
     buildFeatures { compose = true }
 
-    // Sediakan skema JSON yang diekspor Room sebagai ASET androidTest, agar
-    // MigrationTestHelper bisa membaca berkas 1.json / 2.json.
+    // Sediakan skema JSON Room sebagai ASET uji agar MigrationTestHelper bisa
+    // membaca 1.json / 2.json. Plugin Room menempatkan skema di
+    //   app/schemas/<namaKanonik>/<versi>.json
+    // jadi cukup mendaftarkan "schemas" sebagai sumber aset — berkas akan berakhir
+    // di path "<namaKanonik>/<versi>.json" di dalam APK.
     //
-    // Catatan layout: plugin "androidx.room" menempatkan skema pada subfolder
-    // per-variant (schemas/<variant>/<package>/PosDatabase/<ver>.json). Karena
-    // MigrationTestHelper mencari berkas di path "<package>.PosDatabase/<ver>.json"
-    // relatif terhadap root aset, kita mendaftarkan folder variant agar cocok.
-    // Mendaftarkan kedua jalur (dengan & tanpa subfolder variant) membuat konfigurasi
-    // tetap berfungsi tak peduli layout yang dipakai plugin — yang tak ada akan diabaikan.
+    // Didaftarkan ke DUA source set agar TAHAN BANTING (robust):
+    //  - androidTest (primer): aset dibaca via konteks uji (getContext).
+    //  - debug (cadangan): MigrationTestHelper otomatis JATUH ke konteks aplikasi
+    //    (getTargetContext) bila aset uji tak ditemukan — jadi tes tetap lolos walau
+    //    mekanisme merge aset androidTest berperilaku aneh di suatu versi AGP.
+    //    (Hanya varian debug yang terpengaruh; APK rilis tetap bersih.)
     sourceSets {
-        getByName("androidTest").assets.srcDirs(
-            "$projectDir/schemas/debug",
-            "$projectDir/schemas"
-        )
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+        getByName("debug").assets.srcDir("$projectDir/schemas")
     }
 
     packaging {

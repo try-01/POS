@@ -94,7 +94,7 @@ jobs:
           script: |
             set -e
             echo "===== 1) Bangun androidTest APK (regenerasi skema 2.json) ====="
-            ./gradlew :app:assembleDebugAndroidTest --stacktrace
+            ./gradlew :app:assembleDebugAndroidTest --parallel --build-cache --stacktrace
 
             echo "===== 2) Pohon skema pada app/schemas ====="
             find app/schemas -type f -name "*.json" | sort

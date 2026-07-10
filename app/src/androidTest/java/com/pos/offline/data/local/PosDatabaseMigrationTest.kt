@@ -40,8 +40,14 @@ class PosDatabaseMigrationTest {
 
     @get:Rule
     val helper: MigrationTestHelper = MigrationTestHelper(
+        // Bentuk (Instrumentation, Class) — non-deprecated untuk migrasi manual.
+        // Helper akan menurunkan assetsFolder = nama kanonik kelas, lalu membuka aset di
+        //     "<namaKanonik>/<version>.json"
+        // Karena plugin Room menulis skema ke app/schemas/<namaKanonik>/<versi>.json
+        // dan srcDir aset memetakan folder tsb langsung ke root aset, di dalam APK
+        // berkas tepat berada di "<namaKanonik>/<versi>.json" → cocok.
         InstrumentationRegistry.getInstrumentation(),
-        PosDatabase::class.java.canonicalName
+        PosDatabase::class.java
     )
 
     @Test
