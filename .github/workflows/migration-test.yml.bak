@@ -92,20 +92,25 @@ jobs:
           # PERBAIKAN 2: Hapus '-gpu swiftshader-indirect' karena tidak didukung di environment ini
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: |
-            set -e
-            echo "===== 1) Bangun androidTest APK (regenerasi skema 2.json) ====="
-            ./gradlew :app:assembleDebugAndroidTest --parallel --build-cache --stacktrace
+            echo "===== 1) Bangun APK app + androidTest (regenerasi skema) ====="
+            ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --parallel --build-cache --stacktrace
 
             echo "===== 2) Pohon skema pada app/schemas ====="
             find app/schemas -type f -name "*.json" | sort
 
-            echo "===== 3) Aset androidTest yang ter-merge (path di dalam APK) ====="
-            find app/build/intermediates/android_test_assets -type f -name "*.json" 2>/dev/null | sort || true
+            echo "===== 3) Inspeksi ISI APK (bukti skema ada di dalam APK) ====="
+            echo "--- androidTest APK (.json) ---"
+            unzip -l app/build/outputs/apk/androidTest/debug/*.apk 2>/dev/null | grep -i "json" || echo "(tidak ada *.json di androidTest APK)"
+            echo "--- debug app APK (.json) ---"
+            unzip -l app/build/outputs/apk/debug/*.apk 2>/dev/null | grep -i "json" || echo "(tidak ada *.json di app APK)"
 
             echo "===== 4) Jalankan uji migrasi ====="
-            ./gradlew :app:connectedDebugAndroidTest \
-              -Pandroid.testInstrumentationRunnerArguments.class=com.pos.offline.data.local.PosDatabaseMigrationTest \
-              --parallel --build-cache --stacktrace
+            ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.pos.offline.data.local.PosDatabaseMigrationTest --parallel --build-cache --stacktrace || code=$?
+
+            echo "===== 5) Hasil tes (XML) ====="
+            find app/build/outputs/androidTest-results -name "*.xml" -exec cat {} \; 2>/dev/null || true
+
+            exit ${code:-0}
 
       - name: Upload test reports
         if: always()

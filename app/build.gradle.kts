@@ -69,6 +69,16 @@ android {
     }
 }
 
+// URUTAN BUILD (penting agar skema versi terbaru, mis. 2.json, masuk ke APK):
+// KSP membangkitkan <version>.json (mis. 2.json untuk skema saat ini) selama
+// kspDebugKotlin. Tanpa dependensi eksplisit, task merge*Assets bisa berjalan
+// SEBELUM 2.json ditulis → hanya 1.json (yang sudah di-commit) yang ter-merge.
+// Memaksa merge assets tergantung pada kspDebugKotlin menjamin kedua berkas ada.
+afterEvaluate {
+    tasks.matching { it.name == "mergeDebugAssets" || it.name == "mergeDebugAndroidTestAssets" }
+        .configureEach { dependsOn("kspDebugKotlin") }
+}
+
 dependencies {
     // ---- Compose (Material 3) ----
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
