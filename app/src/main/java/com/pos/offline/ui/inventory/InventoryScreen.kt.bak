@@ -206,13 +206,13 @@ private fun ProductRow(
                     StockBadge(stock = product.stock)
                     Spacer(Modifier.width(10.dp))
                     // Laba per unit = harga jual − modal (kolom `cost` dari v2).
-//                    if (product.cost > 0) {
-//                        Text(
-//                            "Laba ${(product.price - product.cost).toRupiah()}",
-//                            style = MaterialTheme.typography.bodySmall,
-//                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-//                        )
-//                    }
+                    if (product.cost > 0) {
+                        Text(
+                            "Laba ${(product.price - product.cost).toRupiah()}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
                 }
             }
             IconButton(onClick = onEdit) {
