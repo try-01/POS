@@ -81,11 +81,10 @@ jobs:
       - name: Run Room migration instrumentation test
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 33          # API 33/34 sangat dioptimalkan untuk aarch64
+          api-level: 33          
           target: google_apis    
-          arch: aarch64          # OPTIMASI: Native ARM64, emulator menyala dalam hitungan detik
+          arch: arm64-v8a        # PERBAIKAN: Gunakan format penamaan yang didukung
           disable-animations: true
-          # OPTIMASI: Mematikan kamera dan sensor yang tidak perlu untuk tes database
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: >
             ./gradlew :app:connectedDebugAndroidTest
