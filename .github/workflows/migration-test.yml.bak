@@ -1,0 +1,126 @@
+# ===================================================================
+# CI: uji migrasi database Room (androidTest / instrumented)
+# ===================================================================
+# Menjalankan PosDatabaseMigrationTest yang memverifikasi:
+#   1. migrasi v1→v2 menghasilkan skema valid (cocok dengan 2.json), dan
+#   2. data lama terjaga + kolom baru `cost` ber-default 0.
+#
+# PRASYARAT SKEMA (penting!):
+#   - 2.json dibangkitkan OTOMATIS saat build (skema saat ini, version=2).
+#   - 1.json (skema v1) HARUS sudah di-commit ke repo, karena Room tidak
+#     membangkitkannya lagi. Job `build-and-verify` akan GAGAL dengan pesan
+#     jelas bila 1.json belum ada — lihat juga README §5.
+# ===================================================================
+name: Database Migration Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch: {} # bisa dijalankan manual dari tab Actions
+
+# Batalkan run lama yang masih jalan pada branch/PR yang sama (hemat minutes).
+concurrency:
+  group: migration-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # -----------------------------------------------------------------
+  # JOB 1 — gerbang cepat di Ubuntu (tanpa emulator):
+  #   kompilasi, ekspor skema Room, pastikan 1.json & 2.json ada, unit test.
+  #   Gagal di sini = tidak perlu menghabiskan waktu menyalakan emulator.
+  # -----------------------------------------------------------------
+  build-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle # cache dependency Gradle → build lebih cepat
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Compile & export Room schemas
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Verify Room schema files (1.json & 2.json) exist
+        run: |
+          set -e
+          s1=$(find app/schemas -type f -name "1.json" | head -n1)
+          s2=$(find app/schemas -type f -name "2.json" | head -n1)
+
+          # 2.json seharusnya selalu ada setelah build di atas.
+          if [ -z "$s2" ]; then
+            echo "::error::2.json (skema v2) tidak ditemukan — ekspor skema gagal. Cek plugin 'androidx.room' & exportSchema=true."
+            exit 1
+          fi
+
+          # 1.json tidak dibangkitkan otomatis (skema sekarang sudah v2),
+          # jadi WAJIB sudah ada di repo agar migration test bisa membuat DB v1.
+          if [ -z "$s1" ]; then
+            echo "::error::1.json (skema v1) tidak ditemukan di app/schemas."
+            echo "::error::Migration test membutuhkannya. Cara membuatnya:"
+            echo "::error::  1) set version = 1 di PosDatabase.kt"
+            echo "::error::  2) ./gradlew :app:assembleDebug  (membangkitkan 1.json)"
+            echo "::error::  3) git add app/schemas && git commit"
+            echo "::error::  4) kembalikan version = 2, build ulang, commit 2.json"
+            exit 1
+          fi
+
+          echo "Skema OK -> v1: $s1 | v2: $s2"
+
+      - name: Run unit tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+  # -----------------------------------------------------------------
+  # JOB 2 — uji migrasi SESUNGUHNYA di emulator (macOS = akselerasi HW
+  #   paling andal untuk Android Emulator). Berjalan hanya jika JOB 1 lolos.
+  # -----------------------------------------------------------------
+  migration-test:
+    needs: build-and-verify
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run Room migration instrumentation test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30          # di atas minSdk(26); gambar stabil & andal di CI
+          target: google_apis    # API 30+ butuh target eksplisit (default tak tersedia)
+          arch: x86_64           # arsitektur host runner
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader-indirect -no-snapshot -noaudio -no-boot-anim
+          # Jalankan HANYA kelas uji migrasi (lebih cepat daripada seluruh connectedCheck).
+          script: >
+            ./gradlew :app:connectedDebugAndroidTest
+            -Pandroid.testInstrumentationRunnerArguments.class=com.pos.offline.data.local.PosDatabaseMigrationTest
+            --stacktrace
+
+      - name: Upload test reports
+        if: always() # unggah laporan meski tes gagal, agar bisa diperiksa
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-test-reports
+          path: |
+            app/build/reports/androidTests
+            app/build/outputs/androidTest-results
+          if-no-files-found: warn

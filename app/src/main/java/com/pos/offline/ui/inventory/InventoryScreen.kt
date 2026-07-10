@@ -204,6 +204,15 @@ private fun ProductRow(
                     )
                     Spacer(Modifier.width(10.dp))
                     StockBadge(stock = product.stock)
+                    Spacer(Modifier.width(10.dp))
+                    // Laba per unit = harga jual − modal (kolom `cost` dari v2).
+                    if (product.cost > 0) {
+                        Text(
+                            "Laba ${(product.price - product.cost).toRupiah()}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
                 }
             }
             IconButton(onClick = onEdit) {
@@ -284,11 +293,18 @@ private fun ProductFormDialog(
     var stock by remember(state.id) {
         mutableStateOf(if (state.stock > 0) state.stock.toString() else "")
     }
+    // Modal/harga beli (kolom `cost` v2). Opsional; 0 = belum diisi.
+    var cost by remember(state.id) {
+        mutableStateOf(if (state.cost > 0) state.cost.toString() else "")
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (state.isNew) "Tambah Produk" else "Edit Produk") },
         text = {
+            // Laba per unit dihitung langsung dari input harga jual & modal.
+            val priceLong = price.toLongOrNull() ?: 0L
+            val costLong = cost.toLongOrNull() ?: 0L
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = name,
@@ -307,6 +323,7 @@ private fun ProductFormDialog(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
+                // Baris harga: harga jual & harga modal (cost) berdampingan.
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     NumberField(
                         value = price,
@@ -315,9 +332,27 @@ private fun ProductFormDialog(
                         modifier = Modifier.weight(1f)
                     )
                     NumberField(
+                        value = cost,
+                        onValueChange = { cost = it },
+                        label = "Modal (Rp)",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                // Baris stok & laba per unit (read-only, terhitung otomatis).
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    NumberField(
                         value = stock,
                         onValueChange = { stock = it },
                         label = "Stok",
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = (priceLong - costLong).toRupiah(),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Laba/Unit") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -331,6 +366,7 @@ private fun ProductFormDialog(
                         name = name,
                         sku = sku,
                         price = price.toLongOrNull() ?: 0L,
+                        cost = cost.toLongOrNull() ?: 0L,
                         stock = stock.toIntOrNull() ?: 0,
                         createdAt = state.createdAt
                     )

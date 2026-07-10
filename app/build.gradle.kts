@@ -3,6 +3,14 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose") // Kotlin 2.0+ Compose compiler plugin
     id("com.google.devtools.ksp")             // codegen Room yang cepat & hemat
+    id("androidx.room")                       // export skema JSON (untuk migrasi teruji)
+}
+
+// Room Gradle Plugin: mengekspor riwayat skema database (JSON) ke app/schemas
+// saat kompilasi. Berkas ini WAJIB di-commit ke VCS agar migrasi otomatis
+// antar versi bisa dibangkitkan & diuji secara reproduktif.
+room {
+    schemaDirectory("$projectDir/schemas")
 }
 
 android {
@@ -16,6 +24,9 @@ android {
         versionCode = 1
         versionName = "1.0"
         vectorDrawables { useSupportLibrary = true }
+
+        // Runner instrumentasi default untuk androidTest (migration test, dsb.).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -35,6 +46,22 @@ android {
     kotlinOptions { jvmTarget = "17" }
 
     buildFeatures { compose = true }
+
+    // Sediakan skema JSON yang diekspor Room sebagai ASET androidTest, agar
+    // MigrationTestHelper bisa membaca berkas 1.json / 2.json.
+    //
+    // Catatan layout: plugin "androidx.room" menempatkan skema pada subfolder
+    // per-variant (schemas/<variant>/<package>/PosDatabase/<ver>.json). Karena
+    // MigrationTestHelper mencari berkas di path "<package>.PosDatabase/<ver>.json"
+    // relatif terhadap root aset, kita mendaftarkan folder variant agar cocok.
+    // Mendaftarkan kedua jalur (dengan & tanpa subfolder variant) membuat konfigurasi
+    // tetap berfungsi tak peduli layout yang dipakai plugin — yang tak ada akan diabaikan.
+    sourceSets {
+        getByName("androidTest").assets.srcDirs(
+            "$projectDir/schemas/debug",
+            "$projectDir/schemas"
+        )
+    }
 
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
@@ -64,4 +91,9 @@ dependencies {
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1") // suspend DAO + withTransaction
     ksp("androidx.room:room-compiler:2.6.1")
+
+    // ---- androidTest: uji migrasi Room + runner JUnit4 ----
+    androidTestImplementation("androidx.room:room-testing:2.6.1") // MigrationTestHelper
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")     // AndroidJUnit4
+    androidTestImplementation("androidx.test:runner:1.6.2")        // InstrumentationRegistry
 }

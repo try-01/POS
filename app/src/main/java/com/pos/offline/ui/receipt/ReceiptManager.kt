@@ -128,7 +128,8 @@ object ReceiptManager {
 
         var y = margin + 14f
         for (line in lines) {
-            drawLine(canvas, line, pageWidth, margin, y)
+            // pageWidth (Int) untuk PageInfo; drawLine butuh Float → konversi.
+            drawLine(canvas, line, pageWidth.toFloat(), margin, y)
             y += lineHeight
         }
         document.finishPage(page)

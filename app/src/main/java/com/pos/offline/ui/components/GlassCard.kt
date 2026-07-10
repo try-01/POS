@@ -10,8 +10,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -39,9 +41,10 @@ fun GlassCard(
 ) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val tint = if (isDark) Color.White else Color.Black
+    val shape: Shape = RoundedCornerShape(cornerRadius)
     Box(
         modifier = modifier
-            .clipShape(RoundedCornerShape(cornerRadius))
+            .clip(shape)
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
@@ -52,7 +55,7 @@ fun GlassCard(
             )
             .border(
                 BorderStroke(1.dp, tint.copy(alpha = 0.22f)),
-                shape = RoundedCornerShape(cornerRadius)
+                shape = shape
             )
             .padding(contentPadding)
     ) {
@@ -62,7 +65,3 @@ fun GlassCard(
 
 /** Konstanta pembantu luminance sederhana. */
 private fun Color.luminance(): Float = 0.299f * red + 0.587f * green + 0.114f * blue
-
-/** Ekstensi privat supaya nama API tetap bersih (mengganti import clip eksplisit). */
-private fun Modifier.clipShape(shape: androidx.compose.ui.graphics.Shape) =
-    this.then(androidx.compose.ui.draw.clip(shape))

@@ -3,6 +3,9 @@
 Aplikasi kasir **100% offline**, dirancang **sangat ringan**, hemat RAM/baterai,
 bebas memory leak, dengan UI modern (glassmorphism ringan) berbasis **Jetpack Compose**.
 
+<!-- Ganti OWNER/REPO di bawah dengan path repo GitHub Anda (mis. budi/kasir-offline). -->
+[![Migration Test](https://github.com/OWNER/REPO/actions/workflows/migration-test.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/migration-test.yml)
+
 > Target: **Android 16 (API 36)** · Bahasa: **Kotlin** · Arsitektur: **Clean MVVM**
 
 ---
@@ -98,3 +101,32 @@ mencegah coupling & memory leak.
 - **Glassmorphism** disimulasikan dengan gradient+border (bukan `RenderEffect` per-frame),
   agar GPU tetap ringan saat scroll.
 - R8 (`isMinifyEnabled`) membuang kode tak terpakai → APK kecil & RAM hemat.
+
+---
+
+## 5. Migrasi Database & Pengujian
+
+Skema Room versi-ke-versi dikelola dengan **migrasi eksplisit** (bukan destruktif):
+
+- **Versi saat ini: 2.** Migrasi `MIGRATION_1_2` (`data/local/Migrations.kt`) menambah
+  kolom `cost` (harga modal) pada tabel `products` secara aditif (`ALTER TABLE ... ADD COLUMN`).
+- Skema diekspor sebagai JSON ke `app/schemas/` via plugin `id("androidx.room")`.
+  **Berkas `1.json` & `2.json` wajib di-commit ke VCS.**
+- Database memakai `addMigrations(...)` (data pengguna terjaga saat update).
+  `fallbackToDestructiveMigrationOnDowngrade()` hanya untuk skenario downgrade saat develop.
+
+### Uji migrasi (androidTest)
+`PosDatabaseMigrationTest` memverifikasi dua jaminan sekaligus:
+1. **Skema valid** — `runMigrationsAndValidate` membandingkan hasil migrasi dengan `2.json`
+   (gagal = fail-loud bila tidak cocok).
+2. **Data terjaga** — baris lama tetap utuh & kolom baru `cost` ber-default `0`.
+
+Jalankan (butuh emulator/perangkat):
+```bash
+./gradlew :app:connectedDebugAndroidTest
+```
+
+> **Jika `1.json` belum ada:** skema `2.json` dibangkitkan otomatis saat build, tapi
+> `1.json` hanya ada bila pernah di-build saat database masih `version = 1`. Untuk
+> membuatnya: set `version = 1` di `PosDatabase.kt`, build sekali, commit `1.json`,
+> lalu kembalikan ke `version = 2`.

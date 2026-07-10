@@ -10,6 +10,7 @@ import com.pos.offline.data.repository.ProductRepository
 import com.pos.offline.data.repository.TransactionRepository
 import com.pos.offline.ui.inventory.InventoryViewModel
 import com.pos.offline.ui.pos.PosViewModel
+import com.pos.offline.ui.report.ReportViewModel
 
 /**
  * Aplikasi entry-point. Menginisialisasi [ServiceLocator] sekali di onCreate.
