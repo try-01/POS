@@ -294,17 +294,21 @@ private fun ProductFormDialog(
         mutableStateOf(if (state.stock > 0) state.stock.toString() else "")
     }
     // Modal/harga beli (kolom `cost` v2). Opsional; 0 = belum diisi.
+    // 1. UBAH SEMENTARA BARIS INI: Jangan panggil state.cost
     var cost by remember(state.id) {
-        mutableStateOf(if (state.cost > 0) state.cost.toString() else "")
+        // mutableStateOf(if (state.cost > 0) state.cost.toString() else "")
+        mutableStateOf("") // <- Gunakan ini sementara
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (state.isNew) "Tambah Produk" else "Edit Produk") },
         text = {
-            // Laba per unit dihitung langsung dari input harga jual & modal.
             val priceLong = price.toLongOrNull() ?: 0L
-            val costLong = cost.toLongOrNull() ?: 0L
+            // 2. UBAH SEMENTARA BARIS INI: Paksa jadi 0
+            // val costLong = cost.toLongOrNull() ?: 0L
+            val costLong = 0L // <- Gunakan ini sementara
+
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = name,
@@ -323,7 +327,7 @@ private fun ProductFormDialog(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
-                // Baris harga: harga jual & harga modal (cost) berdampingan.
+                
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     NumberField(
                         value = price,
@@ -331,14 +335,17 @@ private fun ProductFormDialog(
                         label = "Harga Jual (Rp)",
                         modifier = Modifier.weight(1f)
                     )
-                    NumberField(
-                        value = cost,
-                        onValueChange = { cost = it },
-                        label = "Modal (Rp)",
-                        modifier = Modifier.weight(1f)
-                    )
+                    
+                    // 3. KOMENTARI SEMENTARA INPUT INI
+                    // (Karena jika dibiarkan, kamu akan mengetik ke state yang tidak akan disimpan)
+                    // NumberField(
+                    //     value = cost,
+                    //     onValueChange = { cost = it },
+                    //     label = "Modal (Rp)",
+                    //     modifier = Modifier.weight(1f)
+                    // )
                 }
-                // Baris stok & laba per unit (read-only, terhitung otomatis).
+                
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     NumberField(
                         value = stock,
@@ -347,7 +354,7 @@ private fun ProductFormDialog(
                         modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
-                        value = (priceLong - costLong).toRupiah(),
+                        value = (priceLong - costLong).toRupiah(), // Ini sekarang akan aman karena costLong = 0L
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Laba/Unit") },
