@@ -1,33 +1,30 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose") // Kotlin 2.x Compose Compiler plugin
-    id("com.google.dagger.hilt.android")
-    id("com.google.devtools.ksp")
-    id("androidx.room")
+    id("org.jetbrains.kotlin.plugin.compose") // Kotlin 2.0+ Compose compiler plugin
+    id("com.google.devtools.ksp")             // codegen Room yang cepat & hemat
 }
 
 android {
-    namespace = "com.kasirku.pos"
+    namespace = "com.pos.offline"
     compileSdk = 36 // Android 16
 
     defaultConfig {
-        applicationId = "com.kasirku.pos"
-        minSdk = 26      // Android 8.0 — jangkauan perangkat luas, tetap ringan
+        applicationId = "com.pos.offline"
+        minSdk = 26      // Android 8.0 — baseline modern (java.time, classic BT)
         targetSdk = 36   // Android 16
         versionCode = 1
-        versionName = "1.0.0"
-    }
-
-    room {
-        schemaDirectory("$projectDir/schemas")
+        versionName = "1.0"
+        vectorDrawables { useSupportLibrary = true }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = true
+            isMinifyEnabled = true        // R8: buang kode mati → APK kecil & RAM hemat
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Aturan default sudah memuat optimasi R8; tiap library (Compose/Room)
+            // menyertakan consumer-rules sendiri, jadi tidak butuh file tambahan.
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
     }
 
@@ -35,51 +32,36 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    kotlinOptions { jvmTarget = "17" }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
-    buildFeatures {
-        compose = true
-    }
+    buildFeatures { compose = true }
 
     packaging {
-        resources.excludes.add("/META-INF/{AL2.0,LGPL2.1}")
+        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     }
 }
 
 dependencies {
-    // --- Jetpack Compose (BOM menjaga semua versi library Compose selaras) ---
-    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    // ---- Compose (Material 3) ----
+    val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
+    implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.material:material-icons-extended") // ikon Icons.Rounded.*
     implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.core:core-ktx:1.13.1")
+
+    // ---- Lifecycle: koleksi Flow sadar-siklus → berhenti saat background (hemat baterai) ----
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
 
-    // --- Room (Database lokal offline) ---
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1") // dukungan Coroutines & Flow
-    ksp("androidx.room:room-compiler:2.6.1")
-
-    // --- Hilt (Dependency Injection) ---
-    implementation("com.google.dagger:hilt-android:2.52")
-    ksp("com.google.dagger:hilt-compiler:2.52")
-    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
-
-    // --- Coroutines ---
+    // ---- Coroutines + Flow ----
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
-    // --- Navigation (multi-screen: Kasir, Inventaris, Riwayat) ---
-    implementation("androidx.navigation:navigation-compose:2.8.5")
-
-    // --- Testing ---
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    // ---- Room (database offline cepat) ----
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1") // suspend DAO + withTransaction
+    ksp("androidx.room:room-compiler:2.6.1")
 }

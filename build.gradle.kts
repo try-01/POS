@@ -1,13 +1,7 @@
-// Top-level build file di mana Anda dapat menambahkan opsi konfigurasi yang berlaku untuk semua sub-proyek/modul.
+// Build script root — deklarasi plugin (versi), tidak di-apply di sini.
 plugins {
-    id("com.android.application") version "8.7.3" apply false
+    id("com.android.application") version "8.7.2" apply false
     id("org.jetbrains.kotlin.android") version "2.0.21" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.0.21" apply false
-    id("com.google.dagger.hilt.android") version "2.52" apply false
-    id("androidx.room") version "2.6.1" apply false
-    id("com.google.devtools.ksp") version "2.0.21-1.0.25" apply false
-}
-
-tasks.register<Delete>("clean") {
-    delete(rootProject.buildDir)
+    id("com.google.devtools.ksp") version "2.0.21-1.0.27" apply false
 }

@@ -1,48 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Tidak ada izin INTERNET: aplikasi didesain 100% offline -->
-
-    <!-- Diperlukan untuk cetak struk via printer Bluetooth ESC/POS (Android 12+/API 31+) -->
+    <!-- Bluetooth untuk cetak struk ESC/POS -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-    <!-- Kompatibilitas printer Bluetooth di perangkat lawas -->
-    <uses-permission
-        android:name="android.permission.BLUETOOTH"
-        android:maxSdkVersion="30" />
-    <uses-permission
-        android:name="android.permission.BLUETOOTH_ADMIN"
-        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
     <application
-        android:name=".KasirApplication"
-        android:allowBackup="false"
-        android:icon="@mipmap/ic_launcher"
-        android:label="KasirKu"
-        android:theme="@style/Theme.KasirKu"
-        android:hardwareAccelerated="true"
-        android:largeHeap="false">
+        android:name="com.pos.offline.data.di.PosApplication"
+        android:allowBackup="true"
+        android:label="Kasir Offline"
+        android:supportsRtl="true"
+        android:icon="@android:drawable/ic_menu_manage"
+        android:theme="@android:style/Theme.Material.NoActionBar">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.KasirKu"
-            android:screenOrientation="unspecified">
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!-- FileProvider untuk ekspor dan share PDF Struk offline secara aman -->
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
     </application>
+
 </manifest>

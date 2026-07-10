@@ -1,0 +1,238 @@
+package com.pos.offline.ui.receipt
+
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color as AndroidColor
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import com.pos.offline.data.repository.CheckoutResult
+import com.pos.offline.util.toRupiah
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
+
+/** Perataan baris pada struk. */
+enum class ReceiptAlign { LEFT, CENTER, RIGHT }
+
+/**
+ * Satu baris struk. Bisa berupa teks tunggal, atau dua kolom (left/right) yang
+ * dipakai untuk baris "Nama ........... Total". Model tunggal ini menjadi sumber
+ * konten yang sama bagi keluaran ESC/POS, PDF, maupun Bitmap.
+ */
+data class ReceiptLine(
+    val left: String = "",
+    val right: String = "",
+    val align: ReceiptAlign = ReceiptAlign.LEFT,
+    val bold: Boolean = false,
+    val large: Boolean = false
+)
+
+/**
+ * Manajer struk: membangun konten dan mengekspor ke 3 target:
+ *  1) Byte ESC/POS → dicetak via Bluetooth thermal printer.
+ *  2) Dokumen PDF → disimpan ke storage aplikasi (tanpa izin runtime).
+ *  3) Bitmap → untuk dibagikan/dipratinjau.
+ *
+ * Semua operasi berat (jaringan/I-O) berjalan di [Dispatchers.IO] via coroutines.
+ */
+object ReceiptManager {
+
+    private const val STORE_NAME = "TOKO KASIR OFFLINE"
+    private val dateFmt = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("in", "ID"))
+
+    // ---------- Sumber konten tunggal ----------
+    fun buildLines(result: CheckoutResult): List<ReceiptLine> {
+        val tx = result.transaction
+        val lines = mutableListOf<ReceiptLine>()
+        lines += ReceiptLine(left = STORE_NAME, align = ReceiptAlign.CENTER, bold = true, large = true)
+        lines += ReceiptLine(left = dateFmt.format(Date(tx.createdAt)), align = ReceiptAlign.CENTER)
+        lines += ReceiptLine(left = "No: ${tx.id}", align = ReceiptAlign.CENTER)
+        lines += divider()
+        for (item in result.items) {
+            lines += ReceiptLine(left = item.productName, right = item.lineTotal.toRupiah(), bold = true)
+            lines += ReceiptLine(left = "  ${item.quantity} x ${item.unitPrice.toRupiah()}")
+        }
+        lines += divider()
+        lines += ReceiptLine(left = "Subtotal", right = tx.subtotal.toRupiah())
+        if (tx.discount > 0) lines += ReceiptLine(left = "Diskon", right = "- ${tx.discount.toRupiah()}")
+        if (tx.tax > 0) lines += ReceiptLine(left = "Pajak", right = tx.tax.toRupiah())
+        lines += ReceiptLine(left = "TOTAL", right = tx.total.toRupiah(), bold = true, large = true)
+        lines += ReceiptLine(left = "Bayar", right = tx.paidAmount.toRupiah())
+        lines += ReceiptLine(left = "Kembali", right = tx.change.toRupiah())
+        lines += divider()
+        lines += ReceiptLine(left = "Terima kasih", align = ReceiptAlign.CENTER)
+        lines += ReceiptLine(left = "Struk elektronik", align = ReceiptAlign.CENTER)
+        return lines
+    }
+
+    private fun divider(): ReceiptLine =
+        ReceiptLine(left = "--------------------------------", align = ReceiptAlign.CENTER)
+
+    // ====================== 1) ESC/POS (Bluetooth) ======================
+
+    /** Ubah baris menjadi byte perintah ESC/POS untuk printer thermal 58/80mm. */
+    fun toEscPosBytes(lines: List<ReceiptLine>, paperChars: Int = 32): ByteArray {
+        val os = ByteArrayOutputStream()
+        fun cmd(vararg b: Int) = b.forEach { os.write(it) }       // perintah kontrol
+        fun txt(t: String) = os.write(t.toByteArray(Charsets.UTF_8)) // teks UTF-8
+        cmd(0x1B, 0x40) // ESC @ : reset printer
+        lines.forEach { line ->
+            cmd(0x1B, 0x45, if (line.bold) 0x01 else 0x00)        // ESC E : bold on/off
+            cmd(0x1D, 0x21, if (line.large) 0x11 else 0x00)       // GS !  : double width+height
+            cmd(0x1B, 0x61, when (line.align) {                   // ESC a : alignment
+                ReceiptAlign.LEFT -> 0x00; ReceiptAlign.CENTER -> 0x01; ReceiptAlign.RIGHT -> 0x02
+            })
+            val body = if (line.right.isNotEmpty()) twoColumn(line.left, line.right, paperChars) else line.left
+            txt(body)
+            cmd(0x0A) // LF : cetak baris
+        }
+        cmd(0x1B, 0x64, 0x03) // ESC d 3 : feed 3 baris
+        cmd(0x1D, 0x56, 0x00) // GS V 0  : potong kertas
+        return os.toByteArray()
+    }
+
+    /** Susun dua kolom (left ... right) ke lebar kertas tetap dengan padding. */
+    private fun twoColumn(left: String, right: String, width: Int): String {
+        val gap = 2
+        val maxLeft = (width - right.length - gap).coerceAtLeast(0)
+        val l = if (left.length > maxLeft) left.take(maxLeft) else left
+        val pad = (width - right.length - l.length).coerceAtLeast(0)
+        return l + " ".repeat(pad) + right
+    }
+
+    // ====================== 2) Ekspor PDF ======================
+
+    /** Render struk ke PDF; simpan di direktori khusus aplikasi (tanpa izin runtime). */
+    fun exportToPdf(context: Context, result: CheckoutResult): File {
+        val lines = buildLines(result)
+        val pageWidth = 240               // ~3,3 inci (lebar struk)
+        val margin = 14f
+        val lineHeight = 20f
+        val pageHeight = (lines.size * lineHeight + 2 * margin).toInt().coerceAtLeast(320)
+
+        val document = PdfDocument()
+        val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
+        val page = document.startPage(pageInfo)
+        val canvas = page.canvas
+
+        var y = margin + 14f
+        for (line in lines) {
+            drawLine(canvas, line, pageWidth, margin, y)
+            y += lineHeight
+        }
+        document.finishPage(page)
+
+        val dir = File(context.getExternalFilesDir(null) ?: context.filesDir, "receipts").apply { mkdirs() }
+        val file = File(dir, "${result.transaction.id}.pdf")
+        FileOutputStream(file).use { document.writeTo(it) }
+        document.close()
+        return file
+    }
+
+    // ====================== 3) Ekspor Bitmap ======================
+
+    /** Render struk ke Bitmap (mis. untuk dipratinjau/dibagikan). */
+    fun renderToBitmap(result: CheckoutResult, scale: Int = 3): Bitmap {
+        val lines = buildLines(result)
+        val w = 240 * scale
+        val lineHeight = 22f * scale
+        val margin = 16f * scale
+        val h = (lines.size * lineHeight + 2 * margin).toInt()
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp).apply { drawColor(AndroidColor.WHITE) }
+
+        var y = margin + lineHeight
+        for (line in lines) {
+            drawLine(canvas, line, w.toFloat(), margin, y, scale.toFloat())
+            y += lineHeight
+        }
+        return bmp
+    }
+
+    /** Gambar satu baris (dipakai PDF & Bitmap) sesuai perataan / dua kolom. */
+    private fun drawLine(
+        canvas: Canvas, line: ReceiptLine, pageWidth: Float, margin: Float, y: Float, scale: Float = 1f
+    ) {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AndroidColor.BLACK
+            textSize = (if (line.large) 16f else 11f) * scale
+            typeface = if (line.bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        }
+        if (line.right.isNotEmpty()) {
+            canvas.drawText(line.left, margin, y, paint)
+            val rightW = paint.measureText(line.right)
+            canvas.drawText(line.right, pageWidth - margin - rightW, y, paint)
+        } else {
+            when (line.align) {
+                ReceiptAlign.LEFT -> canvas.drawText(line.left, margin, y, paint)
+                ReceiptAlign.CENTER -> {
+                    val tw = paint.measureText(line.left)
+                    canvas.drawText(line.left, (pageWidth - tw) / 2f, y, paint)
+                }
+                ReceiptAlign.RIGHT -> {
+                    val tw = paint.measureText(line.left)
+                    canvas.drawText(line.left, pageWidth - margin - tw, y, paint)
+                }
+            }
+        }
+    }
+
+    // ====================== Bluetooth ======================
+
+    /** Daftar printer thermal yang sudah dipasang (paired). */
+    fun bondedPrinters(context: Context): List<BluetoothDevice> = try {
+        context.getSystemService(BluetoothManager::class.java)
+            ?.adapter?.bondedDevices?.toList() ?: emptyList()
+    } catch (e: SecurityException) {
+        emptyList() // BLUETOOTH_CONNECT belum diberikan (Android 12+)
+    }
+
+    /**
+     * Cetak ke printer Bluetooth pertama yang terpasang.
+     * Mengembalikan true jika pengiriman berhasil.
+     * CATATAN: butuh izin runtime BLUETOOTH_CONNECT di Android 12+.
+     */
+    suspend fun printToFirstBonded(context: Context, result: CheckoutResult): Boolean = try {
+        val device = bondedPrinters(context).firstOrNull() ?: return false
+        val data = toEscPosBytes(buildLines(result))
+        BluetoothReceiptPrinter().print(context, device, data)
+    } catch (e: SecurityException) {
+        false
+    }
+}
+
+/**
+ * Pengirim ESC/POS via Bluetooth Classic (SPP RFCOMM).
+ * Koneksi blocking dijalankan pada [Dispatchers.IO].
+ */
+class BluetoothReceiptPrinter {
+    private val sppUuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+    suspend fun print(context: Context, device: BluetoothDevice, data: ByteArray): Boolean =
+        withContext(Dispatchers.IO) {
+            val socket = device.createRfcommSocketToServiceRecord(sppUuid)
+            try {
+                socket.connect()
+                socket.outputStream.use { stream ->
+                    stream.write(data)
+                    stream.flush()
+                }
+                true
+            } catch (e: IOException) {
+                false
+            } finally {
+                runCatching { socket.close() }
+            }
+        }
+}

@@ -1,0 +1,156 @@
+package com.pos.offline.ui.report
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.pos.offline.data.local.entity.TransactionEntity
+import com.pos.offline.data.repository.TransactionRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
+
+/**
+ * Ringkasan laporan untuk satu hari tertentu. Semua angka uang bertipe [Long]
+ * (presisi penuh, bebas floating-point).
+ */
+data class DailyReport(
+    val date: LocalDate,
+    val transactions: List<TransactionEntity>,
+    val totalRevenue: Long,        // Σ total transaksi
+    val transactionCount: Int,
+    val averagePerTransaction: Long,
+    val totalDiscount: Long,       // Σ diskon diberikan
+    val totalTax: Long,            // Σ pajak dipungut
+    val hourlyRevenue: List<Long>  // panjang 24; indeks = jam (0–23). Dipakai grafik batang.
+) {
+    companion object {
+        fun empty(date: LocalDate) = DailyReport(
+            date = date,
+            transactions = emptyList(),
+            totalRevenue = 0L,
+            transactionCount = 0,
+            averagePerTransaction = 0L,
+            totalDiscount = 0L,
+            totalTax = 0L,
+            hourlyRevenue = List(24) { 0L }
+        )
+    }
+}
+
+/**
+ * ViewModel Laporan Harian.
+ *
+ * Prinsip performa:
+ *  - Satu-satunya query DB adalah `dailyTransactions(start, end)`; sisanya
+ *    (pendapatan, jumlah, rata-rata, distribusi per jam) diturunkan di-memori
+ *    lewat [map] → hemat round-trip DB.
+ *  - `flatMapLatest` membatalkan query tanggal lama saat pengguna pindah hari.
+ *  - `WhileSubscribed(5000)` → Flow berhenti saat layar tak terlihat (hemat baterai).
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class ReportViewModel(
+    private val transactionRepository: TransactionRepository
+) : ViewModel() {
+
+    private val zone: ZoneId = ZoneId.systemDefault()
+
+    // Tanggal terpilih (default hari ini).
+    private val _selectedDate = MutableStateFlow(LocalDate.now(zone))
+    val selectedDate: StateFlow<LocalDate> = _selectedDate.asStateFlow()
+
+    /** Apakah tanggal terpilih = hari ini (untuk menonaktifkan tombol "besok"). */
+    val isToday: StateFlow<Boolean> = _selectedDate
+        .map { it.isEqual(LocalDate.now(zone)) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    /** Laporan reaktif untuk tanggal terpilih. */
+    val report: StateFlow<DailyReport> = _selectedDate
+        .flatMapLatest { date ->
+            val (start, end) = dayBounds(date)
+            transactionRepository.dailyTransactions(start, end).map { aggregate(date, it) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DailyReport.empty(LocalDate.now()))
+
+    // ---------- Kalkulasi murni (terpisah → mudah diuji) ----------
+
+    /**
+     * Batas hari dalam epoch millis. `end` = awal hari berikutnya (eksklusif),
+     * cocok dengan query `createdAt >= start AND createdAt < end`.
+     */
+    private fun dayBounds(date: LocalDate): Pair<Long, Long> {
+        val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
+        val end = date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        return start to end
+    }
+
+    /**
+     * Agregasi harian + distribusi pendapatan per jam.
+     *
+     * Catatan kalkulasi:
+     *  - [totalRevenue] = Σ `total` (sudah bersih diskon & sudah termasuk pajak).
+     *  - Rata-rata = pendapatan ÷ jumlah transaksi (pembulatan bawah Long wajar untuk Rupiah).
+     *  - `hourlyRevenue` membagi pendapatan ke 24 bucket menurut jam transaksi,
+     *    sehingga grafik menunjukkan jam-jam ramai toko.
+     */
+    private fun aggregate(date: LocalDate, txs: List<TransactionEntity>): DailyReport {
+        if (txs.isEmpty()) return DailyReport.empty(date)
+
+        val totalRevenue = txs.sumOf { it.total }
+        val totalDiscount = txs.sumOf { it.discount }
+        val totalTax = txs.sumOf { it.tax }
+        val count = txs.size
+
+        // Distribusi per jam: bucket-kan setiap transaksi ke jam kejadian.
+        val hourly = MutableList(24) { 0L }
+        for (tx in txs) {
+            val hour = Instant.ofEpochMilli(tx.createdAt).atZone(zone).hour
+            hourly[hour] += tx.total
+        }
+
+        val average = if (count > 0) totalRevenue / count else 0L
+
+        return DailyReport(
+            date = date,
+            transactions = txs,
+            totalRevenue = totalRevenue,
+            transactionCount = count,
+            averagePerTransaction = average,
+            totalDiscount = totalDiscount,
+            totalTax = totalTax,
+            hourlyRevenue = hourly
+        )
+    }
+
+    // ---------- Aksi UI ----------
+
+    fun previousDay() { _selectedDate.value = _selectedDate.value.minusDays(1) }
+
+    /** Maju satu hari, tapi tidak melewati hari ini. */
+    fun nextDay() {
+        val today = LocalDate.now(zone)
+        val current = _selectedDate.value
+        if (current.isBefore(today)) _selectedDate.value = current.plusDays(1)
+    }
+
+    fun goToday() { _selectedDate.value = LocalDate.now(zone) }
+
+    companion object {
+        /** Format tanggal panjang Indonesia, mis. "Senin, 5 Mei 2025". */
+        val dateFmt: DateTimeFormatter =
+            DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(Locale("in", "ID"))
+
+        /** Format jam singkat, mis. "14.05". */
+        val timeFmt: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
+    }
+}

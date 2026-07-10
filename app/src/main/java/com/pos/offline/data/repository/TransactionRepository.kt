@@ -1,0 +1,128 @@
+package com.pos.offline.data.repository
+
+import androidx.room.withTransaction
+import com.pos.offline.data.local.PosDatabase
+import com.pos.offline.data.local.dao.CartDao
+import com.pos.offline.data.local.dao.ProductDao
+import com.pos.offline.data.local.dao.TransactionDao
+import com.pos.offline.data.local.entity.CartItemEntity
+import com.pos.offline.data.local.entity.TransactionEntity
+import com.pos.offline.data.local.entity.TransactionItemEntity
+import kotlinx.coroutines.flow.Flow
+
+/** Hasil checkout: transaksi + detail item, dipakai untuk cetak/ekspor struk. */
+data class CheckoutResult(
+    val transaction: TransactionEntity,
+    val items: List<TransactionItemEntity>
+)
+
+/** Dilempar ketika stok tidak mencukupi (memicu rollback transaksi DB). */
+class InsufficientStockException(val productName: String) : RuntimeException()
+
+/**
+ * Repository transaksi.
+ *
+ * Logika paling kompleks ada di [checkout]: menghitung total, memotong stok,
+ * menulis struk, lalu mengosongkan keranjang — semuanya dalam SATU transaksi DB
+ * ([withTransaction]). Jika satu langkah gagal (mis. stok tidak cukup),
+ * seluruh operasi di-rollback → tidak ada data setengah-jadi (konsisten).
+ */
+class TransactionRepository(
+    private val database: PosDatabase,
+    private val transactionDao: TransactionDao,
+    private val cartDao: CartDao,
+    private val productDao: ProductDao
+) {
+    val transactions: Flow<List<TransactionEntity>> = transactionDao.observeAll()
+
+    fun dailyTransactions(startOfDay: Long, endOfDay: Long): Flow<List<TransactionEntity>> =
+        transactionDao.observeByDateRange(startOfDay, endOfDay)
+
+    fun dailyRevenue(startOfDay: Long, endOfDay: Long): Flow<Long> =
+        transactionDao.observeDailyRevenue(startOfDay, endOfDay)
+
+    /**
+     * Proses checkout.
+     *
+     * @param cart        isi keranjang (snapshot) yang akan di-checkout.
+     * @param discount    nominal diskon (Rupiah).
+     * @param taxRate     tarif pajak desimal, mis. 0.11 untuk PPN 11%.
+     * @param paid        uang yang dibayar pelanggan.
+     *
+     * URUTAN KALKULASI (penting):
+     *  1) subtotal  = Σ (hargaSatuan × qty) seluruh item.
+     *  2) diskon dibatasi maksimal sebesar subtotal (tidak boleh negatif).
+     *  3) pajak dihitung dari (subtotal − diskon), BUKAN subtotal → adil & benar.
+     *  4) total     = (subtotal − diskon) + pajak.
+     *  5) kembalian = max(0, paid − total); jika kurang bayar, change = 0.
+     */
+    suspend fun checkout(
+        cart: List<CartItemEntity>,
+        discount: Long,
+        taxRate: Double,
+        paid: Long
+    ): CheckoutResult {
+        require(cart.isNotEmpty()) { "Keranjang kosong" }
+
+        // ---- 1) Subtotal ----
+        val subtotal = cart.sumOf { it.unitPrice * it.quantity.toLong() }
+
+        // ---- 2) Diskon (dibatasi maks. subtotal) ----
+        val discountAmount = discount.coerceIn(0L, subtotal)
+
+        // ---- 3) Dasar kena pajak & pajak ----
+        val taxableBase = (subtotal - discountAmount).coerceAtLeast(0L)
+        val tax = (taxableBase * taxRate).toLong() // Long = presisi uang
+
+        // ---- 4) Total ----
+        val total = taxableBase + tax
+
+        // ---- 5) Kembalian ----
+        val change = (paid - total).coerceAtLeast(0L)
+
+        val invoiceId = "INV-${System.currentTimeMillis()}"
+        val now = System.currentTimeMillis()
+
+        val transaction = TransactionEntity(
+            id = invoiceId,
+            createdAt = now,
+            subtotal = subtotal,
+            discount = discountAmount,
+            tax = tax,
+            total = total,
+            paidAmount = paid,
+            change = change
+        )
+
+        val items = cart.map {
+            TransactionItemEntity(
+                transactionId = invoiceId,
+                productName = it.name,
+                unitPrice = it.unitPrice,
+                quantity = it.quantity,
+                lineTotal = it.unitPrice * it.quantity.toLong()
+            )
+        }
+
+        // ---- Operasi atomik: potong stok → tulis struk → kosongkan keranjang ----
+        database.withTransaction {
+            cart.forEach { item ->
+                // decrementStock mengembalikan 0 jika stok < qty → lempar exception.
+                val affected = productDao.decrementStock(item.productId, item.quantity, now)
+                if (affected == 0) {
+                    throw InsufficientStockException(item.name) // memicu rollback seluruh txn
+                }
+            }
+            transactionDao.checkout(transaction, items)
+            cartDao.clear()
+        }
+
+        return CheckoutResult(transaction, items)
+    }
+
+    suspend fun loadReceipt(invoiceId: String): CheckoutResult? {
+        val tx = transactionDao.getById(invoiceId) ?: return null
+        val items = transactionDao.getItems(invoiceId)
+        return CheckoutResult(tx, items)
+    }
+}
