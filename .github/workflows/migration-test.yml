@@ -81,11 +81,11 @@ jobs:
       - name: Run Room migration instrumentation test
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 33          
-          target: google_apis    
-          arch: arm64-v8a        # PERBAIKAN: Gunakan format penamaan yang didukung
+          api-level: 33
+          target: aosp_atd       # PERUBAHAN UTAMA: Gunakan Automated Test Device
+          arch: arm64-v8a
           disable-animations: true
-          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim
           script: >
             ./gradlew :app:connectedDebugAndroidTest
             -Pandroid.testInstrumentationRunnerArguments.class=com.pos.offline.data.local.PosDatabaseMigrationTest
