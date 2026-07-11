@@ -300,18 +300,17 @@ private fun ProductPane(
     onAdd: (ProductEntity) -> Unit
 ) {
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 160.dp),
+        columns = GridCells.Adaptive(minSize = 130.dp), // diperkecil dari 160.dp -> lebih banyak kolom per baris
         modifier = modifier.padding(horizontal = 12.dp),
         contentPadding = PaddingValues(bottom = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp), // diperkecil dari 10.dp
+        verticalArrangement = Arrangement.spacedBy(8.dp)    // diperkecil dari 10.dp
     ) {
         items(
             items = products,
-            key = { it.id },                 // key stabil → recycle benar saat reorder
-            contentType = { "product" }      // satu tipe → pool recycle optimal
+            key = { it.id },
+            contentType = { "product" }
         ) { product ->
-            // Stok "efektif" = stok fisik dikurangi jumlah yang sudah masuk keranjang.
             val qtyInCart = cartQtyByProductId[product.id] ?: 0
             val remainingStock = product.stock - qtyInCart
             ProductCard(
@@ -328,37 +327,34 @@ private fun ProductCard(product: ProductEntity, remainingStock: Int, onAdd: () -
     val outOfStock = remainingStock <= 0
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(12.dp),
-        // enabled TIDAK lagi mengikuti outOfStock — kartu tetap bisa ditekan
-        // supaya ViewModel selalu sempat memvalidasi & mengirim pesan penolakan.
-        // Tampilan "pudar" tetap didapat dari warna teks/ikon di bawah.
+        contentPadding = PaddingValues(8.dp), // diperkecil dari 12.dp
         onClick = onAdd
     ) {
         Column {
             Text(
                 text = product.name,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall, // diperkecil dari titleMedium
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(1.dp)) // diperkecil dari 2.dp
             Text(
                 text = product.sku,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelSmall, // diperkecil dari bodySmall
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp)) // diperkecil dari 12.dp
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = product.price.toRupiah(),
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleSmall, // diperkecil dari titleMedium
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
                         text = if (outOfStock) "Stok habis" else "Stok: $remainingStock",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.labelSmall, // diperkecil dari bodySmall
                         color = if (outOfStock) MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
@@ -367,7 +363,7 @@ private fun ProductCard(product: ProductEntity, remainingStock: Int, onAdd: () -
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(28.dp) // diperkecil dari 36.dp
                         .clip(CircleShape)
                         .background(
                             if (outOfStock) MaterialTheme.colorScheme.surfaceVariant
@@ -379,7 +375,7 @@ private fun ProductCard(product: ProductEntity, remainingStock: Int, onAdd: () -
                         contentDescription = "Tambah ${product.name}",
                         tint = if (outOfStock) MaterialTheme.colorScheme.onSurfaceVariant
                         else MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(16.dp) // diperkecil dari 20.dp
                     )
                 }
             }
