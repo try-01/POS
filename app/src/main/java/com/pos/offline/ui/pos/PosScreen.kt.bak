@@ -595,23 +595,24 @@ private fun MoneyField(
             color = MaterialTheme.colorScheme.onSurface, 
             fontWeight = FontWeight.SemiBold
         ),
+        // PERBAIKAN: Modifier wajib dipasang langsung di BasicTextField
+        modifier = modifier, 
         decorationBox = { innerTextField ->
-            // Merakit kotak input secara manual
             Row(
-                modifier = modifier
+                // PERBAIKAN: Kotak hiasan sekarang mengikuti ukuran BasicTextField
+                modifier = Modifier
+                    .fillMaxSize() 
                     .clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Label statis sebagai prefix
                 Text(
                     text = "$label: ",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                // Area tempat angka diketik
                 Box(Modifier.weight(1f)) {
                     if (text.isEmpty()) {
                         Text(
@@ -627,7 +628,6 @@ private fun MoneyField(
     )
 }
 
-/** Field desimal (untuk persentase pajak). Menerima satu titik desimal. */
 @Composable
 private fun DecimalField(
     label: String,
@@ -660,9 +660,13 @@ private fun DecimalField(
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold
         ),
+        // PERBAIKAN: Modifier dipasang di sini
+        modifier = modifier, 
         decorationBox = { innerTextField ->
             Row(
-                modifier = modifier
+                // PERBAIKAN: fillMaxSize digunakan di sini
+                modifier = Modifier
+                    .fillMaxSize()
                     .clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))

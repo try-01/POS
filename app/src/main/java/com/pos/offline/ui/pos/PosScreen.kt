@@ -111,23 +111,21 @@ fun PosScreen(
     }
 
     Scaffold(
+        // KITA BUANG TopAppBar bawaan Material 3 dan ganti dengan Box sederhana
         topBar = {
-            TopAppBar(
-                title = { Text("Kasir Offline", fontWeight = FontWeight.SemiBold) },
-                actions = {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = viewModel::search,
-                        modifier = Modifier
-                            .width(220.dp)
-                            .padding(end = 12.dp),
-                        placeholder = { Text("Cari produk/SKU…", style = MaterialTheme.typography.bodyMedium) },
-                        leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp)
-                    )
-                }
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // Padding vertikal ditekan jadi 6.dp (Sangat menarik batas ke atas)
+                    .padding(horizontal = 12.dp, vertical = 6.dp) 
+            ) {
+                CompactSearchBar(
+                    query = query,
+                    onQueryChange = viewModel::search,
+                    // Kotak pencarian dipaksa melebar 100% dan tingginya dipipihkan jadi 40.dp
+                    modifier = Modifier.fillMaxWidth().height(40.dp)
+                )
+            }
         },
         contentWindowInsets = WindowInsets.statusBars
     ) { inner ->
@@ -736,6 +734,52 @@ private fun SuccessDialog(
                     OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) {
                         Text("Ekspor PDF")
                     }
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun CompactSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    BasicTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(
+            color = MaterialTheme.colorScheme.onSurface
+        ),
+        modifier = modifier,
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Rounded.Search,
+                    contentDescription = "Cari",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.weight(1f)) {
+                    if (query.isEmpty()) {
+                        Text(
+                            text = "Cari produk/SKU…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
+                    innerTextField()
                 }
             }
         }
