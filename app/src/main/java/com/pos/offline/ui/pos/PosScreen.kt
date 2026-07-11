@@ -27,6 +27,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material.icons.Icons
@@ -516,27 +518,22 @@ private fun TotalsSummary(
     onTaxRateChange: (Double) -> Unit,
     onPaidChange: (Long) -> Unit
 ) {
-    // 1. NOL-KAN JARAK ANTAR BARIS (Diatur rapat)
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) { 
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         SummaryLine("Subtotal", totals.subtotal.toRupiah())
         
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp), 
-            modifier = Modifier.padding(vertical = 2.dp)
-        ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MoneyField(
-                label = "Diskon", 
+                label = "Diskon",
                 value = discount,
                 onValueChange = onDiscountChange,
-                // 2. PAKSA TINGGI INPUT DISKON MENJADI 46.dp
-                modifier = Modifier.weight(1f).height(46.dp) 
+                // Tinggi ditekan hingga 40.dp, sangat compact!
+                modifier = Modifier.weight(1f).height(40.dp) 
             )
             DecimalField(
-                label = "Pajak", 
+                label = "Pajak",
                 value = taxRate * 100.0,
                 onValueChange = { pct -> onTaxRateChange((pct / 100.0).coerceIn(0.0, 100.0)) },
-                // 3. PAKSA TINGGI INPUT PAJAK MENJADI 46.dp
-                modifier = Modifier.weight(1f).height(46.dp) 
+                modifier = Modifier.weight(1f).height(40.dp)
             )
         }
         
@@ -547,11 +544,11 @@ private fun TotalsSummary(
         SummaryLine("Total", totals.total.toRupiah(), emphasize = true)
 
         MoneyField(
-            label = "Uang dibayar", 
+            label = "Bayar",
             value = paid,
             onValueChange = onPaidChange,
-            // 4. PAKSA TINGGI INPUT PEMBAYARAN MENJADI 46.dp
-            modifier = Modifier.fillMaxWidth().height(46.dp).padding(top = 2.dp) 
+            // Tinggi 44.dp agar sedikit lebih menonjol dari diskon/pajak
+            modifier = Modifier.fillMaxWidth().height(44.dp) 
         )
         if (paid > 0) SummaryLine("Kembalian", change.toRupiah(), color = MaterialTheme.colorScheme.primary)
     }
@@ -583,18 +580,49 @@ private fun MoneyField(
     modifier: Modifier = Modifier
 ) {
     var text by remember(value) { mutableStateOf(if (value <= 0) "" else value.toString()) }
-    OutlinedTextField(
+
+    BasicTextField(
         value = text,
         onValueChange = { input ->
             val digits = input.filter { it.isDigit() }
             text = digits
             onValueChange(digits.toLongOrNull() ?: 0L)
         },
-        label = { Text(label, style = MaterialTheme.typography.bodySmall) },
-        singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        shape = RoundedCornerShape(12.dp),
-        modifier = modifier
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(
+            color = MaterialTheme.colorScheme.onSurface, 
+            fontWeight = FontWeight.SemiBold
+        ),
+        decorationBox = { innerTextField ->
+            // Merakit kotak input secara manual
+            Row(
+                modifier = modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Label statis sebagai prefix
+                Text(
+                    text = "$label: ",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                // Area tempat angka diketik
+                Box(Modifier.weight(1f)) {
+                    if (text.isEmpty()) {
+                        Text(
+                            text = "0", 
+                            style = MaterialTheme.typography.bodyMedium, 
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        }
     )
 }
 
@@ -609,10 +637,10 @@ private fun DecimalField(
     var text by remember(value) {
         mutableStateOf(if (value <= 0.0) "" else formatTrim(value))
     }
-    OutlinedTextField(
+    
+    BasicTextField(
         value = text,
         onValueChange = { input ->
-            // Izinkan hanya digit & maksimal satu titik desimal.
             val cleaned = buildString {
                 var dotSeen = false
                 for (c in input) {
@@ -625,11 +653,38 @@ private fun DecimalField(
             text = cleaned
             onValueChange(cleaned.toDoubleOrNull() ?: 0.0)
         },
-        label = { Text(label, style = MaterialTheme.typography.bodySmall) },
-        singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        shape = RoundedCornerShape(12.dp),
-        modifier = modifier
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold
+        ),
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "$label: ",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Box(Modifier.weight(1f)) {
+                    if (text.isEmpty()) {
+                        Text(
+                            text = "0", 
+                            style = MaterialTheme.typography.bodyMedium, 
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        }
     )
 }
 

@@ -332,35 +332,37 @@ private fun CartPane(
     onCheckout: () -> Unit,
     canCheckout: Boolean,
     isProcessing: Boolean
-    // Parameter isWideLayout SUDAH DIHAPUS
 ) {
     GlassCard(
-        // Padding bottom dikembalikan ke 12.dp karena celah bawah sudah dibasmi oleh Scaffold
         modifier = modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
-        contentPadding = PaddingValues(12.dp)
+        // 1. PANGKAS PADDING DALAM KARTU
+        contentPadding = PaddingValues(10.dp) 
     ) {
-        // HAPUS Modifier.fillMaxSize()! Biarkan Column beradaptasi.
         Column(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.ShoppingCart, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Keranjang", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                Icon(Icons.Rounded.ShoppingCart, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(6.dp))
+                // 2. KECILKAN UKURAN JUDUL
+                Text("Keranjang", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 if (cart.isNotEmpty()) {
-                    TextButton(onClick = onClear) {
-                        Icon(Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    TextButton(
+                        onClick = onClear, 
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Icon(Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Kosongkan")
+                        Text("Kosongkan", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            // 3. TIPISKAN JARAK GARIS PEMBATAS
+            HorizontalDivider(Modifier.padding(vertical = 4.dp)) 
 
-            // DAFTAR ITEM BELANJA
             LazyColumn(
-                // RAHASIA 2: weight(1f, fill = false). 
-                // List tidak akan rakus memakan ruang, tapi akan otomatis scroll jika item terlalu banyak!
                 modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                // 4. RAPATKAN JARAK ANTAR ITEM KERANJANG
+                verticalArrangement = Arrangement.spacedBy(4.dp) 
             ) {
                 items(cart, key = { it.id }, contentType = { "cart" }) { item ->
                     CartRow(
@@ -372,10 +374,9 @@ private fun CartPane(
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            // 5. TIPISKAN JARAK GARIS PEMBATAS BAWAH
+            HorizontalDivider(Modifier.padding(vertical = 4.dp)) 
 
-            // ---- Input & ringkasan total ----
             TotalsSummary(
                 totals = totals,
                 change = change,
@@ -387,12 +388,13 @@ private fun CartPane(
                 onPaidChange = onPaidChange
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(6.dp))
             Button(
                 onClick = onCheckout,
                 enabled = canCheckout,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(14.dp)
+                // 6. PAKSA TOMBOL LEBIH PENDEK (Dari 52.dp menjadi 42.dp)
+                modifier = Modifier.fillMaxWidth().height(42.dp), 
+                shape = RoundedCornerShape(12.dp)
             ) {
                 if (isProcessing) {
                     CircularProgressIndicator(
@@ -401,8 +403,8 @@ private fun CartPane(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Icon(Icons.Rounded.Check, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text("Bayar · ${totals.total.toRupiah()}")
                 }
             }
@@ -514,23 +516,25 @@ private fun TotalsSummary(
     onTaxRateChange: (Double) -> Unit,
     onPaidChange: (Long) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         SummaryLine("Subtotal", totals.subtotal.toRupiah())
-        // Input diskon (Rupiah) & pajak (%).
+        
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MoneyField(
-                label = "Diskon (Rp)",
+                label = "Diskon",
                 value = discount,
                 onValueChange = onDiscountChange,
-                modifier = Modifier.weight(1f)
+                // Tinggi ditekan hingga 40.dp, sangat compact!
+                modifier = Modifier.weight(1f).height(40.dp) 
             )
             DecimalField(
-                label = "Pajak (%)",
+                label = "Pajak",
                 value = taxRate * 100.0,
                 onValueChange = { pct -> onTaxRateChange((pct / 100.0).coerceIn(0.0, 100.0)) },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).height(40.dp)
             )
         }
+        
         if (totals.discount > 0) SummaryLine("Diskon", "- ${totals.discount.toRupiah()}")
         if (totals.tax > 0) SummaryLine("Pajak", totals.tax.toRupiah())
 
@@ -538,10 +542,11 @@ private fun TotalsSummary(
         SummaryLine("Total", totals.total.toRupiah(), emphasize = true)
 
         MoneyField(
-            label = "Uang dibayar (Rp)",
+            label = "Bayar",
             value = paid,
             onValueChange = onPaidChange,
-            modifier = Modifier.fillMaxWidth()
+            // Tinggi 44.dp agar sedikit lebih menonjol dari diskon/pajak
+            modifier = Modifier.fillMaxWidth().height(44.dp) 
         )
         if (paid > 0) SummaryLine("Kembalian", change.toRupiah(), color = MaterialTheme.colorScheme.primary)
     }
@@ -573,18 +578,49 @@ private fun MoneyField(
     modifier: Modifier = Modifier
 ) {
     var text by remember(value) { mutableStateOf(if (value <= 0) "" else value.toString()) }
-    OutlinedTextField(
+
+    BasicTextField(
         value = text,
         onValueChange = { input ->
             val digits = input.filter { it.isDigit() }
             text = digits
             onValueChange(digits.toLongOrNull() ?: 0L)
         },
-        label = { Text(label, style = MaterialTheme.typography.bodySmall) },
-        singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        shape = RoundedCornerShape(12.dp),
-        modifier = modifier
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(
+            color = MaterialTheme.colorScheme.onSurface, 
+            fontWeight = FontWeight.SemiBold
+        ),
+        decorationBox = { innerTextField ->
+            // Merakit kotak input secara manual
+            Row(
+                modifier = modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Label statis sebagai prefix
+                Text(
+                    text = "$label: ",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                // Area tempat angka diketik
+                Box(Modifier.weight(1f)) {
+                    if (text.isEmpty()) {
+                        Text(
+                            text = "0", 
+                            style = MaterialTheme.typography.bodyMedium, 
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        }
     )
 }
 
