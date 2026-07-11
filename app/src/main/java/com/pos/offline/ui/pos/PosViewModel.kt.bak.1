@@ -19,9 +19,6 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 
 /** Ringkasan kalkulasi keranjang (nilai murni, mudah di-unit-test). */
@@ -31,11 +28,6 @@ data class Totals(
     val tax: Long = 0L,
     val total: Long = 0L
 )
-
-/** Event UI sekali-jalan (bukan state) — cocok untuk Snackbar/Toast, tidak "nempel" saat rotasi. */
-sealed interface PosUiEvent {
-    data class ShowMessage(val message: String) : PosUiEvent
-}
 
 /** Status proses checkout (unidirectional: UI hanya membaca, VM yang menulis). */
 sealed interface CheckoutState {
@@ -92,10 +84,6 @@ class PosViewModel(
         computeTotals(items, disc, rate)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Totals())
 
-    // ---------- Event UI sekali-jalan ----------
-    private val _uiEvents = MutableSharedFlow<PosUiEvent>(extraBufferCapacity = 4)
-    val uiEvents: SharedFlow<PosUiEvent> = _uiEvents.asSharedFlow()
-
     // ---------- Status checkout ----------
     private val _checkoutState = MutableStateFlow<CheckoutState>(CheckoutState.Idle)
     val checkoutState: StateFlow<CheckoutState> = _checkoutState.asStateFlow()
@@ -107,28 +95,10 @@ class PosViewModel(
     fun setPaid(value: Long) { _paid.value = value.coerceAtLeast(0L) }
 
     fun addToCart(product: ProductEntity) = viewModelScope.launch {
-        // Guard stok: jumlah yang sudah ada di keranjang + 1 tidak boleh melebihi stok fisik.
-        val currentQtyInCart = cart.value.find { it.productId == product.id }?.quantity ?: 0
-        if (currentQtyInCart + 1 > product.stock) {
-            _uiEvents.emit(
-                PosUiEvent.ShowMessage("Stok \"${product.name}\" tidak mencukupi (tersisa ${product.stock}).")
-            )
-            return@launch
-        }
         cartRepository.add(product.id, product.name, product.price)
     }
 
     fun increaseQty(item: CartItemEntity) = viewModelScope.launch {
-        // Ambil data stok terkini langsung dari DB — tidak bergantung pada list `products`
-        // yang bisa saja sedang tersaring oleh kata kunci pencarian.
-        val product = productRepository.getById(item.productId)
-        val stock = product?.stock
-        if (stock != null && item.quantity + 1 > stock) {
-            _uiEvents.emit(
-                PosUiEvent.ShowMessage("Stok \"${item.name}\" tidak mencukupi (tersisa $stock).")
-            )
-            return@launch
-        }
         cartRepository.setQuantity(item.productId, item.quantity + 1)
     }
 
