@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.Alignment
@@ -94,7 +95,11 @@ private fun AppRoot() {
     val scope = rememberCoroutineScope()
     var dest by remember { mutableStateOf(Dest.POS) }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .imePadding() // <-- TAMBAHKAN INI: seluruh layout (termasuk Bottom Nav) ikut menyesuaikan keyboard
+    ) {
         // Konten layar mengisi sisa ruang di atas bottom navigation.
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (dest) {

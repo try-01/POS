@@ -27,7 +27,7 @@ import androidx.compose.material.icons.rounded.Assessment
 import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.Surface
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -124,50 +124,51 @@ private fun AppRoot() {
             }
         }
 
-        NavigationBar {
-        // --- NAVIGATION BAR KUSTOM SUPER COMPACT ---
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp) 
-                .height(48.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Dest.entries.forEach { item ->
-                val selected = dest == item
-                val color = if (selected) androidx.compose.material3.MaterialTheme.colorScheme.primary 
-                            else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clickable { dest = item },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = when (item) {
-                            Dest.POS -> Icons.Rounded.ShoppingCart
-                            Dest.INVENTORY -> Icons.Rounded.Inventory2
-                            Dest.REPORT -> Icons.Rounded.Assessment
-                        },
-                        contentDescription = item.label,
-                        tint = color,
-                        // Ikon sedikit dikecilkan agar pas di ruang 44.dp
-                        modifier = Modifier.size(18.dp) 
-                    )
-                    // Hapus Spacer agar teks menempel rapi di bawah ikon
-                    Text(
-                        text = item.label,
-                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                        color = color,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-                    )
-                }
+Surface(
+    modifier = Modifier.fillMaxWidth(),
+    color = androidx.compose.material3.MaterialTheme.colorScheme.surface,
+    tonalElevation = 3.dp
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .height(56.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Dest.entries.forEach { item ->
+            val selected = dest == item
+            val color = if (selected) androidx.compose.material3.MaterialTheme.colorScheme.primary
+                        else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable { dest = item },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = when (item) {
+                        Dest.POS -> Icons.Rounded.ShoppingCart
+                        Dest.INVENTORY -> Icons.Rounded.Inventory2
+                        Dest.REPORT -> Icons.Rounded.Assessment
+                    },
+                    contentDescription = item.label,
+                    tint = color,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = item.label,
+                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                    color = color,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                )
             }
         }
-        }
+    }
+}
     }
 }
