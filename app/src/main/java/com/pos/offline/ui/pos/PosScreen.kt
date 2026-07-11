@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.ime
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -171,14 +173,19 @@ fun PosScreen(
         contentWindowInsets = WindowInsets.statusBars
     ) { inner ->
         BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-        ) {
-            val isWide = maxWidth >= 840.dp
-            val maxH = maxHeight
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(inner)
+            .imePadding() // <-- DIPINDAH KE SINI: hanya area konten (bukan topbar) yang menyesuaikan keyboard
+    ) {
+        val isWide = maxWidth >= 840.dp
+        val maxH = maxHeight
 
-            if (isWide) {
+        // Deteksi apakah keyboard sedang tampil, untuk melonggarkan batas tinggi CartPane saat mengetik.
+        val density = LocalDensity.current
+        val imeVisible = WindowInsets.ime.getBottom(density) > 0
+
+        if (isWide) {
                 Row(Modifier.fillMaxSize()) {
                     ProductPane(
                         modifier = Modifier.weight(1f).fillMaxHeight(),
@@ -210,19 +217,28 @@ fun PosScreen(
                     )
                 }
             } else {
-                Column(Modifier.fillMaxSize()) {
-                    ProductPane(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        products = products,
-                        cartQtyByProductId = cartQtyByProductId,
-                        onAdd = viewModel::addToCart
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    CartPane(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .wrapContentHeight()
-                            .let { if (cartExpanded) it.heightIn(max = maxH * 0.65f) else it },
+            Column(Modifier.fillMaxSize()) {
+                ProductPane(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    products = products,
+                    cartQtyByProductId = cartQtyByProductId,
+                    onAdd = viewModel::addToCart
+                )
+                Spacer(Modifier.height(8.dp))
+                CartPane(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight()
+                        .let { base ->
+                            when {
+                                !cartExpanded -> base
+                                // Keyboard aktif: JANGAN batasi 65% — biar TotalsSummary
+                                // & tombol Bayar selalu punya ruang untuk muncul penuh
+                                // di atas keyboard, bukan tersembunyi di baliknya.
+                                imeVisible -> base
+                                else -> base.heightIn(max = maxH * 0.65f)
+                                }
+                        },
                         cart = cart,
                         totals = totals,
                         discount = discount,
