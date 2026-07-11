@@ -176,7 +176,6 @@ fun PosScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(inner)
-            .imePadding() // <-- DIPINDAH KE SINI: hanya area konten (bukan topbar) yang menyesuaikan keyboard
     ) {
         val isWide = maxWidth >= 840.dp
         val maxH = maxHeight

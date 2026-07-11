@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.lazy.LazyColumn
@@ -60,6 +61,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -138,13 +140,16 @@ fun PosScreen(
 
     // ---- Snackbar untuk event sekali-jalan dari ViewModel (mis. stok kurang) ----
     val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(viewModel) {
-        viewModel.uiEvents.collect { event ->
-            when (event) {
-                is PosUiEvent.ShowMessage -> snackbarHostState.showSnackbar(event.message)
-            }
+LaunchedEffect(viewModel) {
+    viewModel.uiEvents.collect { event ->
+        when (event) {
+            is PosUiEvent.ShowMessage -> snackbarHostState.showSnackbar(
+                message = event.message,
+                duration = SnackbarDuration.Short // eksplisit: pesan stok harus singkat, tidak mengganggu alur kasir
+            )
         }
     }
+}
 
     // ---- State collapse/expand keranjang (khusus layout ponsel) ----
     var cartExpanded by remember { mutableStateOf(false) }
@@ -194,7 +199,10 @@ fun PosScreen(
                     )
                     Spacer(Modifier.width(12.dp))
                     CartPane(
-                        modifier = Modifier.width(380.dp).fillMaxHeight(),
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .widthIn(min = 320.dp, max = 420.dp) // <-- GANTI dari .width(380.dp)
+                            .fillMaxWidth(0.32f),                 // proporsional ~32% lebar layar, dibatasi min/max di atas
                         cart = cart,
                         totals = totals,
                         discount = discount,
@@ -453,53 +461,80 @@ private fun CartPane(
                 }
             }
 
-            if (showFull) {
-                // ---- Isi lengkap: daftar item, ringkasan, tombol bayar ----
-                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+if (showFull) {
+    HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
-                val cartListState = rememberLazyListState()
-                Box(Modifier.weight(1f, fill = false)) {
-                    LazyColumn(
-                        state = cartListState,
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(vertical = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        items(cart, key = { it.id }, contentType = { "cart" }) { item ->
-                            val stock = stockByProductId[item.productId]
-                            // stock == null → produk tak terdeteksi di daftar terfilter saat ini;
-                            // izinkan sementara, validasi akhir tetap dilakukan di ViewModel.
-                            val canIncrease = stock == null || item.quantity < stock
-                            CartRow(
-                                item = item,
-                                canIncrease = canIncrease,
-                                onIncrease = { onIncrease(item) },
-                                onDecrease = { onDecrease(item) },
-                                onRemove = { onRemove(item) }
-                            )
-                        }
-                    }
-
-                    // Indikator halus: menandakan masih ada item tersembunyi di atas/bawah.
-                    val showTopFade by remember { derivedStateOf { cartListState.canScrollBackward } }
-                    val showBottomFade by remember { derivedStateOf { cartListState.canScrollForward } }
-                    if (showTopFade) {
-                        HorizontalDivider(
-                            modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth(),
-                            thickness = 2.dp,
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                        )
-                    }
-                    if (showBottomFade) {
-                        HorizontalDivider(
-                            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-                            thickness = 2.dp,
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                        )
-                    }
+    if (cart.isEmpty()) {
+        // Empty state: beri konteks visual jelas, bukan area kosong membingungkan.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    Icons.Rounded.ShoppingCart,
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Keranjang masih kosong",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+                Text(
+                    "Ketuk produk di atas untuk menambahkan",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                )
+            }
+        }
+    } else {
+        val cartListState = rememberLazyListState()
+        Box(Modifier.weight(1f, fill = false)) {
+            LazyColumn(
+                state = cartListState,
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items(cart, key = { it.id }, contentType = { "cart" }) { item ->
+                    val stock = stockByProductId[item.productId]
+                    val canIncrease = stock == null || item.quantity < stock
+                    CartRow(
+                        item = item,
+                        canIncrease = canIncrease,
+                        onIncrease = { onIncrease(item) },
+                        onDecrease = { onDecrease(item) },
+                        onRemove = { onRemove(item) },
+                        modifier = Modifier.animateItem()
+                    )
                 }
+            }
 
-                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+            val showTopFade by remember { derivedStateOf { cartListState.canScrollBackward } }
+            val showBottomFade by remember { derivedStateOf { cartListState.canScrollForward } }
+            if (showTopFade) {
+                HorizontalDivider(
+                    modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth(),
+                    thickness = 2.dp,
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                )
+            }
+            if (showBottomFade) {
+                HorizontalDivider(
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                    thickness = 2.dp,
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                )
+            }
+        }
+    }
+
+    HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
                 TotalsSummary(
                     totals = totals,
@@ -597,10 +632,11 @@ private fun CartRow(
     canIncrease: Boolean,
     onIncrease: () -> Unit,
     onDecrease: () -> Unit,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier // <-- TAMBAHKAN parameter ini
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier // <-- GANTI dari "Modifier" polos jadi terima dari luar
             .fillMaxWidth()
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
