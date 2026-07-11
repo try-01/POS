@@ -306,7 +306,9 @@ private fun ProductCard(product: ProductEntity, remainingStock: Int, onAdd: () -
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(12.dp),
-        enabled = !outOfStock,
+        // enabled TIDAK lagi mengikuti outOfStock — kartu tetap bisa ditekan
+        // supaya ViewModel selalu sempat memvalidasi & mengirim pesan penolakan.
+        // Tampilan "pudar" tetap didapat dari warna teks/ikon di bawah.
         onClick = onAdd
     ) {
         Column {
@@ -394,7 +396,7 @@ private fun CartPane(
 
     Box(
         modifier = modifier
-            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
+            .padding(start = 12.dp, end = 12.dp, top = 1.5.dp, bottom = 1.5.dp)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
     ) {
         Column(Modifier.fillMaxWidth().padding(10.dp)) {
@@ -650,8 +652,8 @@ private fun QuantityStepper(
         CompactActionBox(
             icon = Icons.Rounded.Add,
             contentDescription = "Tambah",
-            enabled = canIncrease,
-            onClick = onIncrease
+            dimmed = !canIncrease, // ganti dari "enabled = canIncrease"
+            onClick = onIncrease   // tetap selalu terhubung, biar ViewModel yang menolak+kasih pesan
         )
     }
 }
@@ -660,7 +662,7 @@ private fun QuantityStepper(
 private fun CompactActionBox(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String,
-    enabled: Boolean = true,
+    dimmed: Boolean = false, // sebelumnya bernama "enabled" — sekarang murni untuk styling, bukan gating klik
     onClick: () -> Unit
 ) {
     Box(
@@ -668,17 +670,17 @@ private fun CompactActionBox(
             .size(28.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(
-                if (enabled) MaterialTheme.colorScheme.surfaceVariant
-                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                if (dimmed) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                else MaterialTheme.colorScheme.surfaceVariant
             )
-            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
+            .clickable(onClick = onClick), // SELALU bisa ditekan — validasi ada di ViewModel
         contentAlignment = Alignment.Center
     ) {
         Icon(
             icon,
             contentDescription = contentDescription,
             modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.4f)
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (dimmed) 0.4f else 1f)
         )
     }
 }
@@ -751,35 +753,45 @@ private fun SummaryLine(label: String, value: String, emphasize: Boolean = false
 
 /**
  * VisualTransformation yang menampilkan separator ribuan ("100000" -> "100.000")
- * tanpa mengubah nilai asli yang disimpan di state. Offset mapping dihitung
- * matematis agar posisi kursor tetap presisi saat mengetik/menghapus.
+ * tanpa mengubah nilai asli yang disimpan di state.
+ *
+ * Pemetaan offset dibangun dari array (bukan rumus aritmatika manual) supaya
+ * tidak ada celah off-by-one yang bisa menghasilkan indeks negatif/di luar
+ * jangkauan — penyebab crash sebelumnya saat jumlah digit kelipatan 3.
  */
 private object ThousandsSeparatorTransformation : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val original = text.text
-        if (original.isEmpty()) return TransformedText(text, OffsetMapping.Identity)
+        val n = original.length
+        if (n == 0) return TransformedText(text, OffsetMapping.Identity)
 
-        val formatted = original.reversed()
-            .chunked(3)
-            .joinToString(".")
-            .reversed()
+        // Bangun string berformat + peta original->transformed sekaligus.
+        val sb = StringBuilder()
+        val orig2Trans = IntArray(n + 1)
+        orig2Trans[0] = 0
+        for (i in original.indices) {
+            sb.append(original[i])
+            val remaining = n - i - 1
+            if (remaining > 0 && remaining % 3 == 0) sb.append('.')
+            orig2Trans[i + 1] = sb.length
+        }
+        val formatted = sb.toString()
 
-        val totalSeparators = (original.length - 1).coerceAtLeast(0) / 3
+        // Peta balik transformed->original, dibangun dengan menelusuri karakter hasil.
+        val trans2Orig = IntArray(formatted.length + 1)
+        var origIdx = 0
+        trans2Orig[0] = 0
+        for (t in 1..formatted.length) {
+            if (formatted[t - 1] != '.') origIdx++
+            trans2Orig[t] = origIdx.coerceAtMost(n)
+        }
 
         val offsetMapping = object : OffsetMapping {
-            override fun originalToTransformed(offset: Int): Int {
-                val safeOffset = offset.coerceIn(0, original.length)
-                val digitsFromRight = original.length - safeOffset
-                val separatorsAfterCursor = digitsFromRight / 3
-                val separatorsBeforeCursor = totalSeparators - separatorsAfterCursor
-                return safeOffset + separatorsBeforeCursor
-            }
+            override fun originalToTransformed(offset: Int): Int =
+                orig2Trans[offset.coerceIn(0, n)]
 
-            override fun transformedToOriginal(offset: Int): Int {
-                val safeOffset = offset.coerceIn(0, formatted.length)
-                val dotsBefore = formatted.take(safeOffset).count { it == '.' }
-                return (safeOffset - dotsBefore).coerceIn(0, original.length)
-            }
+            override fun transformedToOriginal(offset: Int): Int =
+                trans2Orig[offset.coerceIn(0, formatted.length)]
         }
 
         return TransformedText(AnnotatedString(formatted), offsetMapping)
