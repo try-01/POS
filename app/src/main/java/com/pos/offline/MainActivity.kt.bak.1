@@ -9,19 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Assessment
 import androidx.compose.material.icons.rounded.Inventory2
@@ -125,52 +112,23 @@ private fun AppRoot() {
         }
 
         NavigationBar {
-        // --- NAVIGATION BAR KUSTOM SUPER COMPACT ---
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                // Memberikan efek background yang menyatu dengan tema
-                .background(androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                // Menghindar dari garis navigasi sistem Android di bagian paling bawah
-                .navigationBarsPadding() 
-                // KUNCI: Menekan tinggi menu dari 80.dp menjadi hanya 52.dp!
-                .height(52.dp), 
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
             Dest.entries.forEach { item ->
-                val selected = dest == item
-                val color = if (selected) androidx.compose.material3.MaterialTheme.colorScheme.primary 
-                            else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clickable { dest = item }, // Area sentuh tetap luas
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = when (item) {
-                            Dest.POS -> Icons.Rounded.ShoppingCart
-                            Dest.INVENTORY -> Icons.Rounded.Inventory2
-                            Dest.REPORT -> Icons.Rounded.Assessment
-                        },
-                        contentDescription = item.label,
-                        tint = color,
-                        modifier = Modifier.size(20.dp) // Ukuran ikon diperkecil sedikit
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = item.label,
-                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                        color = color,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-                    )
-                }
+                NavigationBarItem(
+                    selected = dest == item,
+                    onClick = { dest = item },
+                    icon = {
+                        Icon(
+                            imageVector = when (item) {
+                                Dest.POS -> Icons.Rounded.ShoppingCart
+                                Dest.INVENTORY -> Icons.Rounded.Inventory2
+                                Dest.REPORT -> Icons.Rounded.Assessment
+                            },
+                            contentDescription = item.label
+                        )
+                    },
+                    label = { Text(item.label) }
+                )
             }
-        }
         }
     }
 }

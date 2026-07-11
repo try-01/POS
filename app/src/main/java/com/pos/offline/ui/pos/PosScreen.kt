@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -111,18 +112,17 @@ fun PosScreen(
     }
 
     Scaffold(
-        // KITA BUANG TopAppBar bawaan Material 3 dan ganti dengan Box sederhana
         topBar = {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    // Padding vertikal ditekan jadi 6.dp (Sangat menarik batas ke atas)
+                    .background(MaterialTheme.colorScheme.background)
+                    .statusBarsPadding() // <--- TAMBAHKAN BARIS INI: Mendorong kotak ke bawah status bar
                     .padding(horizontal = 12.dp, vertical = 6.dp) 
             ) {
                 CompactSearchBar(
                     query = query,
                     onQueryChange = viewModel::search,
-                    // Kotak pencarian dipaksa melebar 100% dan tingginya dipipihkan jadi 40.dp
                     modifier = Modifier.fillMaxWidth().height(40.dp)
                 )
             }
