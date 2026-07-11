@@ -129,10 +129,8 @@ private fun AppRoot() {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                // HAPUS navigationBarsPadding() agar menu mepet langsung ke batas bawah layar/tombol sistem
-                // TEKAN tinggi menu menjadi hanya 44.dp
-                .height(44.dp), 
+                .padding(bottom = 8.dp) 
+                .height(48.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {

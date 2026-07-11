@@ -116,7 +116,6 @@ fun PosScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background)
                     .statusBarsPadding() // <--- TAMBAHKAN BARIS INI: Mendorong kotak ke bawah status bar
                     .padding(horizontal = 12.dp, vertical = 6.dp) 
             ) {
@@ -333,11 +332,13 @@ private fun CartPane(
     canCheckout: Boolean,
     isProcessing: Boolean
 ) {
-    GlassCard(
-        modifier = modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 0.dp),
-        contentPadding = PaddingValues(10.dp)
+    Box(
+        modifier = modifier
+            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 0.dp)
+            // Tambahkan border tipis agar batas keranjang tetap terlihat elegan meski transparan
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
     ) {
-        Column(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.ShoppingCart, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(6.dp))
@@ -758,7 +759,6 @@ private fun CompactSearchBar(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
