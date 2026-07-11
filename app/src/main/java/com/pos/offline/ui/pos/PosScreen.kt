@@ -521,7 +521,6 @@ private fun TotalsSummary(
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         SummaryLine("Subtotal", totals.subtotal.toRupiah())
         
-        // BLOK ROW INI KUNCI-NYA: Membagi ruang horizontal 50:50 secara adil
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -530,15 +529,13 @@ private fun TotalsSummary(
                 label = "Diskon",
                 value = discount,
                 onValueChange = onDiscountChange,
-                // weight(1f) memaksa Diskon mengambil maksimal 50% lebar
                 modifier = Modifier.weight(1f).height(40.dp) 
             )
             DecimalField(
                 label = "Pajak (%)",
                 value = taxRate * 100.0,
                 onValueChange = { pct -> onTaxRateChange((pct / 100.0).coerceIn(0.0, 100.0)) },
-                // weight(1f) memaksa Pajak mengambil sisa 50% lebar
-                modifier = Modifier.weight(1f).height(40.dp) 
+                modifier = Modifier.weight(1f).height(40.dp)
             )
         }
         
@@ -552,7 +549,7 @@ private fun TotalsSummary(
             label = "Bayar",
             value = paid,
             onValueChange = onPaidChange,
-            modifier = Modifier.fillMaxWidth().height(44.dp)
+            modifier = Modifier.fillMaxWidth().height(44.dp) 
         )
         if (paid > 0) SummaryLine("Kembalian", change.toRupiah(), color = MaterialTheme.colorScheme.primary)
     }
@@ -598,23 +595,24 @@ private fun MoneyField(
             color = MaterialTheme.colorScheme.onSurface, 
             fontWeight = FontWeight.SemiBold
         ),
+        // PERBAIKAN: Modifier wajib dipasang langsung di BasicTextField
+        modifier = modifier, 
         decorationBox = { innerTextField ->
-            // Merakit kotak input secara manual
             Row(
-                modifier = modifier
+                // PERBAIKAN: Kotak hiasan sekarang mengikuti ukuran BasicTextField
+                modifier = Modifier
+                    .fillMaxSize() 
                     .clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Label statis sebagai prefix
                 Text(
                     text = "$label: ",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                // Area tempat angka diketik
                 Box(Modifier.weight(1f)) {
                     if (text.isEmpty()) {
                         Text(
@@ -630,7 +628,6 @@ private fun MoneyField(
     )
 }
 
-/** Field desimal (untuk persentase pajak). Menerima satu titik desimal. */
 @Composable
 private fun DecimalField(
     label: String,
@@ -663,9 +660,13 @@ private fun DecimalField(
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold
         ),
+        // PERBAIKAN: Modifier dipasang di sini
+        modifier = modifier, 
         decorationBox = { innerTextField ->
             Row(
-                modifier = modifier
+                // PERBAIKAN: fillMaxSize digunakan di sini
+                modifier = Modifier
+                    .fillMaxSize()
                     .clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
