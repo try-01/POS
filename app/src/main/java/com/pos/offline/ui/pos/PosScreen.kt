@@ -334,9 +334,8 @@ private fun CartPane(
     isProcessing: Boolean
 ) {
     GlassCard(
-        modifier = modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
-        // 1. PANGKAS PADDING DALAM KARTU
-        contentPadding = PaddingValues(10.dp) 
+        modifier = modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 0.dp),
+        contentPadding = PaddingValues(10.dp)
     ) {
         Column(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
