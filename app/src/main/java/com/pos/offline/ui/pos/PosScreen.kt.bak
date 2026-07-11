@@ -300,11 +300,13 @@ private fun ProductPane(
     onAdd: (ProductEntity) -> Unit
 ) {
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 130.dp), // diperkecil dari 160.dp -> lebih banyak kolom per baris
+        // 104.dp dipilih agar 3 kolom muat di layar ~360dp (mis. device 1080x2460px @3x density).
+        // Kalau di device lain kolom terasa kurang, coba turunkan sedikit lagi (mis. 96.dp).
+        columns = GridCells.Adaptive(minSize = 104.dp),
         modifier = modifier.padding(horizontal = 12.dp),
         contentPadding = PaddingValues(bottom = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp), // diperkecil dari 10.dp
-        verticalArrangement = Arrangement.spacedBy(8.dp)    // diperkecil dari 10.dp
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         items(
             items = products,
@@ -327,34 +329,33 @@ private fun ProductCard(product: ProductEntity, remainingStock: Int, onAdd: () -
     val outOfStock = remainingStock <= 0
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(8.dp), // diperkecil dari 12.dp
+        contentPadding = PaddingValues(6.dp),
         onClick = onAdd
     ) {
         Column {
             Text(
                 text = product.name,
-                style = MaterialTheme.typography.titleSmall, // diperkecil dari titleMedium
-                maxLines = 2,
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                maxLines = 1, // ganti ke 2 kalau nama sering terpotong mengganggu
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(Modifier.height(1.dp)) // diperkecil dari 2.dp
             Text(
                 text = product.sku,
-                style = MaterialTheme.typography.labelSmall, // diperkecil dari bodySmall
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
-            Spacer(Modifier.height(8.dp)) // diperkecil dari 12.dp
+            Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = product.price.toRupiah(),
-                        style = MaterialTheme.typography.titleSmall, // diperkecil dari titleMedium
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = if (outOfStock) "Stok habis" else "Stok: $remainingStock",
-                        style = MaterialTheme.typography.labelSmall, // diperkecil dari bodySmall
+                        text = if (outOfStock) "Habis" else "Stok: $remainingStock",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         color = if (outOfStock) MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
@@ -363,7 +364,7 @@ private fun ProductCard(product: ProductEntity, remainingStock: Int, onAdd: () -
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(28.dp) // diperkecil dari 36.dp
+                        .size(24.dp)
                         .clip(CircleShape)
                         .background(
                             if (outOfStock) MaterialTheme.colorScheme.surfaceVariant
@@ -375,7 +376,7 @@ private fun ProductCard(product: ProductEntity, remainingStock: Int, onAdd: () -
                         contentDescription = "Tambah ${product.name}",
                         tint = if (outOfStock) MaterialTheme.colorScheme.onSurfaceVariant
                         else MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(16.dp) // diperkecil dari 20.dp
+                        modifier = Modifier.size(14.dp)
                     )
                 }
             }
