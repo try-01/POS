@@ -521,19 +521,24 @@ private fun TotalsSummary(
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         SummaryLine("Subtotal", totals.subtotal.toRupiah())
         
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // BLOK ROW INI KUNCI-NYA: Membagi ruang horizontal 50:50 secara adil
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             MoneyField(
                 label = "Diskon",
                 value = discount,
                 onValueChange = onDiscountChange,
-                // Tinggi ditekan hingga 40.dp, sangat compact!
+                // weight(1f) memaksa Diskon mengambil maksimal 50% lebar
                 modifier = Modifier.weight(1f).height(40.dp) 
             )
             DecimalField(
-                label = "Pajak",
+                label = "Pajak (%)",
                 value = taxRate * 100.0,
                 onValueChange = { pct -> onTaxRateChange((pct / 100.0).coerceIn(0.0, 100.0)) },
-                modifier = Modifier.weight(1f).height(40.dp)
+                // weight(1f) memaksa Pajak mengambil sisa 50% lebar
+                modifier = Modifier.weight(1f).height(40.dp) 
             )
         }
         
@@ -547,8 +552,7 @@ private fun TotalsSummary(
             label = "Bayar",
             value = paid,
             onValueChange = onPaidChange,
-            // Tinggi 44.dp agar sedikit lebih menonjol dari diskon/pajak
-            modifier = Modifier.fillMaxWidth().height(44.dp) 
+            modifier = Modifier.fillMaxWidth().height(44.dp)
         )
         if (paid > 0) SummaryLine("Kembalian", change.toRupiah(), color = MaterialTheme.colorScheme.primary)
     }
