@@ -49,10 +49,6 @@ interface TransactionDao {
     @Query("SELECT * FROM transaction_items WHERE transactionId = :invoiceId")
     suspend fun getItems(invoiceId: String): List<TransactionItemEntity>
 
-    /** Semua transaksi dalam satu sesi shift — dasar Laporan Tutup Shift. */
-    @Query("SELECT * FROM transactions WHERE shiftId = :shiftId ORDER BY createdAt ASC")
-    fun observeByShift(shiftId: Long): Flow<List<TransactionEntity>>
-
     /** Tulis header + semua item dalam satu transaksi DB. */
     @Transaction
     suspend fun checkout(tx: TransactionEntity, items: List<TransactionItemEntity>) {

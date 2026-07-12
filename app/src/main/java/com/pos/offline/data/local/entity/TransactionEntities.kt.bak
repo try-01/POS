@@ -1,6 +1,5 @@
 package com.pos.offline.data.local.entity
 
-import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -18,26 +17,7 @@ data class TransactionEntity(
     val tax: Long,           // nominal pajak (Rupiah), dihitung setelah diskon
     val total: Long,         // subtotal - diskon + pajak (yang harus dibayar)
     val paidAmount: Long,    // uang diterima dari pelanggan
-    val change: Long,        // kembalian = max(0, paidAmount - total)
-
-    // ============ KOLOM BARU (v3) — lihat Migrations.MIGRATION_2_3 ============
-    // WAJIB pakai @ColumnInfo(defaultValue) — bukan cukup default Kotlin —
-    // karena Room memvalidasi skema dari anotasi, bukan dari nilai default
-    // parameter (persis seperti pola kolom `cost` di ProductEntity).
-
-    /** Nama enum [PaymentMethod] disimpan sbg String, mis. "CASH"/"QRIS". */
-    @ColumnInfo(defaultValue = "'CASH'")
-    val paymentMethod: String = PaymentMethod.CASH.name,
-
-    /** Null = transaksi tanpa kasir/shift tercatat (fitur ini opsional). */
-    val cashierId: Long? = null,
-
-    /** Snapshot nama kasir saat transaksi dibuat (tetap utuh walau kasir diedit/dihapus). */
-    @ColumnInfo(defaultValue = "''")
-    val cashierName: String = "",
-
-    /** Null = transaksi di luar sesi shift manapun. */
-    val shiftId: Long? = null
+    val change: Long         // kembalian = max(0, paidAmount - total)
 )
 
 /**

@@ -6,14 +6,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.pos.offline.data.local.PosDatabase
 import com.pos.offline.data.repository.CartRepository
-import com.pos.offline.data.repository.CashierRepository
 import com.pos.offline.data.repository.ProductRepository
-import com.pos.offline.data.repository.ShiftRepository
 import com.pos.offline.data.repository.TransactionRepository
 import com.pos.offline.ui.inventory.InventoryViewModel
 import com.pos.offline.ui.pos.PosViewModel
 import com.pos.offline.ui.report.ReportViewModel
 
+/**
+ * Aplikasi entry-point. Menginisialisasi [ServiceLocator] sekali di onCreate.
+ * Memakai applicationContext → tidak menyimpan referensi Activity (anti leak).
+ */
 class PosApplication : Application() {
     override fun onCreate() {
         super.onCreate()
@@ -23,6 +25,10 @@ class PosApplication : Application() {
 
 /**
  * Dependency Injection manual (Service Locator) memakai `by lazy`.
+ *
+ * Alasan memilih ini ketimbang Hilt/Koin: tidak ada reflection/runtime container →
+ * start-up lebih cepat & jejak RAM lebih kecil (sesuai tujuan "sangat ringan").
+ * Database DAO dibuat satu kali lalu dipakai ulang (singleton efektif).
  */
 object ServiceLocator {
     private lateinit var appContext: Context
@@ -38,18 +44,12 @@ object ServiceLocator {
     private val transactionRepository: TransactionRepository by lazy {
         TransactionRepository(db, db.transactionDao(), db.cartDao(), db.productDao())
     }
-    // === BARU: fondasi fitur Kasir/Shift (Batch 1) ===
-    private val cashierRepository: CashierRepository by lazy {
-        CashierRepository(db.cashierDao())
-    }
-    private val shiftRepository: ShiftRepository by lazy {
-        ShiftRepository(db.shiftDao())
-    }
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
     }
 
+    /** Factory ViewModel standar untuk dipakai Compose `viewModel(factory = ...)`. */
     fun posViewModelFactory(): ViewModelProvider.Factory = PosViewModelFactory(
         productRepository,
         cartRepository,
@@ -65,10 +65,9 @@ object ServiceLocator {
     // Repositori lain dapat dibuka di sini saat dibutuhkan.
     fun transactionRepository(): TransactionRepository = transactionRepository
     fun productRepository(): ProductRepository = productRepository
-    fun cashierRepository(): CashierRepository = cashierRepository
-    fun shiftRepository(): ShiftRepository = shiftRepository
 }
 
+/** Factory tipis yang menyuntikkan repository ke dalam [PosViewModel]. */
 class PosViewModelFactory(
     private val productRepository: ProductRepository,
     private val cartRepository: CartRepository,
@@ -79,6 +78,7 @@ class PosViewModelFactory(
         PosViewModel(productRepository, cartRepository, transactionRepository) as T
 }
 
+/** Factory untuk [InventoryViewModel] — hanya butuh ProductRepository. */
 class InventoryViewModelFactory(
     private val productRepository: ProductRepository
 ) : ViewModelProvider.Factory {
@@ -87,6 +87,7 @@ class InventoryViewModelFactory(
         InventoryViewModel(productRepository) as T
 }
 
+/** Factory untuk [ReportViewModel] — hanya butuh TransactionRepository. */
 class ReportViewModelFactory(
     private val transactionRepository: TransactionRepository
 ) : ViewModelProvider.Factory {
