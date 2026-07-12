@@ -118,7 +118,7 @@ import com.pos.offline.util.toRupiah
 fun PosScreen(
     viewModel: PosViewModel,
     onPrintBluetooth: (CheckoutResult) -> Unit,
-    onExportPdf: (CheckoutResult) -> Unit
+    onExportPdf: (CheckoutResult) -> Unit,
     forceWideLayout: Boolean = false // <-- TAMBAHKAN parameter ini
 ) {
     // ---- State reaktif (sadarkan-siklus) ----
@@ -211,7 +211,6 @@ LaunchedEffect(viewModel) {
                         modifier = Modifier
                             .fillMaxHeight()
                             .widthIn(min = 320.dp, max = 420.dp) // <-- GANTI dari .width(380.dp)
-                            .fillMaxWidth(0.32f),                 // proporsional ~32% lebar layar, dibatasi min/max di atas
                         cart = cart,
                         totals = totals,
                         discount = discount,
