@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
+import android.content.res.Configuration
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -86,21 +88,19 @@ private fun AppRoot() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var dest by remember { mutableStateOf(Dest.POS) }
+
     val density = LocalDensity.current
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
+
+    // Deteksi orientasi perangkat — dipakai untuk menyembunyikan Bottom Nav
+    // di landscape supaya area kasir (katalog + keranjang) dapat ruang maksimal.
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     Column(
         Modifier
             .fillMaxSize()
-            // Dipindah ke sini (dari Row bottom-nav) supaya insets navigasi
-            // sistem dihormati di SELURUH layar — bukan cuma bottom-nav.
-            // Ini penting di landscape karena beberapa device (mis. MIUI
-            // dengan navigasi 3-tombol) menaruh strip navigasi di SISI
-            // KANAN layar, bukan di bawah, sehingga area konten (katalog +
-            // keranjang) juga perlu di-inset, bukan cuma bottom-nav saja.
             .navigationBarsPadding()
     ) {
-        // Konten layar mengisi sisa ruang di atas bottom navigation.
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -126,14 +126,17 @@ private fun AppRoot() {
                         Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
                     }
                 )
-
                 Dest.INVENTORY -> InventoryScreen(viewModel = inventoryViewModel)
                 Dest.REPORT -> ReportScreen(viewModel = reportViewModel)
             }
         }
 
+        // Bottom Nav disembunyikan saat keyboard aktif ATAU saat landscape,
+        // supaya layar kasir dapat ruang vertikal maksimal.
+        // CATATAN: saat landscape, tab Inventaris/Laporan tidak bisa diakses
+        // tanpa memutar HP kembali ke potret.
         AnimatedVisibility(
-            visible = !imeVisible,
+            visible = !imeVisible && !isLandscape,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
         ) {
@@ -145,8 +148,6 @@ private fun AppRoot() {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        // HAPUS .navigationBarsPadding() DARI SINI — sudah
-                        // ditangani di Column terluar, jangan dobel di sini.
                         .height(56.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
