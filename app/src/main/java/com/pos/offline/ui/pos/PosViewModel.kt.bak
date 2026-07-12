@@ -118,27 +118,6 @@ class PosViewModel(
         cartRepository.add(product.id, product.name, product.price)
     }
 
-/**
- * Set quantity secara langsung (dipakai saat kasir mengetik angka manual,
- * mis. beli 50 pcs sekaligus tanpa tap "+" berkali-kali).
- * Guard stok tetap divalidasi ke DB sebelum diterapkan.
- */
-fun setQuantityDirect(item: CartItemEntity, newQuantity: Int) = viewModelScope.launch {
-    if (newQuantity <= 0) {
-        cartRepository.remove(item.productId)
-        return@launch
-    }
-    val product = productRepository.getById(item.productId)
-    val stock = product?.stock
-    if (stock != null && newQuantity > stock) {
-        _uiEvents.emit(
-            PosUiEvent.ShowMessage("Stok \"${item.name}\" tidak mencukupi (tersisa $stock).")
-        )
-        return@launch
-    }
-    cartRepository.setQuantity(item.productId, newQuantity)
-}
-
     fun increaseQty(item: CartItemEntity) = viewModelScope.launch {
         // Ambil data stok terkini langsung dari DB — tidak bergantung pada list `products`
         // yang bisa saja sedang tersaring oleh kata kunci pencarian.
