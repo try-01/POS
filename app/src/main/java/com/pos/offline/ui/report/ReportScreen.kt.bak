@@ -26,7 +26,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Paid
 import androidx.compose.material.icons.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material.icons.rounded.Today
@@ -38,12 +37,18 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
+import java.time.LocalDate
+import java.time.ZoneId
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -116,10 +121,16 @@ fun ReportScreen(viewModel: ReportViewModel) {
             // ---------- Ringkasan ----------
             item(key = "summary") { SummarySection(report = report) }
 
-            // ---------- Grafik per jam (hanya bila ada transaksi) ----------
-            if (report.transactionCount > 0) {
-                item(key = "chart") { HourlyRevenueChart(hourly = report.hourlyRevenue) }
-            }
+if (report.transactionCount > 0) {
+    item(key = "chart") {
+        RevenueTrendChart(
+            date = report.date,
+            transactions = report.transactions,
+            totalRevenue = report.totalRevenue,
+            hourly = report.hourlyRevenue
+        )
+    }
+}
 
             // ---------- Daftar transaksi ----------
             item(key = "list_header") {
@@ -355,22 +366,71 @@ private fun StatCard(
     }
 }
 
-// ============================ GRAFIK BATANG PER JAM ============================
+// ============================ KURVA TREN PENDAPATAN (GAYA BURSA) ============================
+
+/** Format ringkas angka Rupiah untuk label sumbu (mis. 1.500.000 -> "Rp1,5jt"). */
+private fun Long.toCompactRupiah(): String {
+    fun trim(d: Double): String {
+        val rounded = Math.round(d * 10) / 10.0
+        return if (rounded == rounded.toLong().toDouble()) rounded.toLong().toString()
+        else rounded.toString().replace('.', ',')
+    }
+    return when {
+        this >= 1_000_000_000L -> "Rp${trim(this / 1_000_000_000.0)}M"
+        this >= 1_000_000L -> "Rp${trim(this / 1_000_000.0)}jt"
+        this >= 1_000L -> "Rp${trim(this / 1_000.0)}rb"
+        else -> "Rp$this"
+    }
+}
 
 /**
- * Grafik batang pendapatan per jam (0–23). Digambar manual dengan [Canvas]:
- * tidak ada dependency chart library, hanya satu pass draw → sangat ringan.
- * Garis bantu horizontal membantu membaca skala.
+ * Kurva pendapatan kumulatif sepanjang hari — mirip "equity curve" pada
+ * grafik bursa saham/kripto. Garis naik bertahap (step) setiap ada transaksi,
+ * lalu datar hingga transaksi berikutnya.
+ *
+ * Kunci perbaikan bug alignment sebelumnya: label sumbu X & Y, garis bantu
+ * grid, dan garis data SEMUA dihitung dari fungsi koordinat [xFor]/[yFor]
+ * yang sama persis — sehingga posisinya dijamin sinkron, tidak mungkin
+ * "nyasar" seperti pada implementasi bar chart sebelumnya (yang memakai
+ * dua sistem koordinat berbeda: Row.SpaceBetween untuk label vs rumus
+ * manual untuk bar).
  */
 @Composable
-private fun HourlyRevenueChart(hourly: List<Long>) {
-    val max = hourly.maxOrNull() ?: 0L
+private fun RevenueTrendChart(
+    date: LocalDate,
+    transactions: List<TransactionEntity>,
+    totalRevenue: Long,
+    hourly: List<Long>
+) {
     val primary = MaterialTheme.colorScheme.primary
-    val grid = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val gridColor = onSurface.copy(alpha = 0.08f)
+    val axisTextColor = onSurface.copy(alpha = 0.55f)
+    val textMeasurer = rememberTextMeasurer()
 
-    // Cari jam puncak untuk keterangan.
-    val peakHour = hourly.indices.maxByOrNull { hourly[it] } ?: 0
-    val peakValue = hourly.getOrElse(peakHour) { 0L }
+    val zone = remember { ZoneId.systemDefault() }
+    val dayStartMillis = remember(date) { date.atStartOfDay(zone).toInstant().toEpochMilli() }
+    val dayEndMillis = remember(date) { date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() }
+
+    // Jam & nilai puncak — tetap dihitung dari data per-jam untuk keterangan ringkas di atas chart.
+    val peakHour = remember(hourly) { hourly.indices.maxByOrNull { hourly[it] } ?: 0 }
+    val peakValue = remember(hourly) { hourly.getOrElse(peakHour) { 0L } }
+
+    // Titik kumulatif: (waktu, total pendapatan berjalan). Diawali (00:00, 0),
+    // naik setiap transaksi sesuai waktu aslinya, diakhiri (24:00, totalRevenue).
+    val points = remember(transactions, dayStartMillis, dayEndMillis) {
+        val sorted = transactions.sortedBy { it.createdAt }
+        val list = mutableListOf(dayStartMillis to 0L)
+        var running = 0L
+        for (tx in sorted) {
+            running += tx.total
+            list.add(tx.createdAt.coerceIn(dayStartMillis, dayEndMillis) to running)
+        }
+        list.add(dayEndMillis to running)
+        list
+    }
+
+    val labelStyle = remember(axisTextColor) { TextStyle(color = axisTextColor, fontSize = 9.sp) }
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
@@ -380,19 +440,19 @@ private fun HourlyRevenueChart(hourly: List<Long>) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    Icons.Rounded.Paid,
+                    Icons.Rounded.ShowChart,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = primary,
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    "Pendapatan per Jam",
+                    "Tren Pendapatan",
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                     fontWeight = FontWeight.SemiBold
                 )
             }
-            if (max > 0L) {
+            if (totalRevenue > 0L) {
                 Spacer(Modifier.height(3.dp))
                 Text(
                     "Jam ramai: ${"%02d".format(peakHour)}.00 · ${peakValue.toRupiah()}",
@@ -402,45 +462,101 @@ private fun HourlyRevenueChart(hourly: List<Long>) {
             }
 
             Spacer(Modifier.height(10.dp))
-            Canvas(modifier = Modifier.fillMaxWidth().height(140.dp)) {
-                val w = size.width
-                val h = size.height
-                // Garis bantu horizontal (4 tingkat).
-                val gridCount = 4
-                for (i in 1..gridCount) {
-                    val y = h * i / gridCount
-                    drawLine(grid, Offset(0f, y), Offset(w, y), strokeWidth = 1.dp.toPx())
-                }
-                if (max == 0L) return@Canvas // tak ada data → hanya garis bantu
 
-                // 24 batang dengan jarak kecil antar batang.
-                val n = 24
-                val gap = 2.dp.toPx()
-                val barWidth = (w - gap * (n - 1)) / n
-                hourly.forEachIndexed { hour, value ->
-                    if (value <= 0) return@forEachIndexed
-                    val ratio = value.toFloat() / max.toFloat()
-                    val barHeight = h * ratio
-                    val x = hour * (barWidth + gap)
-                    val y = h - barHeight
-                    drawRoundRect(
-                        color = primary,
-                        topLeft = Offset(x, y),
-                        size = Size(barWidth, barHeight),
-                        cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f) // ujung membulat
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+            ) {
+                // Reservasi ruang untuk label sumbu Y (kiri) & sumbu X (bawah).
+                val leftAxisWidth = 40.dp.toPx()
+                val bottomAxisHeight = 16.dp.toPx()
+                val plotLeft = leftAxisWidth
+                val plotRight = size.width
+                val plotTop = 0f
+                val plotBottom = size.height - bottomAxisHeight
+                val plotWidth = plotRight - plotLeft
+                val plotHeight = plotBottom - plotTop
+                val maxRevenue = totalRevenue.coerceAtLeast(1L)
+
+                // ---- Fungsi koordinat TUNGGAL, dipakai untuk grid, label, DAN garis data ----
+                fun xFor(time: Long): Float {
+                    val ratio = (time - dayStartMillis).toFloat() / (dayEndMillis - dayStartMillis).toFloat()
+                    return plotLeft + ratio.coerceIn(0f, 1f) * plotWidth
+                }
+                fun yFor(value: Long): Float {
+                    val ratio = value.toFloat() / maxRevenue.toFloat()
+                    return plotBottom - ratio.coerceIn(0f, 1f) * plotHeight
+                }
+
+                // ---- Grid horizontal + label sumbu Y (skala pendapatan) ----
+                val ySteps = 4
+                for (i in 0..ySteps) {
+                    val ratio = i / ySteps.toFloat()
+                    val y = plotBottom - ratio * plotHeight
+                    drawLine(gridColor, Offset(plotLeft, y), Offset(plotRight, y), strokeWidth = 1.dp.toPx())
+                    val measured = textMeasurer.measure((maxRevenue * ratio).toLong().toCompactRupiah(), labelStyle, density = this)
+                    drawText(
+                        textLayoutResult = measured,
+                        topLeft = Offset(0f, (y - measured.size.height / 2f).coerceIn(0f, plotBottom - measured.size.height))
                     )
                 }
-            }
 
-            // Penanda sumbu jam (00, 06, 12, 18) — spasi berbobot agar selaras batang.
-            Spacer(Modifier.height(3.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                listOf("00", "06", "12", "18").forEach {
-                    Text(
-                        "$it.00",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                // ---- Grid vertikal + label sumbu X (waktu, presisi sama dgn garis data) ----
+                listOf(0, 6, 12, 18, 24).forEach { hour ->
+                    val time = (dayStartMillis + hour.toLong() * 3_600_000L).coerceAtMost(dayEndMillis)
+                    val x = xFor(time)
+                    drawLine(gridColor, Offset(x, plotTop), Offset(x, plotBottom), strokeWidth = 1.dp.toPx())
+                    val label = if (hour == 24) "24.00" else "%02d.00".format(hour)
+                    val measured = textMeasurer.measure(label, labelStyle, density = this)
+                    val labelX = when (hour) {
+                        0 -> x
+                        24 -> x - measured.size.width
+                        else -> x - measured.size.width / 2f
+                    }
+                    drawText(
+                        textLayoutResult = measured,
+                        topLeft = Offset(labelX.coerceIn(0f, size.width - measured.size.width), plotBottom + 4.dp.toPx())
                     )
+                }
+
+                // ---- Garis tren + area (step-line, gaya kurva ekuitas) ----
+                if (points.size >= 2) {
+                    val linePath = Path()
+                    val areaPath = Path()
+                    points.forEachIndexed { index, (time, value) ->
+                        val x = xFor(time)
+                        val y = yFor(value)
+                        if (index == 0) {
+                            linePath.moveTo(x, y)
+                            areaPath.moveTo(x, plotBottom)
+                            areaPath.lineTo(x, y)
+                        } else {
+                            val prevY = yFor(points[index - 1].second)
+                            linePath.lineTo(x, prevY) // datar dari nilai sebelumnya
+                            linePath.lineTo(x, y)      // lonjakan tegak saat transaksi terjadi
+                            areaPath.lineTo(x, prevY)
+                            areaPath.lineTo(x, y)
+                        }
+                    }
+                    areaPath.lineTo(xFor(points.last().first), plotBottom)
+                    areaPath.close()
+
+                    drawPath(
+                        path = areaPath,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(primary.copy(alpha = 0.28f), primary.copy(alpha = 0.02f)),
+                            startY = plotTop,
+                            endY = plotBottom
+                        )
+                    )
+                    drawPath(path = linePath, color = primary, style = Stroke(width = 2.dp.toPx()))
+
+                    // Titik penanda tiap transaksi asli (bukan titik awal/akhir buatan).
+                    for (i in 1 until points.size - 1) {
+                        val (time, value) = points[i]
+                        drawCircle(color = primary, radius = 2.5.dp.toPx(), center = Offset(xFor(time), yFor(value)))
+                    }
                 }
             }
         }
