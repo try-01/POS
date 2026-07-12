@@ -86,6 +86,7 @@ private fun AppRoot() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var dest by remember { mutableStateOf(Dest.POS) }
+    val density = LocalDensity.current
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
 
     Column(
