@@ -119,6 +119,7 @@ fun PosScreen(
     viewModel: PosViewModel,
     onPrintBluetooth: (CheckoutResult) -> Unit,
     onExportPdf: (CheckoutResult) -> Unit
+    forceWideLayout: Boolean = false // <-- TAMBAHKAN parameter ini
 ) {
     // ---- State reaktif (sadarkan-siklus) ----
     val products by viewModel.products.collectAsStateWithLifecycle()
@@ -190,7 +191,7 @@ LaunchedEffect(viewModel) {
             .fillMaxSize()
             .padding(inner)
     ) {
-        val isWide = maxWidth >= 840.dp
+        val isWide = forceWideLayout || maxWidth >= 840.dp
         val maxH = maxHeight
 
         // Deteksi apakah keyboard sedang tampil, untuk melonggarkan batas tinggi CartPane saat mengetik.
