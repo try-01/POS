@@ -68,6 +68,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.util.toRupiah
 import com.pos.offline.ui.components.GlassCard
+import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 
 /**
  * Layar Inventaris (CRUD produk) — versi kompak, disamakan densitas
@@ -345,8 +346,8 @@ private fun SwipeActionBackground(direction: SwipeToDismissBoxValue) {
 private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
 /** Tombol aksi bundar kompak (26dp) — pengganti IconButton standar (48dp) agar hemat ruang. */
-//@Composable
-//private fun CompactIconAction(
+// @Composable
+// private fun CompactIconAction(
 //    icon: ImageVector,
 //    contentDescription: String,
 //    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -523,8 +524,8 @@ private fun ProductFormDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumberField(price, { price = it }, "Harga Jual (Rp)", Modifier.weight(1f))
-                    NumberField(cost, { cost = it }, "Modal (Rp)", Modifier.weight(1f))
+                    MoneyNumberField(price, { price = it }, "Harga Jual", Modifier.weight(1f))
+                    MoneyNumberField(cost, { cost = it }, "Modal", Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     NumberField(stock, { stock = it }, "Stok", Modifier.weight(1f))
@@ -574,6 +575,32 @@ private fun NumberField(
         singleLine = true,
         textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        shape = RoundedCornerShape(10.dp),
+        modifier = modifier
+    )
+}
+
+/**
+ * Field angka uang dengan separator ribuan otomatis + prefix "Rp" —
+ * dipakai khusus untuk Harga Jual & Modal. Field mentah (tanpa titik)
+ * tetap yang disimpan ke state; titik hanya efek visual (VisualTransformation).
+ */
+@Composable
+private fun MoneyNumberField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { input -> onValueChange(input.filter { it.isDigit() }) },
+        label = { Text(label, style = MaterialTheme.typography.bodySmall) },
+        prefix = { Text("Rp", style = MaterialTheme.typography.bodySmall) },
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        visualTransformation = ThousandsSeparatorTransformation,
         shape = RoundedCornerShape(10.dp),
         modifier = modifier
     )

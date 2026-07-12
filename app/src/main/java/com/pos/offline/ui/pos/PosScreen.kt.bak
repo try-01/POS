@@ -167,7 +167,6 @@ LaunchedEffect(viewModel) {
     }
 
     Scaffold(
-        modifier = Modifier.imePadding(), // Cegah keyboard menutupi field Bayar/Diskon.
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             Box(
@@ -198,41 +197,40 @@ LaunchedEffect(viewModel) {
         val density = LocalDensity.current
         val imeVisible = WindowInsets.ime.getBottom(density) > 0
 
-        if (isWide) {
-                Row(Modifier.fillMaxSize()) {
-                    ProductPane(
-                        modifier = Modifier.weight(1f).fillMaxHeight(),
-                        products = products,
-                        cartQtyByProductId = cartQtyByProductId,
-                        onAdd = viewModel::addToCart
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    CartPane(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .widthIn(min = 320.dp, max = 420.dp) // <-- GANTI dari .width(380.dp)
-                        cart = cart,
-                        totals = totals,
-                        discount = discount,
-                        taxRate = taxRate,
-                        paid = paid,
-                        change = change,
-                        stockByProductId = stockByProductId,
-                        onDiscountChange = viewModel::setDiscount,
-                        onTaxRateChange = viewModel::setTaxRate,
-                        onPaidChange = viewModel::setPaid,
-                        onSetQuantity = viewModel::setQuantityDirect, // <-- TAMBAHKAN ini
-                        onIncrease = viewModel::increaseQty,
-                        onDecrease = viewModel::decreaseQty,
-                        onRemove = viewModel::removeFromCart,
-                        onClear = viewModel::clearCart,
-                        onCheckout = viewModel::checkout,
-                        canCheckout = !isCartEmpty && !isProcessing,
-                        isProcessing = isProcessing
-                        // Mode tablet/landscape: keranjang selalu terbuka penuh (tidak collapsible).
-                    )
-                }
-            } else {
+if (isWide) {
+    Row(Modifier.fillMaxSize()) {
+        ProductPane(
+            modifier = Modifier.weight(1f).fillMaxHeight(),
+            products = products,
+            cartQtyByProductId = cartQtyByProductId,
+            onAdd = viewModel::addToCart
+        )
+        Spacer(Modifier.width(12.dp))
+        CartPane(
+            modifier = Modifier
+                .fillMaxHeight()
+                .widthIn(min = 320.dp, max = 420.dp), // <-- KOMA DITAMBAHKAN DI SINI
+            cart = cart,
+            totals = totals,
+            discount = discount,
+            taxRate = taxRate,
+            paid = paid,
+            change = change,
+            stockByProductId = stockByProductId,
+            onDiscountChange = viewModel::setDiscount,
+            onTaxRateChange = viewModel::setTaxRate,
+            onPaidChange = viewModel::setPaid,
+            onSetQuantity = viewModel::setQuantityDirect,
+            onIncrease = viewModel::increaseQty,
+            onDecrease = viewModel::decreaseQty,
+            onRemove = viewModel::removeFromCart,
+            onClear = viewModel::clearCart,
+            onCheckout = viewModel::checkout,
+            canCheckout = !isCartEmpty && !isProcessing,
+            isProcessing = isProcessing
+        )
+    }
+} else {
             Column(Modifier.fillMaxSize()) {
                 ProductPane(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -514,6 +512,7 @@ private fun CartPane(
                             .weight(1f, fill = !collapsible)
                             // Cadangan tambahan: pastikan sekali lagi tinggi Box ini
                             // pasti (bukan wrap-content) saat mode non-collapsible.
+                            .heightIn(min = 56.dp) // <-- TAMBAHKAN INI: jaminan minimum, item TIDAK PERNAH hilang total
                             .then(if (!collapsible) Modifier.fillMaxHeight() else Modifier)
                     ) {
                         LazyColumn(

@@ -31,6 +31,10 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -68,6 +72,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.util.toRupiah
 import com.pos.offline.ui.components.GlassCard
+import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 
 /**
  * Layar Inventaris (CRUD produk) — versi kompak, disamakan densitas
@@ -89,6 +94,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
     val pendingDelete by viewModel.pendingDelete.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
+    val sortOption by viewModel.sortOption.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg -> snackbarHostState.showSnackbar(msg) }
@@ -129,14 +135,20 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                         )
                     }
                 }
-                CompactInventorySearchBar(
-                    query = query,
-                    onQueryChange = viewModel::search,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(34.dp)
-                        .padding(bottom = 6.dp)
-                )
+Row(
+    modifier = Modifier
+        .fillMaxWidth()
+        .padding(bottom = 6.dp),
+    verticalAlignment = Alignment.CenterVertically
+) {
+    CompactInventorySearchBar(
+        query = query,
+        onQueryChange = viewModel::search,
+        modifier = Modifier.weight(1f).height(34.dp)
+    )
+    Spacer(Modifier.width(6.dp))
+    SortMenuButton(current = sortOption, onSelect = viewModel::setSortOption)
+}
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -474,6 +486,52 @@ private fun CompactInventorySearchBar(
     )
 }
 
+/** Tombol kompak pemicu dropdown pilihan urutan daftar produk. */
+@Composable
+private fun SortMenuButton(
+    current: ProductSortOption,
+    onSelect: (ProductSortOption) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            modifier = Modifier
+                .height(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                .clickable { expanded = true }
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Rounded.Sort, contentDescription = "Urutkan", modifier = Modifier.size(15.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(
+                current.label,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                maxLines = 1
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            ProductSortOption.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(option.label, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp))
+                    },
+                    onClick = {
+                        onSelect(option)
+                        expanded = false
+                    },
+                    leadingIcon = {
+                        if (option == current) {
+                            Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
 // ============================ FORM TAMBAH / EDIT ============================
 // Dialog dibiarkan memakai OutlinedTextField standar (tidak perlu sepadat list)
 // tapi spacing dipangkas sedikit agar tidak terlalu tinggi di layar kecil.
@@ -523,8 +581,8 @@ private fun ProductFormDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumberField(price, { price = it }, "Harga Jual (Rp)", Modifier.weight(1f))
-                    NumberField(cost, { cost = it }, "Modal (Rp)", Modifier.weight(1f))
+                    MoneyNumberField(price, { price = it }, "Harga Jual", Modifier.weight(1f))
+                    MoneyNumberField(cost, { cost = it }, "Modal", Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     NumberField(stock, { stock = it }, "Stok", Modifier.weight(1f))
@@ -574,6 +632,32 @@ private fun NumberField(
         singleLine = true,
         textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        shape = RoundedCornerShape(10.dp),
+        modifier = modifier
+    )
+}
+
+/**
+ * Field angka uang dengan separator ribuan otomatis + prefix "Rp" —
+ * dipakai khusus untuk Harga Jual & Modal. Field mentah (tanpa titik)
+ * tetap yang disimpan ke state; titik hanya efek visual (VisualTransformation).
+ */
+@Composable
+private fun MoneyNumberField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { input -> onValueChange(input.filter { it.isDigit() }) },
+        label = { Text(label, style = MaterialTheme.typography.bodySmall) },
+        prefix = { Text("Rp", style = MaterialTheme.typography.bodySmall) },
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        visualTransformation = ThousandsSeparatorTransformation,
         shape = RoundedCornerShape(10.dp),
         modifier = modifier
     )
