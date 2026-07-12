@@ -428,7 +428,7 @@ private fun CartPane(
 
     Box(
         modifier = modifier
-            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
+            .padding(start = 12.dp, end = 12.dp, top = 1.dp, bottom = 1.dp)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
     ) {
         Column(
