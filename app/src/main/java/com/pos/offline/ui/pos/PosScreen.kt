@@ -25,17 +25,18 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.key
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -425,6 +426,9 @@ private fun CartPane(
     var qtyEditItem by remember { mutableStateOf<CartItemEntity?>(null) }
     val showFull = !collapsible || expanded
 
+    // Satu state scroll untuk SELURUH konten di bawah header (item + total + tombol).
+    val scrollState = rememberScrollState()
+
     Box(
         modifier = modifier
             .padding(start = 12.dp, end = 12.dp, top = 1.dp, bottom = 1.dp)
@@ -433,12 +437,10 @@ private fun CartPane(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                // WAJIB: mode non-collapsible (landscape/tablet) harus punya tinggi
-                // PASTI, jika tidak, weight() di dalam Column ini akan otomatis
-                // dipaksa Compose menjadi 0px (bukan error, tapi "diam-diam gagal").
                 .then(if (!collapsible) Modifier.fillMaxHeight() else Modifier)
                 .padding(10.dp)
         ) {
+            // ---- Header: SENGAJA tidak ikut scroll, selalu terlihat ----
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.ShoppingCart, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(6.dp))
@@ -479,113 +481,124 @@ private fun CartPane(
             if (showFull) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
-                if (cart.isEmpty()) {
-                    Box(
+                // ---- SATU area scroll untuk: daftar item + ringkasan total + tombol Bayar ----
+                // Sebelumnya daftar item (LazyColumn) & ringkasan total+tombol adalah dua
+                // wilayah terpisah — ringkasan/tombol TIDAK bisa digulir, sehingga di layar
+                // pendek (landscape + keyboard aktif) keduanya bisa terpotong tanpa peringatan
+                // (silent overflow), persis seperti bug yang terjadi di dialog Edit Produk.
+                //
+                // LazyColumn diganti Column biasa (+ key() per item) karena LazyColumn TIDAK
+                // boleh dibungkus verticalScroll lain tanpa tinggi eksplisit (akan crash
+                // "infinite height"). Cart POS realistis berisi puluhan item, bukan ribuan,
+                // jadi Column biasa tetap ringan & aman.
+                Box(
+                    modifier = Modifier
+                        .weight(1f, fill = !collapsible)
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp) // jaminan minimum, konten tak pernah "hilang total"
+                ) {
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 24.dp),
-                        contentAlignment = Alignment.Center
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Rounded.ShoppingCart,
-                                contentDescription = null,
-                                modifier = Modifier.size(32.dp),
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                "Keranjang masih kosong",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                            )
-                            Text(
-                                "Ketuk produk di atas untuk menambahkan",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                            )
-                        }
-                    }
-                } else {
-                    val cartListState = rememberLazyListState()
-                    Box(
-                        modifier = Modifier
-                            .weight(1f, fill = !collapsible)
-                            // Cadangan tambahan: pastikan sekali lagi tinggi Box ini
-                            // pasti (bukan wrap-content) saat mode non-collapsible.
-                            .heightIn(min = 56.dp) // <-- TAMBAHKAN INI: jaminan minimum, item TIDAK PERNAH hilang total
-                            .then(if (!collapsible) Modifier.fillMaxHeight() else Modifier)
-                    ) {
-                        LazyColumn(
-                            state = cartListState,
-                            modifier = Modifier.fillMaxSize(), // fillMaxSize, bukan fillMaxWidth saja
-                            contentPadding = PaddingValues(vertical = 6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            items(cart, key = { it.id }, contentType = { "cart" }) { item ->
-                                val stock = stockByProductId[item.productId]
-                                val canIncrease = stock == null || item.quantity < stock
-                                CartRow(
-                                    item = item,
-                                    canIncrease = canIncrease,
-                                    onIncrease = { onIncrease(item) },
-                                    onDecrease = { onDecrease(item) },
-                                    onRemove = { onRemove(item) },
-                                    onQuantityClick = { qtyEditItem = item },
-                                    modifier = Modifier.animateItem()
-                                )
+                        if (cart.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Rounded.ShoppingCart,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(32.dp),
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "Keranjang masih kosong",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    )
+                                    Text(
+                                        "Ketuk produk di atas untuk menambahkan",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                    )
+                                }
+                            }
+                        } else {
+                            cart.forEach { item ->
+                                key(item.id) {
+                                    val stock = stockByProductId[item.productId]
+                                    val canIncrease = stock == null || item.quantity < stock
+                                    CartRow(
+                                        item = item,
+                                        canIncrease = canIncrease,
+                                        onIncrease = { onIncrease(item) },
+                                        onDecrease = { onDecrease(item) },
+                                        onRemove = { onRemove(item) },
+                                        onQuantityClick = { qtyEditItem = item }
+                                    )
+                                }
                             }
                         }
 
-                        val showTopFade by remember { derivedStateOf { cartListState.canScrollBackward } }
-                        val showBottomFade by remember { derivedStateOf { cartListState.canScrollForward } }
-                        if (showTopFade) {
-                            HorizontalDivider(
-                                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth(),
-                                thickness = 2.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                            )
-                        }
-                        if (showBottomFade) {
-                            HorizontalDivider(
-                                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-                                thickness = 2.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                            )
-                        }
-                    }
-                }
+                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
-                HorizontalDivider(Modifier.padding(vertical = 4.dp))
-
-                TotalsSummary(
-                    totals = totals,
-                    change = change,
-                    discount = discount,
-                    taxRate = taxRate,
-                    paid = paid,
-                    onDiscountChange = onDiscountChange,
-                    onTaxRateChange = onTaxRateChange,
-                    onPaidChange = onPaidChange
-                )
-
-                Spacer(Modifier.height(6.dp))
-                Button(
-                    onClick = onCheckout,
-                    enabled = canCheckout,
-                    modifier = Modifier.fillMaxWidth().height(42.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    if (isProcessing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
+                        TotalsSummary(
+                            totals = totals,
+                            change = change,
+                            discount = discount,
+                            taxRate = taxRate,
+                            paid = paid,
+                            onDiscountChange = onDiscountChange,
+                            onTaxRateChange = onTaxRateChange,
+                            onPaidChange = onPaidChange
                         )
-                    } else {
-                        Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Bayar · ${totals.total.toRupiah()}")
+
+                        Spacer(Modifier.height(6.dp))
+                        Button(
+                            onClick = onCheckout,
+                            enabled = canCheckout,
+                            modifier = Modifier.fillMaxWidth().height(42.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (isProcessing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Bayar · ${totals.total.toRupiah()}")
+                            }
+                        }
+                        // Spacer kecil agar tombol tidak menempel persis di ujung area scroll.
+                        Spacer(Modifier.height(4.dp))
+                    }
+
+                    // Indikator garis tipis: menandakan MASIH ADA konten di atas/bawah
+                    // (bisa berupa sisa item, atau ringkasan+tombol Bayar yang belum terlihat).
+                    val showTopFade by remember { derivedStateOf { scrollState.canScrollBackward } }
+                    val showBottomFade by remember { derivedStateOf { scrollState.canScrollForward } }
+                    if (showTopFade) {
+                        HorizontalDivider(
+                            modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth(),
+                            thickness = 2.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                        )
+                    }
+                    if (showBottomFade) {
+                        HorizontalDivider(
+                            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                            thickness = 2.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                        )
                     }
                 }
             } else {

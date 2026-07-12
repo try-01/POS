@@ -36,6 +36,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.key
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -97,6 +100,7 @@ import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.util.toRupiah
+import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 
 /**
  * Layar Kasir utama. Layout responsif: tablet/landscape → katalog + keranjang
@@ -848,53 +852,6 @@ private fun SummaryLine(label: String, value: String, emphasize: Boolean = false
             fontWeight = if (emphasize) FontWeight.Bold else FontWeight.Normal,
             color = color
         )
-    }
-}
-
-/**
- * VisualTransformation yang menampilkan separator ribuan ("100000" -> "100.000")
- * tanpa mengubah nilai asli yang disimpan di state.
- *
- * Pemetaan offset dibangun dari array (bukan rumus aritmatika manual) supaya
- * tidak ada celah off-by-one yang bisa menghasilkan indeks negatif/di luar
- * jangkauan — penyebab crash sebelumnya saat jumlah digit kelipatan 3.
- */
-private object ThousandsSeparatorTransformation : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText {
-        val original = text.text
-        val n = original.length
-        if (n == 0) return TransformedText(text, OffsetMapping.Identity)
-
-        // Bangun string berformat + peta original->transformed sekaligus.
-        val sb = StringBuilder()
-        val orig2Trans = IntArray(n + 1)
-        orig2Trans[0] = 0
-        for (i in original.indices) {
-            sb.append(original[i])
-            val remaining = n - i - 1
-            if (remaining > 0 && remaining % 3 == 0) sb.append('.')
-            orig2Trans[i + 1] = sb.length
-        }
-        val formatted = sb.toString()
-
-        // Peta balik transformed->original, dibangun dengan menelusuri karakter hasil.
-        val trans2Orig = IntArray(formatted.length + 1)
-        var origIdx = 0
-        trans2Orig[0] = 0
-        for (t in 1..formatted.length) {
-            if (formatted[t - 1] != '.') origIdx++
-            trans2Orig[t] = origIdx.coerceAtMost(n)
-        }
-
-        val offsetMapping = object : OffsetMapping {
-            override fun originalToTransformed(offset: Int): Int =
-                orig2Trans[offset.coerceIn(0, n)]
-
-            override fun transformedToOriginal(offset: Int): Int =
-                trans2Orig[offset.coerceIn(0, formatted.length)]
-        }
-
-        return TransformedText(AnnotatedString(formatted), offsetMapping)
     }
 }
 
