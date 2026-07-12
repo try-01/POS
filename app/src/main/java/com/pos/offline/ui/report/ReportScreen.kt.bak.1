@@ -1,26 +1,20 @@
 package com.pos.offline.ui.report
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
@@ -32,23 +26,25 @@ import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.ui.components.GlassCard
@@ -56,9 +52,7 @@ import com.pos.offline.util.toRupiah
 import java.time.Instant
 
 /**
- * Layar Laporan Harian — kepadatan visual disamakan dengan PosScreen &
- * InventoryScreen (font kecil, padding ringkas) agar lebih banyak informasi
- * muat di layar ponsel tanpa scroll berlebihan.
+ * Layar Laporan Harian.
  *
  * Performa:
  *  - Grafik memakai [Canvas] langsung (1 pass draw, tanpa library chart) → ringan.
@@ -74,33 +68,13 @@ fun ReportScreen(viewModel: ReportViewModel) {
 
     Scaffold(
         topBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Rounded.ReceiptLong,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "Laporan Harian",
-                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        },
-        contentWindowInsets = WindowInsets.statusBars
+            TopAppBar(title = { Text("Laporan Harian", fontWeight = FontWeight.SemiBold) })
+        }
     ) { inner ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(inner),
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // ---------- Navigator tanggal ----------
             item(key = "date_navigator") {
@@ -125,9 +99,9 @@ fun ReportScreen(viewModel: ReportViewModel) {
             item(key = "list_header") {
                 Text(
                     "Daftar Transaksi (${report.transactionCount})",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 2.dp)
+                    modifier = Modifier.padding(top = 4.dp)
                 )
             }
 
@@ -157,109 +131,58 @@ private fun DateNavigator(
     onToday: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp
     ) {
-        Column(Modifier.fillMaxWidth().padding(10.dp)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                CompactNavIcon(
-                    icon = Icons.Rounded.ChevronLeft,
-                    contentDescription = "Hari sebelumnya",
-                    onClick = onPrevious
-                )
+                IconButton(onClick = onPrevious) {
+                    Icon(Icons.Rounded.ChevronLeft, contentDescription = "Hari sebelumnya")
+                }
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             Icons.Rounded.CalendarMonth,
                             contentDescription = null,
-                            modifier = Modifier.size(14.dp),
+                            modifier = Modifier.size(18.dp),
                             tint = MaterialTheme.colorScheme.primary
                         )
-                        Spacer(Modifier.width(5.dp))
+                        Spacer(Modifier.width(6.dp))
                         Text(
                             label,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                     if (isToday) {
                         Text(
                             "Hari ini",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
-                CompactNavIcon(
-                    icon = Icons.Rounded.ChevronRight,
-                    contentDescription = "Hari berikutnya",
-                    enabled = !isToday,
-                    onClick = onNext
-                )
+                IconButton(onClick = onNext, enabled = !isToday) {
+                    Icon(
+                        Icons.Rounded.ChevronRight,
+                        contentDescription = "Hari berikutnya",
+                        tint = if (isToday) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        else MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
             // Tombol lompat ke hari ini muncul hanya saat tidak sedang di hari ini.
             if (!isToday) {
-                Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.Center) {
-                    TodayPillButton(onClick = onToday)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    TextButton(onClick = onToday) {
+                        Icon(Icons.Rounded.Today, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Ke Hari Ini")
+                    }
                 }
             }
         }
-    }
-}
-
-/** Tombol navigasi bundar kompak (30dp) — pengganti IconButton standar (48dp)
- *  yang enforce minimum touch target lebih besar dari yang dibutuhkan di sini. */
-@Composable
-private fun CompactNavIcon(
-    icon: ImageVector,
-    contentDescription: String,
-    enabled: Boolean = true,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .size(30.dp)
-            .clip(CircleShape)
-            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            icon,
-            contentDescription = contentDescription,
-            modifier = Modifier.size(18.dp),
-            tint = if (enabled) MaterialTheme.colorScheme.onSurface
-            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-        )
-    }
-}
-
-/** Pill kecil "Ke Hari Ini" — pengganti TextButton standar yang lebih besar. */
-@Composable
-private fun TodayPillButton(onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            Icons.Rounded.Today,
-            contentDescription = null,
-            modifier = Modifier.size(14.dp),
-            tint = MaterialTheme.colorScheme.primary
-        )
-        Spacer(Modifier.width(5.dp))
-        Text(
-            "Ke Hari Ini",
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.SemiBold
-        )
     }
 }
 
@@ -267,39 +190,35 @@ private fun TodayPillButton(onClick: () -> Unit) {
 
 @Composable
 private fun SummarySection(report: DailyReport) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         // Kartu utama: total pendapatan (glassmorphism sebagai titik fokus).
         GlassCard(
             modifier = Modifier.fillMaxWidth(),
-            cornerRadius = 16.dp,
-            contentPadding = PaddingValues(12.dp)
+            contentPadding = PaddingValues(16.dp)
         ) {
             Column {
-                Text(
-                    "Total Pendapatan",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
-                )
-                Spacer(Modifier.height(4.dp))
+                Text("Total Pendapatan", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
                 Text(
                     report.totalRevenue.toRupiah(),
-                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
+                    style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     "${report.transactionCount} transaksi" +
                         if (report.totalDiscount > 0 || report.totalTax > 0)
                             " · diskon ${report.totalDiscount.toRupiah()} · pajak ${report.totalTax.toRupiah()}"
                         else "",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
             }
         }
 
-        // Dua kartu statistik pendukung — GlassCard agar konsisten dgn kartu utama & ProductCard Kasir.
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Dua kartu statistik pendukung (Surface datar = murah di GPU).
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatCard(
                 modifier = Modifier.weight(1f),
                 label = "Jumlah Transaksi",
@@ -323,34 +242,23 @@ private fun StatCard(
     value: String,
     icon: ImageVector
 ) {
-    GlassCard(
+    Surface(
         modifier = modifier,
-        cornerRadius = 14.dp,
-        contentPadding = PaddingValues(10.dp)
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp
     ) {
-        Column {
+        Column(Modifier.padding(14.dp)) {
             Icon(
                 icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(22.dp)
             )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                value,
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(1.dp))
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Spacer(Modifier.height(8.dp))
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(2.dp))
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
         }
     }
 }
@@ -374,35 +282,25 @@ private fun HourlyRevenueChart(hourly: List<Long>) {
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 16.dp,
-        contentPadding = PaddingValues(12.dp)
+        contentPadding = PaddingValues(16.dp)
     ) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Rounded.Paid,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "Pendapatan per Jam",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                    fontWeight = FontWeight.SemiBold
-                )
+                Icon(Icons.Rounded.Paid, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Pendapatan per Jam", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
             if (max > 0L) {
-                Spacer(Modifier.height(3.dp))
+                Spacer(Modifier.height(4.dp))
                 Text(
                     "Jam ramai: ${"%02d".format(peakHour)}.00 · ${peakValue.toRupiah()}",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
             }
 
-            Spacer(Modifier.height(10.dp))
-            Canvas(modifier = Modifier.fillMaxWidth().height(140.dp)) {
+            Spacer(Modifier.height(12.dp))
+            Canvas(modifier = Modifier.fillMaxWidth().height(180.dp)) {
                 val w = size.width
                 val h = size.height
                 // Garis bantu horizontal (4 tingkat).
@@ -413,9 +311,9 @@ private fun HourlyRevenueChart(hourly: List<Long>) {
                 }
                 if (max == 0L) return@Canvas // tak ada data → hanya garis bantu
 
-                // 24 batang dengan jarak kecil antar batang.
+                // 24 batang dengan jalan kecil antar batang.
                 val n = 24
-                val gap = 2.dp.toPx()
+                val gap = 3.dp.toPx()
                 val barWidth = (w - gap * (n - 1)) / n
                 hourly.forEachIndexed { hour, value ->
                     if (value <= 0) return@forEachIndexed
@@ -433,12 +331,12 @@ private fun HourlyRevenueChart(hourly: List<Long>) {
             }
 
             // Penanda sumbu jam (00, 06, 12, 18) — spasi berbobot agar selaras batang.
-            Spacer(Modifier.height(3.dp))
+            Spacer(Modifier.height(4.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 listOf("00", "06", "12", "18").forEach {
                     Text(
                         "$it.00",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
                     )
                 }
@@ -451,36 +349,40 @@ private fun HourlyRevenueChart(hourly: List<Long>) {
 
 @Composable
 private fun TransactionRow(tx: TransactionEntity) {
-    GlassCard(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 12.dp,
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             // Waktu transaksi (HH:mm).
             Text(
                 ReportViewModel.timeFmt.format(Instant.ofEpochMilli(tx.createdAt)),
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary
             )
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     tx.id,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                    style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     "Dibayar ${tx.paidAmount.toRupiah()}",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                 )
             }
             Text(
                 tx.total.toRupiah(),
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -489,18 +391,18 @@ private fun TransactionRow(tx: TransactionEntity) {
 
 @Composable
 private fun EmptyReport() {
-    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
                 Icons.Rounded.ReceiptLong,
                 contentDescription = null,
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(48.dp),
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
             )
             Spacer(Modifier.height(8.dp))
             Text(
                 "Belum ada transaksi pada hari ini",
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
         }
