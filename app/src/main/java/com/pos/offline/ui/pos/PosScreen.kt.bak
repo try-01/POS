@@ -83,6 +83,12 @@ import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -214,6 +220,7 @@ LaunchedEffect(viewModel) {
                         onDiscountChange = viewModel::setDiscount,
                         onTaxRateChange = viewModel::setTaxRate,
                         onPaidChange = viewModel::setPaid,
+                        onSetQuantity = viewModel::setQuantityDirect, // <-- TAMBAHKAN ini
                         onIncrease = viewModel::increaseQty,
                         onDecrease = viewModel::decreaseQty,
                         onRemove = viewModel::removeFromCart,
@@ -257,6 +264,7 @@ LaunchedEffect(viewModel) {
                         onDiscountChange = viewModel::setDiscount,
                         onTaxRateChange = viewModel::setTaxRate,
                         onPaidChange = viewModel::setPaid,
+                        onSetQuantity = viewModel::setQuantityDirect, // <-- TAMBAHKAN ini
                         onIncrease = viewModel::increaseQty,
                         onDecrease = viewModel::decreaseQty,
                         onRemove = viewModel::removeFromCart,
@@ -403,6 +411,7 @@ private fun CartPane(
     onPaidChange: (Long) -> Unit,
     onIncrease: (CartItemEntity) -> Unit,
     onDecrease: (CartItemEntity) -> Unit,
+    onSetQuantity: (CartItemEntity, Int) -> Unit, // <-- TAMBAHKAN parameter ini
     onRemove: (CartItemEntity) -> Unit,
     onClear: () -> Unit,
     onCheckout: () -> Unit,
@@ -413,11 +422,12 @@ private fun CartPane(
     onToggleExpand: () -> Unit = {}
 ) {
     var showClearConfirm by remember { mutableStateOf(false) }
+    var qtyEditItem by remember { mutableStateOf<CartItemEntity?>(null) } // <-- TAMBAHKAN state ini
     val showFull = !collapsible || expanded
 
     Box(
         modifier = modifier
-            .padding(start = 12.dp, end = 12.dp, top = 1.5.dp, bottom = 1.5.dp)
+            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 1.5.dp)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
     ) {
         Column(Modifier.fillMaxWidth().padding(10.dp)) {
@@ -508,6 +518,7 @@ if (showFull) {
                         onIncrease = { onIncrease(item) },
                         onDecrease = { onDecrease(item) },
                         onRemove = { onRemove(item) },
+                        onQuantityClick = { qtyEditItem = item },
                         modifier = Modifier.animateItem()
                     )
                 }
@@ -622,7 +633,21 @@ if (showFull) {
             }
         )
     }
+
+    // --- Dialog edit quantity manual ---
+    qtyEditItem?.let { item ->
+        QuantityEditDialog(
+            item = item,
+            maxStock = stockByProductId[item.productId],
+            onConfirm = { newQty ->
+                onSetQuantity(item, newQty)
+                qtyEditItem = null
+            },
+            onDismiss = { qtyEditItem = null }
+        )
+    }
 }
+
 
 @Composable
 private fun CartRow(
@@ -631,10 +656,11 @@ private fun CartRow(
     onIncrease: () -> Unit,
     onDecrease: () -> Unit,
     onRemove: () -> Unit,
-    modifier: Modifier = Modifier // <-- TAMBAHKAN parameter ini
+    onQuantityClick: () -> Unit, // <-- TAMBAHKAN parameter ini
+    modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier // <-- GANTI dari "Modifier" polos jadi terima dari luar
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -659,7 +685,13 @@ private fun CartRow(
         )
         Spacer(Modifier.width(12.dp))
 
-        QuantityStepper(item.quantity, canIncrease, onDecrease, onIncrease)
+        QuantityStepper(
+            qty = item.quantity,
+            canIncrease = canIncrease,
+            onDecrease = onDecrease,
+            onIncrease = onIncrease,
+            onQuantityClick = onQuantityClick // <-- teruskan
+        )
 
         Spacer(Modifier.width(8.dp))
 
@@ -686,23 +718,33 @@ private fun QuantityStepper(
     qty: Int,
     canIncrease: Boolean,
     onDecrease: () -> Unit,
-    onIncrease: () -> Unit
+    onIncrease: () -> Unit,
+    onQuantityClick: () -> Unit // <-- TAMBAHKAN parameter ini
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         CompactActionBox(icon = Icons.Rounded.Remove, contentDescription = "Kurangi", onClick = onDecrease)
 
-        Text(
-            text = "$qty",
-            modifier = Modifier.width(32.dp),
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center
-        )
+        // Angka qty sekarang bisa di-tap untuk input manual/pintasan angka besar.
+        Box(
+            modifier = Modifier
+                .width(32.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(onClick = onQuantityClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "$qty",
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline // isyarat visual "bisa di-tap"
+            )
+        }
 
         CompactActionBox(
             icon = Icons.Rounded.Add,
             contentDescription = "Tambah",
-            dimmed = !canIncrease, // ganti dari "enabled = canIncrease"
-            onClick = onIncrease   // tetap selalu terhubung, biar ViewModel yang menolak+kasih pesan
+            dimmed = !canIncrease,
+            onClick = onIncrease
         )
     }
 }
@@ -971,6 +1013,117 @@ private fun formatTrim(d: Double): String {
 }
 
 // ============================ DIALOG SUKSES ============================
+
+/**
+ * Dialog input jumlah manual. Menyediakan tombol pintasan angka umum
+ * (10/20/50/100) agar kasir bisa set quantity besar hanya dengan 1 tap,
+ * tanpa perlu mengetik atau menekan tombol "+" berulang kali.
+ */
+@Composable
+private fun QuantityEditDialog(
+    item: CartItemEntity,
+    maxStock: Int?,
+    onConfirm: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var fieldValue by remember {
+        val initial = item.quantity.toString()
+        mutableStateOf(TextFieldValue(text = initial, selection = TextRange(0, initial.length)))
+    }
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
+    fun confirmWith(qty: Int) = onConfirm(qty.coerceAtLeast(0))
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ubah Jumlah") },
+        text = {
+            Column {
+                Text(
+                    item.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (maxStock != null) {
+                    Text(
+                        "Stok tersedia: $maxStock",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+
+                // Input manual — teks otomatis ter-select semua saat dialog dibuka,
+                // jadi kasir tinggal ketik angka baru untuk langsung menimpa.
+                BasicTextField(
+                    value = fieldValue,
+                    onValueChange = { newValue ->
+                        val digits = newValue.text.filter { it.isDigit() }.take(5)
+                        fieldValue = newValue.copy(text = digits)
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = { confirmWith(fieldValue.text.toIntOrNull() ?: item.quantity) }
+                    ),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.headlineSmall.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                        .padding(vertical = 14.dp),
+                    decorationBox = { innerTextField ->
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            innerTextField()
+                        }
+                    }
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                // Tombol pintasan: 1 tap langsung terapkan & tutup dialog.
+                Text(
+                    "Pintasan cepat",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    listOf(10, 20, 50, 100).forEach { shortcut ->
+                        FilledTonalButton(
+                            onClick = { confirmWith(shortcut) },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(vertical = 8.dp)
+                        ) {
+                            Text("$shortcut", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { confirmWith(fieldValue.text.toIntOrNull() ?: item.quantity) }) {
+                Text("Terapkan")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Batal") }
+        }
+    )
+}
 
 @Composable
 private fun SuccessDialog(

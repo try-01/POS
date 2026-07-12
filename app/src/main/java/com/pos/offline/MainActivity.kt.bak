@@ -5,10 +5,18 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +25,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.Alignment
@@ -39,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pos.offline.data.di.ServiceLocator
 import com.pos.offline.ui.inventory.InventoryScreen
@@ -51,16 +59,10 @@ import com.pos.offline.ui.report.ReportViewModel
 import com.pos.offline.ui.theme.PosTheme
 import kotlinx.coroutines.launch
 
-/** Tujuan navigasi. Ringan: beralih via state, tanpa library navigasi tambahan. */
 private enum class Dest(val label: String) {
     POS("Kasir"), INVENTORY("Inventaris"), REPORT("Laporan")
 }
 
-/**
- * Activity tunggal yang menjadi host Jetpack Compose.
- * ViewModel dibuat via [ServiceLocator] factory (DI manual) — bukan Hilt —
- * agar start-up cepat & footprint RAM kecil.
- */
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,16 +76,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/**
- * Akar UI: bottom navigation 3 tujuan (Kasir, Inventaris, Laporan).
- *
- * Menggunakan Column + NavigationBar (bukan Scaffold bersarang) agar penanganan
- * inset sistem (status bar / nav bar) tetap satu lapis dan tidak dobel-padding.
- *
- * Ketiga ViewModel dibuat sekali di sini (scoped ke Activity) sehingga state
- * terjaga saat berpindah tab. Layar yang tidak tampil otomatis berhenti
- * mengoleksi Flow (hemat baterai) berkat [collectAsStateWithLifecycle] + WhileSubscribed.
- */
 @Composable
 private fun AppRoot() {
     val posViewModel: PosViewModel = viewModel(factory = ServiceLocator.posViewModelFactory())
@@ -95,19 +87,27 @@ private fun AppRoot() {
     val scope = rememberCoroutineScope()
     var dest by remember { mutableStateOf(Dest.POS) }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .imePadding() // <-- TAMBAHKAN INI: seluruh layout (termasuk Bottom Nav) ikut menyesuaikan keyboard
-    ) {
+    // Deteksi status keyboard di level root — dipakai untuk menyembunyikan
+    // Bottom Nav (bukan ikut naik) supaya konten (mis. keranjang kasir)
+    // mendapat ruang maksimal saat keyboard aktif.
+    val density = LocalDensity.current
+    val imeVisible = WindowInsets.ime.getBottom(density) > 0
+
+    Column(Modifier.fillMaxSize()) {
         // Konten layar mengisi sisa ruang di atas bottom navigation.
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        // imePadding() dipasang di sini (bukan di Column terluar) supaya saat
+        // Bottom Nav disembunyikan, Box ini otomatis melebar mengisi ruang
+        // ekstra tersebut sebelum dipangkas ulang oleh tinggi keyboard.
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .imePadding()
+        ) {
             when (dest) {
                 Dest.POS -> PosScreen(
                     viewModel = posViewModel,
                     onPrintBluetooth = { result ->
-                        // Cetak Bluetooth di background; butuh izin runtime
-                        // BLUETOOTH_CONNECT + printer yang sudah dipasang (paired).
                         scope.launch {
                             val ok = ReceiptManager.printToFirstBonded(context, result)
                             Toast.makeText(
@@ -129,51 +129,60 @@ private fun AppRoot() {
             }
         }
 
-Surface(
-    modifier = Modifier.fillMaxWidth(),
-    color = androidx.compose.material3.MaterialTheme.colorScheme.surface,
-    tonalElevation = 3.dp
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .height(56.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Dest.entries.forEach { item ->
-            val selected = dest == item
-            val color = if (selected) androidx.compose.material3.MaterialTheme.colorScheme.primary
-                        else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .clickable { dest = item },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+        // Bottom Nav disembunyikan (bukan ikut naik) saat keyboard aktif,
+        // supaya layar kasir dapat ruang vertikal maksimal untuk mengetik
+        // diskon/pajak/bayar tanpa terganggu navigasi di bawahnya.
+        AnimatedVisibility(
+            visible = !imeVisible,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = androidx.compose.material3.MaterialTheme.colorScheme.surface,
+                tonalElevation = 3.dp
             ) {
-                Icon(
-                    imageVector = when (item) {
-                        Dest.POS -> Icons.Rounded.ShoppingCart
-                        Dest.INVENTORY -> Icons.Rounded.Inventory2
-                        Dest.REPORT -> Icons.Rounded.Assessment
-                    },
-                    contentDescription = item.label,
-                    tint = color,
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    text = item.label,
-                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                    color = color,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .height(56.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Dest.entries.forEach { item ->
+                        val selected = dest == item
+                        val color = if (selected) androidx.compose.material3.MaterialTheme.colorScheme.primary
+                                    else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable { dest = item },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = when (item) {
+                                    Dest.POS -> Icons.Rounded.ShoppingCart
+                                    Dest.INVENTORY -> Icons.Rounded.Inventory2
+                                    Dest.REPORT -> Icons.Rounded.Assessment
+                                },
+                                contentDescription = item.label,
+                                tint = color,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = item.label,
+                                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                color = color,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
             }
         }
-    }
-}
     }
 }

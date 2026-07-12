@@ -430,7 +430,17 @@ private fun CartPane(
             .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 1.5.dp)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
     ) {
-        Column(Modifier.fillMaxWidth().padding(10.dp)) {
+Column(
+    modifier = Modifier
+        .fillMaxWidth()
+        // Mode landscape/tablet (collapsible = false): Column WAJIB diberi tinggi
+        // eksplisit agar LazyColumn (weight+fill=false) di dalamnya tahu berapa
+        // sisa ruang yang tersedia — tanpa ini area daftar item bisa menciut ke 0px.
+        // Mode potret (collapsible = true) TIDAK diberi ini, supaya perilaku
+        // "mengecil otomatis saat item sedikit" tetap berjalan seperti biasa.
+        .let { if (!collapsible) it.fillMaxHeight() else it }
+        .padding(10.dp)
+) {
             // ---- Header ----
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.ShoppingCart, contentDescription = null, modifier = Modifier.size(20.dp))
