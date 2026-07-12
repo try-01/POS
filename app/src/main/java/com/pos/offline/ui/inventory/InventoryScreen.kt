@@ -24,6 +24,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
@@ -554,13 +557,26 @@ private fun ProductFormDialog(
         mutableStateOf(if (state.cost > 0) state.cost.toString() else "")
     }
 
+    // Batas tinggi konten dihitung dinamis dari tinggi layar — krusial untuk
+    // mode landscape & saat keyboard terbuka, di mana ruang vertikal sangat
+    // terbatas. Tanpa ini, Column akan overflow dan Compose MEMOTONGNYA
+    // secara diam-diam (bukan crash, tapi field jadi tak terlihat/terjangkau).
+    val configuration = LocalConfiguration.current
+    val maxContentHeight = (configuration.screenHeightDp * 0.42f).dp
+    val scrollState = rememberScrollState()
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (state.isNew) "Tambah Produk" else "Edit Produk", style = MaterialTheme.typography.titleMedium) },
         text = {
             val priceLong = price.toLongOrNull() ?: 0L
             val costLong = cost.toLongOrNull() ?: 0L
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = maxContentHeight)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -597,6 +613,9 @@ private fun ProductFormDialog(
                         modifier = Modifier.weight(1f)
                     )
                 }
+                // Spacer kecil di akhir agar field terakhir tidak "menempel" persis
+                // di tepi bawah area scroll saat digulir penuh.
+                Spacer(Modifier.height(2.dp))
             }
         },
         confirmButton = {
