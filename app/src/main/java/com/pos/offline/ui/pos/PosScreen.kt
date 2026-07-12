@@ -118,7 +118,7 @@ import com.pos.offline.util.toRupiah
 fun PosScreen(
     viewModel: PosViewModel,
     onPrintBluetooth: (CheckoutResult) -> Unit,
-    onExportPdf: (CheckoutResult) -> Unit
+    onExportPdf: (CheckoutResult) -> Unit,
     forceWideLayout: Boolean = false // <-- TAMBAHKAN parameter ini
 ) {
     // ---- State reaktif (sadarkan-siklus) ----
