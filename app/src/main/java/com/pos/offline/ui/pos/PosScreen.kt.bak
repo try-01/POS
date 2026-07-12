@@ -512,7 +512,11 @@ if (showFull) {
         }
     } else {
         val cartListState = rememberLazyListState()
-        Box(Modifier.weight(1f, fill = false)) {
+        // fill mengikuti mode: di landscape/tablet (non-collapsible) HARUS true agar
+        // Compose pasti mengalokasikan sisa ruang ke LazyColumn (mencegah area
+        // menciut ke 0px). Di potret (collapsible) tetap false agar CartPane bisa
+        // mengecil otomatis saat item sedikit (perilaku shrink-to-fit yang diinginkan).
+        Box(Modifier.weight(1f, fill = !collapsible)) {
             LazyColumn(
                 state = cartListState,
                 modifier = Modifier.fillMaxWidth(),

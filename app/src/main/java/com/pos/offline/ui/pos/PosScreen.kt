@@ -173,12 +173,13 @@ LaunchedEffect(viewModel) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .padding(horizontal = 12.dp)
+                    .padding(top = 4.dp, bottom = 6.dp)
             ) {
                 CompactSearchBar(
                     query = query,
                     onQueryChange = viewModel::search,
-                    modifier = Modifier.fillMaxWidth().height(40.dp)
+                    modifier = Modifier.fillMaxWidth().height(36.dp)
                 )
             }
         },
@@ -411,7 +412,7 @@ private fun CartPane(
     onPaidChange: (Long) -> Unit,
     onIncrease: (CartItemEntity) -> Unit,
     onDecrease: (CartItemEntity) -> Unit,
-    onSetQuantity: (CartItemEntity, Int) -> Unit, // <-- TAMBAHKAN parameter ini
+    onSetQuantity: (CartItemEntity, Int) -> Unit,
     onRemove: (CartItemEntity) -> Unit,
     onClear: () -> Unit,
     onCheckout: () -> Unit,
@@ -422,26 +423,23 @@ private fun CartPane(
     onToggleExpand: () -> Unit = {}
 ) {
     var showClearConfirm by remember { mutableStateOf(false) }
-    var qtyEditItem by remember { mutableStateOf<CartItemEntity?>(null) } // <-- TAMBAHKAN state ini
+    var qtyEditItem by remember { mutableStateOf<CartItemEntity?>(null) }
     val showFull = !collapsible || expanded
 
     Box(
         modifier = modifier
-            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 1.5.dp)
+            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
     ) {
-Column(
-    modifier = Modifier
-        .fillMaxWidth()
-        // Mode landscape/tablet (collapsible = false): Column WAJIB diberi tinggi
-        // eksplisit agar LazyColumn (weight+fill=false) di dalamnya tahu berapa
-        // sisa ruang yang tersedia — tanpa ini area daftar item bisa menciut ke 0px.
-        // Mode potret (collapsible = true) TIDAK diberi ini, supaya perilaku
-        // "mengecil otomatis saat item sedikit" tetap berjalan seperti biasa.
-        .let { if (!collapsible) it.fillMaxHeight() else it }
-        .padding(10.dp)
-) {
-            // ---- Header ----
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                // WAJIB: mode non-collapsible (landscape/tablet) harus punya tinggi
+                // PASTI, jika tidak, weight() di dalam Column ini akan otomatis
+                // dipaksa Compose menjadi 0px (bukan error, tapi "diam-diam gagal").
+                .then(if (!collapsible) Modifier.fillMaxHeight() else Modifier)
+                .padding(10.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.ShoppingCart, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(6.dp))
@@ -479,85 +477,86 @@ Column(
                 }
             }
 
-if (showFull) {
-    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+            if (showFull) {
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
-    if (cart.isEmpty()) {
-        // Empty state: beri konteks visual jelas, bukan area kosong membingungkan.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 24.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    Icons.Rounded.ShoppingCart,
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp),
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Keranjang masih kosong",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                )
-                Text(
-                    "Ketuk produk di atas untuk menambahkan",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                )
-            }
-        }
-    } else {
-        val cartListState = rememberLazyListState()
-        // fill mengikuti mode: di landscape/tablet (non-collapsible) HARUS true agar
-        // Compose pasti mengalokasikan sisa ruang ke LazyColumn (mencegah area
-        // menciut ke 0px). Di potret (collapsible) tetap false agar CartPane bisa
-        // mengecil otomatis saat item sedikit (perilaku shrink-to-fit yang diinginkan).
-        Box(Modifier.weight(1f, fill = !collapsible)) {
-            LazyColumn(
-                state = cartListState,
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                items(cart, key = { it.id }, contentType = { "cart" }) { item ->
-                    val stock = stockByProductId[item.productId]
-                    val canIncrease = stock == null || item.quantity < stock
-                    CartRow(
-                        item = item,
-                        canIncrease = canIncrease,
-                        onIncrease = { onIncrease(item) },
-                        onDecrease = { onDecrease(item) },
-                        onRemove = { onRemove(item) },
-                        onQuantityClick = { qtyEditItem = item },
-                        modifier = Modifier.animateItem()
-                    )
+                if (cart.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Rounded.ShoppingCart,
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp),
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Keranjang masih kosong",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                            Text(
+                                "Ketuk produk di atas untuk menambahkan",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                            )
+                        }
+                    }
+                } else {
+                    val cartListState = rememberLazyListState()
+                    Box(
+                        modifier = Modifier
+                            .weight(1f, fill = !collapsible)
+                            // Cadangan tambahan: pastikan sekali lagi tinggi Box ini
+                            // pasti (bukan wrap-content) saat mode non-collapsible.
+                            .then(if (!collapsible) Modifier.fillMaxHeight() else Modifier)
+                    ) {
+                        LazyColumn(
+                            state = cartListState,
+                            modifier = Modifier.fillMaxSize(), // fillMaxSize, bukan fillMaxWidth saja
+                            contentPadding = PaddingValues(vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            items(cart, key = { it.id }, contentType = { "cart" }) { item ->
+                                val stock = stockByProductId[item.productId]
+                                val canIncrease = stock == null || item.quantity < stock
+                                CartRow(
+                                    item = item,
+                                    canIncrease = canIncrease,
+                                    onIncrease = { onIncrease(item) },
+                                    onDecrease = { onDecrease(item) },
+                                    onRemove = { onRemove(item) },
+                                    onQuantityClick = { qtyEditItem = item },
+                                    modifier = Modifier.animateItem()
+                                )
+                            }
+                        }
+
+                        val showTopFade by remember { derivedStateOf { cartListState.canScrollBackward } }
+                        val showBottomFade by remember { derivedStateOf { cartListState.canScrollForward } }
+                        if (showTopFade) {
+                            HorizontalDivider(
+                                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth(),
+                                thickness = 2.dp,
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                            )
+                        }
+                        if (showBottomFade) {
+                            HorizontalDivider(
+                                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                                thickness = 2.dp,
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                            )
+                        }
+                    }
                 }
-            }
 
-            val showTopFade by remember { derivedStateOf { cartListState.canScrollBackward } }
-            val showBottomFade by remember { derivedStateOf { cartListState.canScrollForward } }
-            if (showTopFade) {
-                HorizontalDivider(
-                    modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth(),
-                    thickness = 2.dp,
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                )
-            }
-            if (showBottomFade) {
-                HorizontalDivider(
-                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-                    thickness = 2.dp,
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                )
-            }
-        }
-    }
-
-    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
                 TotalsSummary(
                     totals = totals,
@@ -590,7 +589,6 @@ if (showFull) {
                     }
                 }
             } else {
-                // ---- Mode ciut: ringkasan total + tombol bayar cepat ----
                 Spacer(Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -625,7 +623,6 @@ if (showFull) {
         }
     }
 
-    // ---- Dialog konfirmasi kosongkan keranjang ----
     if (showClearConfirm) {
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
@@ -648,7 +645,6 @@ if (showFull) {
         )
     }
 
-    // --- Dialog edit quantity manual ---
     qtyEditItem?.let { item ->
         QuantityEditDialog(
             item = item,
