@@ -37,16 +37,18 @@ jobs:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
       # --- STEP BARU: Menandatangani APK ---
+      # --- STEP BARU: Menandatangani APK ---
       - name: Sign APK
         uses: r0adkll/sign-android-release@v1
         id: sign_app
         with:
-          # Arahkan ke folder debug tempat APK berada
           releaseDirectory: app/build/outputs/apk/debug
           signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
           alias: ${{ secrets.KEY_ALIAS }}
           keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.KEY_PASSWORD }}
+          # Tambahkan baris di bawah ini untuk menggunakan build tools versi terbaru:
+          buildToolsVersion: 36.0.0 
 
       # --- UPDATE STEP: Mengunggah APK yang sudah ditandatangani ---
       - name: Upload APK Artifact
