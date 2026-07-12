@@ -87,17 +87,18 @@ private fun AppRoot() {
     val scope = rememberCoroutineScope()
     var dest by remember { mutableStateOf(Dest.POS) }
 
-    // Deteksi status keyboard di level root — dipakai untuk menyembunyikan
-    // Bottom Nav (bukan ikut naik) supaya konten (mis. keranjang kasir)
-    // mendapat ruang maksimal saat keyboard aktif.
-    val density = LocalDensity.current
-    val imeVisible = WindowInsets.ime.getBottom(density) > 0
-
-    Column(Modifier.fillMaxSize()) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            // Dipindah ke sini (dari Row bottom-nav) supaya insets navigasi
+            // sistem dihormati di SELURUH layar — bukan cuma bottom-nav.
+            // Ini penting di landscape karena beberapa device (mis. MIUI
+            // dengan navigasi 3-tombol) menaruh strip navigasi di SISI
+            // KANAN layar, bukan di bawah, sehingga area konten (katalog +
+            // keranjang) juga perlu di-inset, bukan cuma bottom-nav saja.
+            .navigationBarsPadding()
+    ) {
         // Konten layar mengisi sisa ruang di atas bottom navigation.
-        // imePadding() dipasang di sini (bukan di Column terluar) supaya saat
-        // Bottom Nav disembunyikan, Box ini otomatis melebar mengisi ruang
-        // ekstra tersebut sebelum dipangkas ulang oleh tinggi keyboard.
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -129,9 +130,6 @@ private fun AppRoot() {
             }
         }
 
-        // Bottom Nav disembunyikan (bukan ikut naik) saat keyboard aktif,
-        // supaya layar kasir dapat ruang vertikal maksimal untuk mengetik
-        // diskon/pajak/bayar tanpa terganggu navigasi di bawahnya.
         AnimatedVisibility(
             visible = !imeVisible,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
@@ -145,7 +143,8 @@ private fun AppRoot() {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .navigationBarsPadding()
+                        // HAPUS .navigationBarsPadding() DARI SINI — sudah
+                        // ditangani di Column terluar, jangan dobel di sini.
                         .height(56.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
