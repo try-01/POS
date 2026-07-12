@@ -345,8 +345,8 @@ private fun SwipeActionBackground(direction: SwipeToDismissBoxValue) {
 private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
 /** Tombol aksi bundar kompak (26dp) — pengganti IconButton standar (48dp) agar hemat ruang. */
-// @Composable
-// private fun CompactIconAction(
+//@Composable
+//private fun CompactIconAction(
 //    icon: ImageVector,
 //    contentDescription: String,
 //    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
