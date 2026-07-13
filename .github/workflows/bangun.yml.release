@@ -1,11 +1,11 @@
-name: Android Fast Build
+name: Android Release Build
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    name: Build Debug APK
+    name: Build Release APK
     runs-on: ubuntu-latest
 
     steps:
@@ -18,42 +18,41 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # Menggunakan action resmi Gradle untuk caching otomatis yang sangat agresif
+      # Menggunakan action resmi Gradle untuk caching otomatis
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: wrapper
-          # Cache hanya diperbarui jika build terjadi di branch main (mencegah cache bloat dari PR)
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       - name: Grant Execute Permission for Gradlew
         run: chmod +x ./gradlew
 
-      # Build APK dengan flag optimasi kecepatan maksimal
+      # UBAH: Menggunakan assembleRelease untuk build produksi
       - name: Build APK (Parallel & Cached)
-        run: ./gradlew assembleDebug --parallel --build-cache --configuration-cache
+        run: ./gradlew assembleRelease --parallel --build-cache --configuration-cache
         env:
-          # Menonaktifkan Daemon karena tidak efisien untuk single-run CI/CD
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
+      # --- STEP: Menandatangani Release APK ---
       - name: Sign APK
         uses: r0adkll/sign-android-release@v1
         id: sign_app
         env:
-          # Letakkan di sini sebagai environment variable
           BUILD_TOOLS_VERSION: "34.0.0"
         with:
-          releaseDirectory: app/build/outputs/apk/debug
+          # UBAH: Arahkan ke folder release tempat Release APK berada
+          releaseDirectory: app/build/outputs/apk/release
           signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
           alias: ${{ secrets.KEY_ALIAS }}
           keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.KEY_PASSWORD }}
 
-      # --- UPDATE STEP: Mengunggah APK yang sudah ditandatangani ---
+      # --- STEP: Mengunggah Release APK yang sudah ditandatangani ---
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pos-offline-debug-signed-apk
+          name: pos-offline-release-signed-apk
           path: |
             ${{steps.sign_app.outputs.signedReleaseFile}}
             app/**/*.json
