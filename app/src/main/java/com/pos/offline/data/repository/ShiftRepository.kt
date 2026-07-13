@@ -4,15 +4,6 @@ import com.pos.offline.data.local.dao.ShiftDao
 import com.pos.offline.data.local.entity.ShiftEntity
 import kotlinx.coroutines.flow.Flow
 
-/**
- * Ringkasan finansial sebuah shift — dihitung ON-DEMAND dari `transactions`/
- * `transaction_items` (bukan disimpan sebagai kolom di [ShiftEntity]), jadi
- * bisa dipanggil kapan pun, termasuk untuk shift yang sudah lama ditutup.
- *
- * Laba Kotor dihitung dari AGREGAT (totalRevenue − totalCost), BUKAN dengan
- * menjumlahkan (unitPrice − unitCost) per baris — supaya diskon level-struk
- * ikut terpotong dengan benar dari sisi pendapatan, mencegah laba overstated.
- */
 data class ShiftSummary(
     val startingCash: Long,
     val cashRevenue: Long,
@@ -32,6 +23,13 @@ class ShiftRepository(private val shiftDao: ShiftDao) {
     val allShifts: Flow<List<ShiftEntity>> = shiftDao.observeAll()
 
     suspend fun getOpenShift(): ShiftEntity? = shiftDao.getOpenShift()
+
+    /**
+     * BATCH B: dipakai [SettingsViewModel] untuk memblokir nonaktifkan kasir
+     * yang masih punya shift berjalan (belum direkonsiliasi kasnya).
+     */
+    suspend fun hasOpenShift(cashierId: Long): Boolean =
+        shiftDao.hasOpenShiftForCashier(cashierId)
 
     suspend fun startShift(cashierId: Long, cashierName: String, startingCash: Long): Long {
         val shift = ShiftEntity(

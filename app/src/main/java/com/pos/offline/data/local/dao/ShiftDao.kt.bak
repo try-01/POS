@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ShiftDao {
 
-    /** Shift yang sedang berjalan (endedAt IS NULL). Normalnya hanya 0 atau 1 baris. */
     @Query("SELECT * FROM shifts WHERE endedAt IS NULL ORDER BY startedAt DESC LIMIT 1")
     fun observeOpenShift(): Flow<ShiftEntity?>
 
@@ -29,12 +28,6 @@ interface ShiftDao {
     @Query("SELECT * FROM shifts WHERE id = :id")
     suspend fun getById(id: Long): ShiftEntity?
 
-    /**
-     * Total penjualan TUNAI (bukan QRIS) selama rentang shift tsb — dasar
-     * kalkulasi [ShiftEntity.endingCashExpected]. Query lintas-tabel (baca
-     * `transactions` dari dalam ShiftDao) adalah hal wajar di Room; DAO hanya
-     * pengelompokan logis, bukan batasan akses antar tabel.
-     */
     @Query(
         """
         SELECT COALESCE(SUM(total), 0) FROM transactions
@@ -42,4 +35,32 @@ interface ShiftDao {
         """
     )
     suspend fun cashRevenueForShift(shiftId: Long): Long
+
+    /**
+     * BATCH 3C: total penjualan QRIS selama shift — uangnya masuk rekening
+     * bank, BUKAN ke laci fisik, jadi sengaja dipisah dari cashRevenueForShift.
+     */
+    @Query(
+        """
+        SELECT COALESCE(SUM(total), 0) FROM transactions
+        WHERE shiftId = :shiftId AND paymentMethod = 'QRIS'
+        """
+    )
+    suspend fun qrisRevenueForShift(shiftId: Long): Long
+
+    /**
+     * BATCH 3C: total modal (Σ unitCost × qty) seluruh item yang terjual
+     * dalam shift ini — dasar kalkulasi Laba Kotor. Join ke `transactions`
+     * untuk memfilter berdasarkan `shiftId` (kolom itu ada di header, bukan
+     * di `transaction_items`).
+     */
+    @Query(
+        """
+        SELECT COALESCE(SUM(ti.unitCost * ti.quantity), 0)
+        FROM transaction_items ti
+        INNER JOIN transactions t ON t.id = ti.transactionId
+        WHERE t.shiftId = :shiftId
+        """
+    )
+    suspend fun totalCostForShift(shiftId: Long): Long
 }

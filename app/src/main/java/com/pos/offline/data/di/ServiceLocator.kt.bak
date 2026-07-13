@@ -22,9 +22,6 @@ class PosApplication : Application() {
     }
 }
 
-/**
- * Dependency Injection manual (Service Locator) memakai `by lazy`.
- */
 object ServiceLocator {
     private lateinit var appContext: Context
 
@@ -50,10 +47,14 @@ object ServiceLocator {
         appContext = context.applicationContext
     }
 
+    // === BATCH 3C: PosViewModel kini butuh CashierRepository & ShiftRepository
+    // untuk fitur Shift. Call-site di MainActivity TIDAK berubah. ===
     fun posViewModelFactory(): ViewModelProvider.Factory = PosViewModelFactory(
         productRepository,
         cartRepository,
-        transactionRepository
+        transactionRepository,
+        cashierRepository,
+        shiftRepository
     )
 
     fun inventoryViewModelFactory(): ViewModelProvider.Factory =
@@ -62,8 +63,6 @@ object ServiceLocator {
     fun reportViewModelFactory(): ViewModelProvider.Factory =
         ReportViewModelFactory(transactionRepository)
 
-    // === Batch 3B: SettingsViewModel kini butuh CashierRepository untuk
-    // fitur Kelola Kasir. Call-site di MainActivity TIDAK berubah. ===
     fun settingsViewModelFactory(): ViewModelProvider.Factory =
         SettingsViewModelFactory(cashierRepository)
 
@@ -76,11 +75,19 @@ object ServiceLocator {
 class PosViewModelFactory(
     private val productRepository: ProductRepository,
     private val cartRepository: CartRepository,
-    private val transactionRepository: TransactionRepository
+    private val transactionRepository: TransactionRepository,
+    private val cashierRepository: CashierRepository,
+    private val shiftRepository: ShiftRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        PosViewModel(productRepository, cartRepository, transactionRepository) as T
+        PosViewModel(
+            productRepository,
+            cartRepository,
+            transactionRepository,
+            cashierRepository,
+            shiftRepository
+        ) as T
 }
 
 class InventoryViewModelFactory(

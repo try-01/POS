@@ -63,8 +63,11 @@ object ServiceLocator {
     fun reportViewModelFactory(): ViewModelProvider.Factory =
         ReportViewModelFactory(transactionRepository)
 
+    // === BATCH B: SettingsViewModel kini butuh ShiftRepository untuk
+    // validasi "kasir masih punya shift berjalan?" sebelum dinonaktifkan.
+    // Call-site di MainActivity TIDAK berubah (masih 0 argumen). ===
     fun settingsViewModelFactory(): ViewModelProvider.Factory =
-        SettingsViewModelFactory(cashierRepository)
+        SettingsViewModelFactory(cashierRepository, shiftRepository)
 
     fun transactionRepository(): TransactionRepository = transactionRepository
     fun productRepository(): ProductRepository = productRepository
@@ -107,9 +110,10 @@ class ReportViewModelFactory(
 }
 
 class SettingsViewModelFactory(
-    private val cashierRepository: CashierRepository
+    private val cashierRepository: CashierRepository,
+    private val shiftRepository: ShiftRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        SettingsViewModel(cashierRepository) as T
+        SettingsViewModel(cashierRepository, shiftRepository) as T
 }
