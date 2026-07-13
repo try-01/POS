@@ -147,7 +147,7 @@ class ReportViewModel(
     companion object {
         /** Format tanggal panjang Indonesia, mis. "Senin, 5 Mei 2025". */
         val dateFmt: DateTimeFormatter =
-            DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(Locale.forLanguageTag("id-ID"))
+            DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(Locale("in", "ID"))
 
         /** Format jam singkat, mis. "14.05". */
         val timeFmt: DateTimeFormatter =

@@ -13,6 +13,7 @@ import com.pos.offline.data.repository.TransactionRepository
 import com.pos.offline.ui.inventory.InventoryViewModel
 import com.pos.offline.ui.pos.PosViewModel
 import com.pos.offline.ui.report.ReportViewModel
+import com.pos.offline.ui.settings.SettingsViewModel
 
 class PosApplication : Application() {
     override fun onCreate() {
@@ -21,11 +22,6 @@ class PosApplication : Application() {
     }
 }
 
-/**
- * Dependency Injection manual (Service Locator).
- * Custom getter dipakai menggantikan `by lazy` agar instance bisa di-reset
- * saat proses Backup/Restore database fisik.
- */
 object ServiceLocator {
     private lateinit var appContext: Context
 
@@ -58,9 +54,7 @@ object ServiceLocator {
     }
 
     fun posViewModelFactory(): ViewModelProvider.Factory = PosViewModelFactory(
-        productRepository,
-        cartRepository,
-        transactionRepository
+        productRepository, cartRepository, transactionRepository
     )
 
     fun inventoryViewModelFactory(): ViewModelProvider.Factory =
@@ -69,19 +63,16 @@ object ServiceLocator {
     fun reportViewModelFactory(): ViewModelProvider.Factory =
         ReportViewModelFactory(transactionRepository)
 
+    fun settingsViewModelFactory(): ViewModelProvider.Factory =
+        SettingsViewModelFactory(cashierRepository)
+
     fun transactionRepository(): TransactionRepository = transactionRepository
     fun productRepository(): ProductRepository = productRepository
     fun cashierRepository(): CashierRepository = cashierRepository
     fun shiftRepository(): ShiftRepository = shiftRepository
 
-    /**
-     * Menutup koneksi database dan mereset cache repository di ServiceLocator.
-     * Memaksa WAL checkpoint sebelum close agar tidak ada transaksi nanggung hilang.
-     */
     fun closeDatabase() {
         _db?.let { database ->
-            // Force WAL checkpoint TRUNCATE: memindahkan semua data dari pos.db-wal
-            // ke pos.db utama, lalu mengosongkan file wal. Wajib sebelum backup fisik.
             database.openHelper.writableDatabase
                 .query("PRAGMA wal_checkpoint(TRUNCATE)")
                 .use { it.moveToFirst() }
@@ -122,4 +113,12 @@ class ReportViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
         ReportViewModel(transactionRepository) as T
+}
+
+class SettingsViewModelFactory(
+    private val cashierRepository: CashierRepository
+) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T =
+        SettingsViewModel(cashierRepository) as T
 }

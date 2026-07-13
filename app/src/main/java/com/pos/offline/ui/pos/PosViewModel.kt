@@ -55,6 +55,7 @@ sealed interface CheckoutState {
  *  - flatMapLatest membatalkan query lama saat kata kunci berubah.
  *  - Total dihitung dengan [combine] → hanya recompute ketika keranjang/diskon/pajak berubah.
  */
+@OptIn(kotlinx.coroutines.FlowPreview::class)
 @OptIn(ExperimentalCoroutinesApi::class)
 class PosViewModel(
     private val productRepository: ProductRepository,

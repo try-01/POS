@@ -15,7 +15,7 @@ import java.util.Locale
  */
 private val rupiahFormatter: DecimalFormat = DecimalFormat(
     "#,###",
-    DecimalFormatSymbols(Locale.forLanguageTag("id-ID"))
+    DecimalFormatSymbols(Locale("id", "ID"))
 ).apply {
     maximumFractionDigits = 0
     minimumFractionDigits = 0

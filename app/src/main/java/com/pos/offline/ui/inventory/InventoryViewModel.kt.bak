@@ -50,7 +50,6 @@ enum class ProductSortOption(val label: String) {
         }
 }
 
-@OptIn(kotlinx.coroutines.FlowPreview::class)
 @OptIn(ExperimentalCoroutinesApi::class)
 class InventoryViewModel(
     private val productRepository: ProductRepository
