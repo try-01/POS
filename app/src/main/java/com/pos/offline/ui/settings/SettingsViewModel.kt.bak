@@ -26,7 +26,7 @@ class SettingsViewModel(
     private val cashierRepository: CashierRepository
 ) : ViewModel() {
 
-    val cashiers: StateFlow<List<CashierEntity>> = cashierRepository.allCashiers
+    val cashiers: StateFlow<List<CashierEntity>> = cashierRepository.getAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _uiEvents = MutableSharedFlow<SettingsUiEvent>(extraBufferCapacity = 4)
@@ -34,9 +34,9 @@ class SettingsViewModel(
 
     fun addCashier(name: String) = viewModelScope.launch {
         if (name.isBlank()) return@launch
-        // id = 0 agar Room memakai autoGenerate, pinHash null (fitur PIN belum aktif)
-        val cashier = CashierEntity(id = 0L, name = name.trim(), pinHash = null, active = true)
-        cashierRepository.save(cashier)
+        // Asumsi CashierEntity punya default value id=0, pinHash=null, active=true
+        val cashier = CashierEntity(name = name.trim(), pinHash = null, active = true)
+        cashierRepository.insert(cashier)
         _uiEvents.emit(SettingsUiEvent.ShowToast("Kasir '${name.trim()}' ditambahkan"))
     }
 
@@ -46,6 +46,7 @@ class SettingsViewModel(
 
     fun exportDatabase(context: Context, uri: Uri) = viewModelScope.launch {
         try {
+            // Pindahkan ke IO agar file stream tidak blok Main Thread
             withContext(Dispatchers.IO) {
                 BackupManager.exportDatabase(context, uri)
             }
