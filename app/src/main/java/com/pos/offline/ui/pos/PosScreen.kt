@@ -97,6 +97,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.local.entity.CartItemEntity
 import com.pos.offline.data.local.entity.CashierEntity
+import com.pos.offline.data.local.entity.PaymentMethod
 import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.repository.CheckoutResult
@@ -128,7 +129,10 @@ fun PosScreen(
     val paid by viewModel.paid.collectAsStateWithLifecycle()
     val checkoutState by viewModel.checkoutState.collectAsStateWithLifecycle()
 
-    // ---- BATCH 3C: state Kasir & Shift ----
+    // ---- BATCH 3D: state metode bayar ----
+    val paymentMethod by viewModel.paymentMethod.collectAsStateWithLifecycle()
+
+    // ---- State Kasir & Shift (Batch 3C) ----
     val activeCashiers by viewModel.activeCashiers.collectAsStateWithLifecycle()
     val openShift by viewModel.openShift.collectAsStateWithLifecycle()
     val showStartShiftDialog by viewModel.showStartShiftDialog.collectAsStateWithLifecycle()
@@ -175,7 +179,6 @@ fun PosScreen(
                     .padding(horizontal = 12.dp)
                     .padding(top = 4.dp, bottom = 6.dp)
             ) {
-                // BATCH 3C: indikator shift — tap untuk buka dialog Mulai/Tutup Shift.
                 ShiftIndicatorBar(
                     openShift = openShift,
                     onClick = {
@@ -223,10 +226,12 @@ if (isWide) {
             taxRate = taxRate,
             paid = paid,
             change = change,
+            paymentMethod = paymentMethod,
             stockByProductId = stockByProductId,
             onDiscountChange = viewModel::setDiscount,
             onTaxRateChange = viewModel::setTaxRate,
             onPaidChange = viewModel::setPaid,
+            onPaymentMethodChange = viewModel::setPaymentMethod,
             onSetQuantity = viewModel::setQuantityDirect,
             onIncrease = viewModel::increaseQty,
             onDecrease = viewModel::decreaseQty,
@@ -263,10 +268,12 @@ if (isWide) {
                         taxRate = taxRate,
                         paid = paid,
                         change = change,
+                        paymentMethod = paymentMethod,
                         stockByProductId = stockByProductId,
                         onDiscountChange = viewModel::setDiscount,
                         onTaxRateChange = viewModel::setTaxRate,
                         onPaidChange = viewModel::setPaid,
+                        onPaymentMethodChange = viewModel::setPaymentMethod,
                         onSetQuantity = viewModel::setQuantityDirect,
                         onIncrease = viewModel::increaseQty,
                         onDecrease = viewModel::decreaseQty,
@@ -301,7 +308,7 @@ if (isWide) {
         else -> Unit
     }
 
-    // ---- BATCH 3C: dialog Mulai/Tutup Shift ----
+    // ---- Dialog Mulai/Tutup Shift ----
     if (showStartShiftDialog) {
         StartShiftDialog(
             cashiers = activeCashiers,
@@ -321,9 +328,8 @@ if (isWide) {
     }
 }
 
-// ============================ INDIKATOR & DIALOG SHIFT (BATCH 3C) ============================
+// ============================ INDIKATOR & DIALOG SHIFT ============================
 
-/** Baris tipis di topBar — hijau+nama kasir saat shift aktif, abu-abu saat tidak. */
 @Composable
 private fun ShiftIndicatorBar(openShift: ShiftEntity?, onClick: () -> Unit) {
     Row(
@@ -354,12 +360,6 @@ private fun ShiftIndicatorBar(openShift: ShiftEntity?, onClick: () -> Unit) {
     }
 }
 
-/**
- * Dropdown pilih kasir — sengaja pakai [DropdownMenu] biasa (bukan
- * ExposedDropdownMenuBox) karena API-nya stabil lintas versi Material3
- * (menghindari risiko `menuAnchor()` yang sempat berubah signature antar
- * rilis BOM), dan lebih mudah dikontrol tampilannya agar tetap compact.
- */
 @Composable
 private fun CashierDropdownField(
     cashiers: List<CashierEntity>,
@@ -624,10 +624,12 @@ private fun CartPane(
     taxRate: Double,
     paid: Long,
     change: Long,
+    paymentMethod: PaymentMethod,
     stockByProductId: Map<Long, Int>,
     onDiscountChange: (Long) -> Unit,
     onTaxRateChange: (Double) -> Unit,
     onPaidChange: (Long) -> Unit,
+    onPaymentMethodChange: (PaymentMethod) -> Unit,
     onIncrease: (CartItemEntity) -> Unit,
     onDecrease: (CartItemEntity) -> Unit,
     onSetQuantity: (CartItemEntity, Int) -> Unit,
@@ -768,9 +770,11 @@ private fun CartPane(
                             discount = discount,
                             taxRate = taxRate,
                             paid = paid,
+                            paymentMethod = paymentMethod,
                             onDiscountChange = onDiscountChange,
                             onTaxRateChange = onTaxRateChange,
-                            onPaidChange = onPaidChange
+                            onPaidChange = onPaidChange,
+                            onPaymentMethodChange = onPaymentMethodChange
                         )
 
                         Spacer(Modifier.height(6.dp))
@@ -1017,9 +1021,11 @@ private fun TotalsSummary(
     discount: Long,
     taxRate: Double,
     paid: Long,
+    paymentMethod: PaymentMethod,
     onDiscountChange: (Long) -> Unit,
     onTaxRateChange: (Double) -> Unit,
-    onPaidChange: (Long) -> Unit
+    onPaidChange: (Long) -> Unit,
+    onPaymentMethodChange: (PaymentMethod) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         SummaryLine("Subtotal", totals.subtotal.toRupiah())
@@ -1048,6 +1054,15 @@ private fun TotalsSummary(
         HorizontalDivider(Modifier.padding(vertical = 2.dp))
         SummaryLine("Total", totals.total.toRupiah(), emphasize = true)
 
+        // BATCH 3D: toggle metode bayar — sengaja diletakkan SEBELUM field
+        // "Bayar" (kasir pilih metode dulu, baru input nominal diterima).
+        Spacer(Modifier.height(2.dp))
+        PaymentMethodToggle(
+            selected = paymentMethod,
+            onSelect = onPaymentMethodChange
+        )
+        Spacer(Modifier.height(2.dp))
+
         MoneyField(
             label = "Bayar",
             value = paid,
@@ -1055,6 +1070,72 @@ private fun TotalsSummary(
             modifier = Modifier.fillMaxWidth().height(44.dp)
         )
         if (paid > 0) SummaryLine("Kembalian", change.toRupiah(), color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+/**
+ * Toggle Tunai/QRIS bergaya "pill" 2-opsi. Sengaja custom Row (bukan
+ * SegmentedButton Material3) — API SegmentedButton masih @ExperimentalMaterial3Api
+ * dan rawan berubah antar rilis BOM; custom Row jauh lebih stabil & mudah
+ * dijaga tetap compact.
+ *
+ * QRIS di sini MURNI pencatatan (bukan integrasi payment gateway) — sesuai
+ * keputusan desain: agar laporan tahu uang QRIS masuk rekening bank, bukan
+ * ke laci kasir fisik.
+ */
+@Composable
+private fun PaymentMethodToggle(
+    selected: PaymentMethod,
+    onSelect: (PaymentMethod) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        PaymentMethodChip(
+            label = "Tunai",
+            selected = selected == PaymentMethod.CASH,
+            onClick = { onSelect(PaymentMethod.CASH) },
+            modifier = Modifier.weight(1f)
+        )
+        PaymentMethodChip(
+            label = "QRIS",
+            selected = selected == PaymentMethod.QRIS,
+            onClick = { onSelect(PaymentMethod.QRIS) },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun PaymentMethodChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else Color.Transparent
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -1302,6 +1383,15 @@ private fun QuantityEditDialog(
     )
 }
 
+/** BATCH 3D: label tampil untuk metode bayar di dialog sukses. */
+private fun paymentMethodLabel(raw: String): String = when (raw) {
+    PaymentMethod.CASH.name -> "Tunai"
+    PaymentMethod.QRIS.name -> "QRIS"
+    PaymentMethod.TRANSFER.name -> "Transfer"
+    PaymentMethod.OTHER.name -> "Lainnya"
+    else -> raw
+}
+
 @Composable
 private fun SuccessDialog(
     result: CheckoutResult,
@@ -1321,6 +1411,10 @@ private fun SuccessDialog(
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("No. Struk: ${result.transaction.id}")
+                    Text(
+                        "Metode Bayar: ${paymentMethodLabel(result.transaction.paymentMethod)}",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
                     Text("Total: ${result.transaction.total.toRupiah()}", fontWeight = FontWeight.SemiBold)
                     Text("Bayar: ${result.transaction.paidAmount.toRupiah()}")
                     Text("Kembali: ${result.transaction.change.toRupiah()}", color = MaterialTheme.colorScheme.primary)
