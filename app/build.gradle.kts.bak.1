@@ -21,8 +21,8 @@ android {
         applicationId = "com.pos.offline"
         minSdk = 26      // Android 8.0 — baseline modern (java.time, classic BT)
         targetSdk = 36   // Android 16
-        versionCode = 2
-        versionName = "1.0.0.1"
+        versionCode = 1
+        versionName = "1.0"
         vectorDrawables { useSupportLibrary = true }
 
         // Runner instrumentasi default untuk androidTest (migration test, dsb.).
@@ -107,10 +107,4 @@ dependencies {
     androidTestImplementation("androidx.room:room-testing:2.6.1") // MigrationTestHelper
     androidTestImplementation("androidx.test.ext:junit:1.2.1")     // AndroidJUnit4
     androidTestImplementation("androidx.test:runner:1.6.2")        // InstrumentationRegistry
-}
-
-afterEvaluate {
-    val schemaGenTasks = tasks.matching { it.name.matches(Regex("ksp\\w*Kotlin")) }
-    tasks.matching { it.name.contains("MergeAssets", ignoreCase = true) }
-        .configureEach { dependsOn(schemaGenTasks) }
 }
