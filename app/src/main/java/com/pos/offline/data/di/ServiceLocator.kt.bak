@@ -39,7 +39,6 @@ object ServiceLocator {
     private val transactionRepository: TransactionRepository by lazy {
         TransactionRepository(db, db.transactionDao(), db.cartDao(), db.productDao())
     }
-    // === BARU: fondasi fitur Kasir/Shift (Batch 1) ===
     private val cashierRepository: CashierRepository by lazy {
         CashierRepository(db.cashierDao())
     }
@@ -63,11 +62,11 @@ object ServiceLocator {
     fun reportViewModelFactory(): ViewModelProvider.Factory =
         ReportViewModelFactory(transactionRepository)
 
-    // === BARU: Batch 3A — Backup/Restore. Belum ada dependency; siap
-    // menampung CashierRepository di 3B tanpa mengubah call-site MainActivity. ===
-    fun settingsViewModelFactory(): ViewModelProvider.Factory = SettingsViewModelFactory()
+    // === Batch 3B: SettingsViewModel kini butuh CashierRepository untuk
+    // fitur Kelola Kasir. Call-site di MainActivity TIDAK berubah. ===
+    fun settingsViewModelFactory(): ViewModelProvider.Factory =
+        SettingsViewModelFactory(cashierRepository)
 
-    // Repositori lain dapat dibuka di sini saat dibutuhkan.
     fun transactionRepository(): TransactionRepository = transactionRepository
     fun productRepository(): ProductRepository = productRepository
     fun cashierRepository(): CashierRepository = cashierRepository
@@ -100,8 +99,10 @@ class ReportViewModelFactory(
         ReportViewModel(transactionRepository) as T
 }
 
-class SettingsViewModelFactory : ViewModelProvider.Factory {
+class SettingsViewModelFactory(
+    private val cashierRepository: CashierRepository
+) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        SettingsViewModel() as T
+        SettingsViewModel(cashierRepository) as T
 }

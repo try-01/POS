@@ -20,23 +20,15 @@ data class TransactionEntity(
     val paidAmount: Long,    // uang diterima dari pelanggan
     val change: Long,        // kembalian = max(0, paidAmount - total)
 
-    // ============ KOLOM BARU (v3) — lihat Migrations.MIGRATION_2_3 ============
-    // WAJIB pakai @ColumnInfo(defaultValue) — bukan cukup default Kotlin —
-    // karena Room memvalidasi skema dari anotasi, bukan dari nilai default
-    // parameter (persis seperti pola kolom `cost` di ProductEntity).
-
-    /** Nama enum [PaymentMethod] disimpan sbg String, mis. "CASH"/"QRIS". */
+    // ============ KOLOM v3 — lihat Migrations.MIGRATION_2_3 ============
     @ColumnInfo(defaultValue = "'CASH'")
     val paymentMethod: String = PaymentMethod.CASH.name,
 
-    /** Null = transaksi tanpa kasir/shift tercatat (fitur ini opsional). */
     val cashierId: Long? = null,
 
-    /** Snapshot nama kasir saat transaksi dibuat (tetap utuh walau kasir diedit/dihapus). */
     @ColumnInfo(defaultValue = "''")
     val cashierName: String = "",
 
-    /** Null = transaksi di luar sesi shift manapun. */
     val shiftId: Long? = null
 )
 
@@ -56,5 +48,21 @@ data class TransactionItemEntity(
     val productName: String,
     val unitPrice: Long,
     val quantity: Int,
-    val lineTotal: Long      // unitPrice × quantity (disimpan utk laporan cepat)
+    val lineTotal: Long,      // unitPrice × quantity (disimpan utk laporan cepat)
+
+    // ============ KOLOM BARU (v4) — lihat Migrations.MIGRATION_3_4 ============
+    /**
+     * Snapshot harga modal (cost) produk PADA SAAT transaksi terjadi — bukan
+     * cost produk saat ini. Ini krusial untuk keakuratan laba historis: kalau
+     * modal produk berubah minggu depan, laba transaksi minggu lalu tidak
+     * boleh ikut berubah retroaktif.
+     *
+     * Transaksi lama (sebelum v4) akan punya nilai default 0 di sini — kalau
+     * suatu saat laba dihitung untuk shift/periode SEBELUM update aplikasi
+     * ini, hasilnya akan terlihat overstated (modal dianggap 0). Ini
+     * batasan yang disengaja & diketahui, bukan bug — shift BARU (dibuat
+     * setelah update) akan selalu punya unitCost yang akurat.
+     */
+    @ColumnInfo(defaultValue = "0")
+    val unitCost: Long = 0L
 )

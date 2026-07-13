@@ -67,6 +67,29 @@ abstract class PosDatabase : RoomDatabase() {
                     .also { INSTANCE = it }
             }
 
+        /**
+         * Menutup paksa koneksi Room aktif & melepas singleton.
+         *
+         * HANYA dipanggil oleh [com.pos.offline.data.backup.BackupManager]
+         * tepat sebelum file `pos.db` ditimpa dengan hasil restore. Setelah
+         * ini dipanggil, JANGAN pakai DAO/Repository mana pun sampai proses
+         * aplikasi di-restart total — instance lama sudah closed, memanggil
+         * query di atasnya akan melempar "attempt to re-open an already
+         * closed object" atau exception serupa.
+         *
+         * Tidak perlu di-null-kan ulang secara manual di ServiceLocator
+         * karena strategi kita adalah restart proses penuh: begitu proses
+         * baru mulai, `INSTANCE` di sini otomatis null lagi (memory proses
+         * lama sudah dibuang OS), dan `getInstance()` akan membangun ulang
+         * dari file `pos.db` yang baru saja diganti.
+         */
+        fun closeActiveInstance() {
+            synchronized(this) {
+                INSTANCE?.close()
+                INSTANCE = null
+            }
+        }
+
         private val SEED_CALLBACK = object : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
                 super.onCreate(db)

@@ -17,7 +17,6 @@ import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.TransactionItemEntity
 
-/** Data contoh awal (name, sku, price, cost). */
 private data class SeedProduct(
     val name: String, val sku: String, val price: Long, val cost: Long
 )
@@ -25,10 +24,9 @@ private data class SeedProduct(
 /**
  * Database tunggal (singleton) untuk seluruh aplikasi.
  *
- * v3 menambahkan fondasi fitur Kasir/Shift/Metode Bayar (lihat
- * [Migrations.MIGRATION_2_3]): tabel baru `cashiers` & `shifts`, serta 4
- * kolom baru pada `transactions`. Semua bersifat aditif — data existing
- * (produk, transaksi lama) tidak tersentuh sama sekali.
+ * v4 menambahkan kolom `unitCost` pada `transaction_items` (lihat
+ * [Migrations.MIGRATION_3_4]) — snapshot harga modal produk saat transaksi
+ * terjadi, dasar kalkulasi Laba Kotor per shift.
  */
 @Database(
     entities = [
@@ -39,7 +37,7 @@ private data class SeedProduct(
         CashierEntity::class,
         ShiftEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class PosDatabase : RoomDatabase() {
@@ -67,22 +65,6 @@ abstract class PosDatabase : RoomDatabase() {
                     .also { INSTANCE = it }
             }
 
-        /**
-         * Menutup paksa koneksi Room aktif & melepas singleton.
-         *
-         * HANYA dipanggil oleh [com.pos.offline.data.backup.BackupManager]
-         * tepat sebelum file `pos.db` ditimpa dengan hasil restore. Setelah
-         * ini dipanggil, JANGAN pakai DAO/Repository mana pun sampai proses
-         * aplikasi di-restart total — instance lama sudah closed, memanggil
-         * query di atasnya akan melempar "attempt to re-open an already
-         * closed object" atau exception serupa.
-         *
-         * Tidak perlu di-null-kan ulang secara manual di ServiceLocator
-         * karena strategi kita adalah restart proses penuh: begitu proses
-         * baru mulai, `INSTANCE` di sini otomatis null lagi (memory proses
-         * lama sudah dibuang OS), dan `getInstance()` akan membangun ulang
-         * dari file `pos.db` yang baru saja diganti.
-         */
         fun closeActiveInstance() {
             synchronized(this) {
                 INSTANCE?.close()

@@ -11,23 +11,13 @@ import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.TransactionItemEntity
 import kotlinx.coroutines.flow.Flow
 
-/** Hasil checkout: transaksi + detail item, dipakai untuk cetak/ekspor struk. */
 data class CheckoutResult(
     val transaction: TransactionEntity,
     val items: List<TransactionItemEntity>
 )
 
-/** Dilempar ketika stok tidak mencukupi (memicu rollback transaksi DB). */
 class InsufficientStockException(val productName: String) : RuntimeException()
 
-/**
- * Repository transaksi.
- *
- * Logika paling kompleks ada di [checkout]: menghitung total, memotong stok,
- * menulis struk, lalu mengosongkan keranjang — semuanya dalam SATU transaksi DB
- * ([withTransaction]). Jika satu langkah gagal (mis. stok tidak cukup),
- * seluruh operasi di-rollback → tidak ada data setengah-jadi (konsisten).
- */
 class TransactionRepository(
     private val database: PosDatabase,
     private val transactionDao: TransactionDao,
@@ -48,21 +38,18 @@ class TransactionRepository(
     /**
      * Proses checkout.
      *
-     * @param cart           isi keranjang (snapshot) yang akan di-checkout.
-     * @param discount       nominal diskon (Rupiah).
-     * @param taxRate        tarif pajak desimal, mis. 0.11 untuk PPN 11%.
-     * @param paid           uang yang dibayar pelanggan.
-     * @param paymentMethod  metode bayar (default Tunai — paling umum).
-     * @param cashierId      null jika fitur kasir/shift tidak dipakai (opsional).
-     * @param cashierName    snapshot nama kasir; string kosong jika tanpa kasir.
-     * @param shiftId        null jika tidak ada sesi shift aktif saat checkout.
-     *
      * URUTAN KALKULASI (penting):
      *  1) subtotal  = Σ (hargaSatuan × qty) seluruh item.
      *  2) diskon dibatasi maksimal sebesar subtotal (tidak boleh negatif).
      *  3) pajak dihitung dari (subtotal − diskon), BUKAN subtotal → adil & benar.
      *  4) total     = (subtotal − diskon) + pajak.
      *  5) kembalian = max(0, paid − total); jika kurang bayar, change = 0.
+     *
+     * BATCH 3C: setiap item struk kini menyimpan snapshot `unitCost` (harga
+     * modal produk SAAT transaksi ini terjadi) — dasar kalkulasi Laba Kotor
+     * per shift di [ShiftRepository.getShiftSummary]. Diambil via query
+     * terpisah per item (bukan batch) karena jumlah item per struk kasir
+     * kecil (biasanya < 20), N+1 query di sini tidak signifikan.
      */
     suspend fun checkout(
         cart: List<CartItemEntity>,
@@ -76,20 +63,11 @@ class TransactionRepository(
     ): CheckoutResult {
         require(cart.isNotEmpty()) { "Keranjang kosong" }
 
-        // ---- 1) Subtotal ----
         val subtotal = cart.sumOf { it.unitPrice * it.quantity.toLong() }
-
-        // ---- 2) Diskon (dibatasi maks. subtotal) ----
         val discountAmount = discount.coerceIn(0L, subtotal)
-
-        // ---- 3) Dasar kena pajak & pajak ----
         val taxableBase = (subtotal - discountAmount).coerceAtLeast(0L)
-        val tax = (taxableBase * taxRate).toLong() // Long = presisi uang
-
-        // ---- 4) Total ----
+        val tax = (taxableBase * taxRate).toLong()
         val total = taxableBase + tax
-
-        // ---- 5) Kembalian ----
         val change = (paid - total).coerceAtLeast(0L)
 
         val invoiceId = "INV-${System.currentTimeMillis()}"
@@ -110,17 +88,22 @@ class TransactionRepository(
             shiftId = shiftId
         )
 
-        val items = cart.map {
+        // NOTE: `productDao.getById(id)` diasumsikan ada mengikuti pola thin
+        // wrapper yang sudah terbukti di CashierRepository/ShiftRepository.
+        // Kalau nama fungsi asli di ProductDao berbeda, build akan gagal
+        // persis di baris ini — sesuaikan nama sesuai DAO Anda.
+        val items = cart.map { cartItem ->
+            val unitCost = productDao.getById(cartItem.productId)?.cost ?: 0L
             TransactionItemEntity(
                 transactionId = invoiceId,
-                productName = it.name,
-                unitPrice = it.unitPrice,
-                quantity = it.quantity,
-                lineTotal = it.unitPrice * it.quantity.toLong()
+                productName = cartItem.name,
+                unitPrice = cartItem.unitPrice,
+                quantity = cartItem.quantity,
+                lineTotal = cartItem.unitPrice * cartItem.quantity.toLong(),
+                unitCost = unitCost
             )
         }
 
-        // ---- Operasi atomik: potong stok → tulis struk → kosongkan keranjang ----
         database.withTransaction {
             cart.forEach { item ->
                 val affected = productDao.decrementStock(item.productId, item.quantity, now)

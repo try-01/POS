@@ -52,6 +52,8 @@ import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -94,8 +96,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.local.entity.CartItemEntity
+import com.pos.offline.data.local.entity.CashierEntity
 import com.pos.offline.data.local.entity.ProductEntity
+import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.repository.CheckoutResult
+import com.pos.offline.data.repository.ShiftSummary
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.util.toRupiah
 import com.pos.offline.ui.components.ThousandsSeparatorTransformation
@@ -104,16 +109,6 @@ import com.pos.offline.ui.components.ThousandsSeparatorTransformation
  * Layar Kasir utama. Layout responsif: tablet/landscape → katalog + keranjang
  * berdampingan; ponsel → tumpuk vertikal dengan keranjang yang bisa
  * di-collapse/expand agar katalog dapat ruang maksimal saat tidak dibutuhkan.
- *
- * Performa:
- *  - Semua state dikumpulkan dengan [collectAsStateWithLifecycle] (berhenti saat background).
- *  - [derivedStateOf] untuk nilai turunan → recompose terbatas.
- *  - Lazy list/grid memakai `key` + `contentType` → daur ulang slot optimal.
- *
- * Guard stok dua lapis:
- *  - UI: tombol tambah otomatis nonaktif saat stok sisa habis (feedback instan).
- *  - ViewModel: validasi ulang ke DB sebelum menulis (jaga konsistensi akhir),
- *    mengirim [PosUiEvent] via SharedFlow bila ditolak → ditampilkan sebagai Snackbar.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -121,7 +116,7 @@ fun PosScreen(
     viewModel: PosViewModel,
     onPrintBluetooth: (CheckoutResult) -> Unit,
     onExportPdf: (CheckoutResult) -> Unit,
-    forceWideLayout: Boolean = false // <-- TAMBAHKAN parameter ini
+    forceWideLayout: Boolean = false
 ) {
     // ---- State reaktif (sadarkan-siklus) ----
     val products by viewModel.products.collectAsStateWithLifecycle()
@@ -133,14 +128,19 @@ fun PosScreen(
     val paid by viewModel.paid.collectAsStateWithLifecycle()
     val checkoutState by viewModel.checkoutState.collectAsStateWithLifecycle()
 
-    // Nilai turunan: hanya recompute saat dependency berubah.
+    // ---- BATCH 3C: state Kasir & Shift ----
+    val activeCashiers by viewModel.activeCashiers.collectAsStateWithLifecycle()
+    val openShift by viewModel.openShift.collectAsStateWithLifecycle()
+    val showStartShiftDialog by viewModel.showStartShiftDialog.collectAsStateWithLifecycle()
+    val showEndShiftDialog by viewModel.showEndShiftDialog.collectAsStateWithLifecycle()
+    val shiftSummary by viewModel.shiftSummary.collectAsStateWithLifecycle()
+
     val isCartEmpty by remember { derivedStateOf { cart.isEmpty() } }
     val isProcessing by remember { derivedStateOf { checkoutState is CheckoutState.Processing } }
     val change by remember(paid, totals) {
         derivedStateOf { (paid - totals.total).coerceAtLeast(0L) }
     }
 
-    // Peta bantu untuk guard stok di sisi UI (lihat catatan keterbatasan di kelas doc).
     val cartQtyByProductId by remember(cart) {
         derivedStateOf { cart.associate { it.productId to it.quantity } }
     }
@@ -148,36 +148,42 @@ fun PosScreen(
         derivedStateOf { products.associate { it.id to it.stock } }
     }
 
-    // ---- Snackbar untuk event sekali-jalan dari ViewModel (mis. stok kurang) ----
     val snackbarHostState = remember { SnackbarHostState() }
-LaunchedEffect(viewModel) {
-    viewModel.uiEvents.collect { event ->
-        when (event) {
-            is PosUiEvent.ShowMessage -> snackbarHostState.showSnackbar(
-                message = event.message,
-                duration = SnackbarDuration.Short // eksplisit: pesan stok harus singkat, tidak mengganggu alur kasir
-            )
+    LaunchedEffect(viewModel) {
+        viewModel.uiEvents.collect { event ->
+            when (event) {
+                is PosUiEvent.ShowMessage -> snackbarHostState.showSnackbar(
+                    message = event.message,
+                    duration = SnackbarDuration.Short
+                )
+            }
         }
     }
-}
 
-    // ---- State collapse/expand keranjang (khusus layout ponsel) ----
     var cartExpanded by remember { mutableStateOf(false) }
     LaunchedEffect(isCartEmpty) {
-        // Auto-expand begitu ada isi; auto-collapse begitu keranjang kosong.
         cartExpanded = !isCartEmpty
     }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
                     .padding(horizontal = 12.dp)
                     .padding(top = 4.dp, bottom = 6.dp)
             ) {
+                // BATCH 3C: indikator shift — tap untuk buka dialog Mulai/Tutup Shift.
+                ShiftIndicatorBar(
+                    openShift = openShift,
+                    onClick = {
+                        if (openShift == null) viewModel.openStartShiftDialog()
+                        else viewModel.openEndShiftDialog()
+                    }
+                )
+                Spacer(Modifier.height(4.dp))
                 CompactSearchBar(
                     query = query,
                     onQueryChange = viewModel::search,
@@ -195,7 +201,6 @@ LaunchedEffect(viewModel) {
         val isWide = forceWideLayout || maxWidth >= 840.dp
         val maxH = maxHeight
 
-        // Deteksi apakah keyboard sedang tampil, untuk melonggarkan batas tinggi CartPane saat mengetik.
         val density = LocalDensity.current
         val imeVisible = WindowInsets.ime.getBottom(density) > 0
 
@@ -211,7 +216,7 @@ if (isWide) {
         CartPane(
             modifier = Modifier
                 .fillMaxHeight()
-                .widthIn(min = 320.dp, max = 420.dp), // <-- KOMA DITAMBAHKAN DI SINI
+                .widthIn(min = 320.dp, max = 420.dp),
             cart = cart,
             totals = totals,
             discount = discount,
@@ -248,9 +253,6 @@ if (isWide) {
                         .let { base ->
                             when {
                                 !cartExpanded -> base
-                                // Keyboard aktif: JANGAN batasi 65% — biar TotalsSummary
-                                // & tombol Bayar selalu punya ruang untuk muncul penuh
-                                // di atas keyboard, bukan tersembunyi di baliknya.
                                 imeVisible -> base
                                 else -> base.heightIn(max = maxH * 0.65f)
                                 }
@@ -265,7 +267,7 @@ if (isWide) {
                         onDiscountChange = viewModel::setDiscount,
                         onTaxRateChange = viewModel::setTaxRate,
                         onPaidChange = viewModel::setPaid,
-                        onSetQuantity = viewModel::setQuantityDirect, // <-- TAMBAHKAN ini
+                        onSetQuantity = viewModel::setQuantityDirect,
                         onIncrease = viewModel::increaseQty,
                         onDecrease = viewModel::decreaseQty,
                         onRemove = viewModel::removeFromCart,
@@ -298,6 +300,224 @@ if (isWide) {
         )
         else -> Unit
     }
+
+    // ---- BATCH 3C: dialog Mulai/Tutup Shift ----
+    if (showStartShiftDialog) {
+        StartShiftDialog(
+            cashiers = activeCashiers,
+            onDismiss = viewModel::dismissStartShiftDialog,
+            onConfirm = { cashierId, startingCash -> viewModel.startShift(cashierId, startingCash) }
+        )
+    }
+
+    shiftSummary?.let { summary ->
+        if (showEndShiftDialog) {
+            EndShiftDialog(
+                summary = summary,
+                onDismiss = viewModel::dismissEndShiftDialog,
+                onConfirm = { actualCash -> viewModel.endShift(actualCash) }
+            )
+        }
+    }
+}
+
+// ============================ INDIKATOR & DIALOG SHIFT (BATCH 3C) ============================
+
+/** Baris tipis di topBar — hijau+nama kasir saat shift aktif, abu-abu saat tidak. */
+@Composable
+private fun ShiftIndicatorBar(openShift: ShiftEntity?, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(
+                    if (openShift != null) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                )
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = if (openShift != null) "${openShift.cashierName} · Shift Aktif"
+                   else "Tanpa Shift · Ketuk untuk mulai",
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+            color = if (openShift != null) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        )
+    }
+}
+
+/**
+ * Dropdown pilih kasir — sengaja pakai [DropdownMenu] biasa (bukan
+ * ExposedDropdownMenuBox) karena API-nya stabil lintas versi Material3
+ * (menghindari risiko `menuAnchor()` yang sempat berubah signature antar
+ * rilis BOM), dan lebih mudah dikontrol tampilannya agar tetap compact.
+ */
+@Composable
+private fun CashierDropdownField(
+    cashiers: List<CashierEntity>,
+    selected: CashierEntity?,
+    onSelect: (CashierEntity) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                .clickable { expanded = true }
+                .padding(horizontal = 12.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = selected?.name ?: "Pilih kasir",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (selected != null) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                modifier = Modifier.weight(1f)
+            )
+            Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            cashiers.forEach { cashier ->
+                DropdownMenuItem(
+                    text = { Text(cashier.name) },
+                    onClick = {
+                        onSelect(cashier)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StartShiftDialog(
+    cashiers: List<CashierEntity>,
+    onDismiss: () -> Unit,
+    onConfirm: (cashierId: Long, startingCash: Long) -> Unit
+) {
+    var selectedCashier by remember(cashiers) { mutableStateOf(cashiers.firstOrNull()) }
+    var startingCash by remember { mutableStateOf(0L) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Mulai Shift") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (cashiers.isEmpty()) {
+                    Text(
+                        "Belum ada kasir terdaftar. Tambahkan kasir dulu di tab Pengaturan.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else {
+                    CashierDropdownField(
+                        cashiers = cashiers,
+                        selected = selectedCashier,
+                        onSelect = { selectedCashier = it }
+                    )
+                    MoneyField(
+                        label = "Kas Awal",
+                        value = startingCash,
+                        onValueChange = { startingCash = it },
+                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { selectedCashier?.let { onConfirm(it.id, startingCash) } },
+                enabled = selectedCashier != null
+            ) {
+                Text("Mulai Shift")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Batal") }
+        }
+    )
+}
+
+@Composable
+private fun EndShiftDialog(
+    summary: ShiftSummary,
+    onDismiss: () -> Unit,
+    onConfirm: (actualCash: Long) -> Unit
+) {
+    var actualCash by remember { mutableStateOf(0L) }
+    val expected = summary.expectedCashInDrawer
+    val difference = actualCash - expected
+    val hasInput = actualCash > 0L
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Tutup Shift") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text("📋 Ringkasan Shift", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                SummaryLine("Penjualan Tunai", summary.cashRevenue.toRupiah())
+                SummaryLine("Penjualan QRIS", summary.qrisRevenue.toRupiah())
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                SummaryLine("Total Pendapatan", summary.totalRevenue.toRupiah(), emphasize = true)
+                SummaryLine("Laba Kotor", summary.grossProfit.toRupiah(), color = MaterialTheme.colorScheme.primary)
+
+                Spacer(Modifier.height(14.dp))
+
+                Text("💵 Rekonsiliasi Laci", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                SummaryLine("Kas Awal (Modal)", summary.startingCash.toRupiah())
+                SummaryLine("Penjualan Tunai", summary.cashRevenue.toRupiah())
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                SummaryLine("Estimasi di Laci", expected.toRupiah(), emphasize = true)
+
+                Spacer(Modifier.height(10.dp))
+                MoneyField(
+                    label = "Uang Fisik",
+                    value = actualCash,
+                    onValueChange = { actualCash = it },
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
+                )
+
+                if (hasInput) {
+                    Spacer(Modifier.height(10.dp))
+                    val diffAbs = kotlin.math.abs(difference)
+                    val diffColor = if (difference < 0L) MaterialTheme.colorScheme.error
+                                     else MaterialTheme.colorScheme.primary
+                    val diffLabel = when {
+                        difference == 0L -> "Pas ✓"
+                        difference < 0L -> "-${diffAbs.toRupiah()} (Uang Kurang)"
+                        else -> "+${diffAbs.toRupiah()} (Uang Lebih)"
+                    }
+                    Text("💡 Hasil", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    SummaryLine("Selisih", diffLabel, emphasize = true, color = diffColor)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(actualCash) },
+                enabled = hasInput
+            ) { Text("Tutup Shift") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Batal") }
+        }
+    )
 }
 
 // ============================ PANEL KATALOG ============================
@@ -310,8 +530,6 @@ private fun ProductPane(
     onAdd: (ProductEntity) -> Unit
 ) {
     LazyVerticalGrid(
-        // 104.dp dipilih agar 3 kolom muat di layar ~360dp (mis. device 1080x2460px @3x density).
-        // Kalau di device lain kolom terasa kurang, coba turunkan sedikit lagi (mis. 96.dp).
         columns = GridCells.Adaptive(minSize = 104.dp),
         modifier = modifier.padding(horizontal = 12.dp),
         contentPadding = PaddingValues(bottom = 16.dp),
@@ -346,7 +564,7 @@ private fun ProductCard(product: ProductEntity, remainingStock: Int, onAdd: () -
             Text(
                 text = product.name,
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                maxLines = 1, // ganti ke 2 kalau nama sering terpotong mengganggu
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
@@ -428,12 +646,6 @@ private fun CartPane(
 
     val scrollState = rememberScrollState()
 
-    // Lacak perubahan JUMLAH item: begitu produk baru ditambahkan (cart.size
-    // bertambah), otomatis scroll ke paling bawah — item terbaru, ringkasan
-    // total, dan tombol Bayar langsung terlihat bersamaan tanpa scroll manual.
-    // Sengaja HANYA bereaksi saat ukuran bertambah (bukan berkurang/qty
-    // berubah) agar tidak mengganggu posisi scroll saat pengguna sedang
-    // meninjau atau mengedit item yang sudah ada di keranjang.
     var previousCartSize by remember { mutableStateOf(cart.size) }
     LaunchedEffect(cart.size) {
         if (cart.size > previousCartSize) {
@@ -453,7 +665,6 @@ private fun CartPane(
                 .then(if (!collapsible) Modifier.fillMaxHeight() else Modifier)
                 .padding(10.dp)
         ) {
-            // ---- Header: tidak ikut scroll, selalu terlihat ----
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.ShoppingCart, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(6.dp))
@@ -494,12 +705,6 @@ private fun CartPane(
             if (showFull) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
-                // ---- Area scroll TUNGGAL: daftar item + ringkasan total + tombol Bayar ----
-                // fill = false (BUKAN lagi bergantung !collapsible) -> tinggi Box ini
-                // SELALU mengikuti konten saat konten sedikit (tidak ada ruang kosong
-                // menganggur di bawah tombol Bayar, memperbaiki keluhan sebelumnya).
-                // Saat konten melebihi ruang tersisa, weight tetap membatasi tinggi
-                // maksimum Box ini -> verticalScroll di dalamnya otomatis aktif.
                 Box(
                     modifier = Modifier
                         .weight(1f, fill = false)
@@ -685,7 +890,7 @@ private fun CartRow(
     onIncrease: () -> Unit,
     onDecrease: () -> Unit,
     onRemove: () -> Unit,
-    onQuantityClick: () -> Unit, // <-- TAMBAHKAN parameter ini
+    onQuantityClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -719,7 +924,7 @@ private fun CartRow(
             canIncrease = canIncrease,
             onDecrease = onDecrease,
             onIncrease = onIncrease,
-            onQuantityClick = onQuantityClick // <-- teruskan
+            onQuantityClick = onQuantityClick
         )
 
         Spacer(Modifier.width(8.dp))
@@ -748,12 +953,11 @@ private fun QuantityStepper(
     canIncrease: Boolean,
     onDecrease: () -> Unit,
     onIncrease: () -> Unit,
-    onQuantityClick: () -> Unit // <-- TAMBAHKAN parameter ini
+    onQuantityClick: () -> Unit
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         CompactActionBox(icon = Icons.Rounded.Remove, contentDescription = "Kurangi", onClick = onDecrease)
 
-        // Angka qty sekarang bisa di-tap untuk input manual/pintasan angka besar.
         Box(
             modifier = Modifier
                 .width(32.dp)
@@ -765,7 +969,7 @@ private fun QuantityStepper(
                 text = "$qty",
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
-                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline // isyarat visual "bisa di-tap"
+                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
             )
         }
 
@@ -782,7 +986,7 @@ private fun QuantityStepper(
 private fun CompactActionBox(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String,
-    dimmed: Boolean = false, // sebelumnya bernama "enabled" — sekarang murni untuk styling, bukan gating klik
+    dimmed: Boolean = false,
     onClick: () -> Unit
 ) {
     Box(
@@ -793,7 +997,7 @@ private fun CompactActionBox(
                 if (dimmed) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                 else MaterialTheme.colorScheme.surfaceVariant
             )
-            .clickable(onClick = onClick), // SELALU bisa ditekan — validasi ada di ViewModel
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
@@ -871,7 +1075,6 @@ private fun SummaryLine(label: String, value: String, emphasize: Boolean = false
     }
 }
 
-/** Field angka uang (Long). Hanya menerima digit → mencegah parse error. */
 @Composable
 private fun MoneyField(
     label: String,
@@ -996,11 +1199,6 @@ private fun formatTrim(d: Double): String {
 
 // ============================ DIALOG SUKSES ============================
 
-/**
- * Dialog input jumlah manual. Menyediakan tombol pintasan angka umum
- * (10/20/50/100) agar kasir bisa set quantity besar hanya dengan 1 tap,
- * tanpa perlu mengetik atau menekan tombol "+" berulang kali.
- */
 @Composable
 private fun QuantityEditDialog(
     item: CartItemEntity,
@@ -1039,8 +1237,6 @@ private fun QuantityEditDialog(
                 }
                 Spacer(Modifier.height(12.dp))
 
-                // Input manual — teks otomatis ter-select semua saat dialog dibuka,
-                // jadi kasir tinggal ketik angka baru untuk langsung menimpa.
                 BasicTextField(
                     value = fieldValue,
                     onValueChange = { newValue ->
@@ -1073,7 +1269,6 @@ private fun QuantityEditDialog(
 
                 Spacer(Modifier.height(12.dp))
 
-                // Tombol pintasan: 1 tap langsung terapkan & tutup dialog.
                 Text(
                     "Pintasan cepat",
                     style = MaterialTheme.typography.labelSmall,

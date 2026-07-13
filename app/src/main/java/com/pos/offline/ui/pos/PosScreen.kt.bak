@@ -426,8 +426,21 @@ private fun CartPane(
     var qtyEditItem by remember { mutableStateOf<CartItemEntity?>(null) }
     val showFull = !collapsible || expanded
 
-    // Satu state scroll untuk SELURUH konten di bawah header (item + total + tombol).
     val scrollState = rememberScrollState()
+
+    // Lacak perubahan JUMLAH item: begitu produk baru ditambahkan (cart.size
+    // bertambah), otomatis scroll ke paling bawah — item terbaru, ringkasan
+    // total, dan tombol Bayar langsung terlihat bersamaan tanpa scroll manual.
+    // Sengaja HANYA bereaksi saat ukuran bertambah (bukan berkurang/qty
+    // berubah) agar tidak mengganggu posisi scroll saat pengguna sedang
+    // meninjau atau mengedit item yang sudah ada di keranjang.
+    var previousCartSize by remember { mutableStateOf(cart.size) }
+    LaunchedEffect(cart.size) {
+        if (cart.size > previousCartSize) {
+            scrollState.animateScrollTo(scrollState.maxValue)
+        }
+        previousCartSize = cart.size
+    }
 
     Box(
         modifier = modifier
@@ -440,7 +453,7 @@ private fun CartPane(
                 .then(if (!collapsible) Modifier.fillMaxHeight() else Modifier)
                 .padding(10.dp)
         ) {
-            // ---- Header: SENGAJA tidak ikut scroll, selalu terlihat ----
+            // ---- Header: tidak ikut scroll, selalu terlihat ----
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.ShoppingCart, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(6.dp))
@@ -481,25 +494,21 @@ private fun CartPane(
             if (showFull) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
-                // ---- SATU area scroll untuk: daftar item + ringkasan total + tombol Bayar ----
-                // Sebelumnya daftar item (LazyColumn) & ringkasan total+tombol adalah dua
-                // wilayah terpisah — ringkasan/tombol TIDAK bisa digulir, sehingga di layar
-                // pendek (landscape + keyboard aktif) keduanya bisa terpotong tanpa peringatan
-                // (silent overflow), persis seperti bug yang terjadi di dialog Edit Produk.
-                //
-                // LazyColumn diganti Column biasa (+ key() per item) karena LazyColumn TIDAK
-                // boleh dibungkus verticalScroll lain tanpa tinggi eksplisit (akan crash
-                // "infinite height"). Cart POS realistis berisi puluhan item, bukan ribuan,
-                // jadi Column biasa tetap ringan & aman.
+                // ---- Area scroll TUNGGAL: daftar item + ringkasan total + tombol Bayar ----
+                // fill = false (BUKAN lagi bergantung !collapsible) -> tinggi Box ini
+                // SELALU mengikuti konten saat konten sedikit (tidak ada ruang kosong
+                // menganggur di bawah tombol Bayar, memperbaiki keluhan sebelumnya).
+                // Saat konten melebihi ruang tersisa, weight tetap membatasi tinggi
+                // maksimum Box ini -> verticalScroll di dalamnya otomatis aktif.
                 Box(
                     modifier = Modifier
-                        .weight(1f, fill = !collapsible)
+                        .weight(1f, fill = false)
                         .fillMaxWidth()
-                        .heightIn(min = 56.dp) // jaminan minimum, konten tak pernah "hilang total"
+                        .heightIn(min = 56.dp)
                 ) {
                     Column(
                         modifier = Modifier
-                            .fillMaxSize()
+                            .fillMaxWidth()
                             .verticalScroll(scrollState)
                     ) {
                         if (cart.isEmpty()) {
@@ -578,12 +587,9 @@ private fun CartPane(
                                 Text("Bayar · ${totals.total.toRupiah()}")
                             }
                         }
-                        // Spacer kecil agar tombol tidak menempel persis di ujung area scroll.
                         Spacer(Modifier.height(4.dp))
                     }
 
-                    // Indikator garis tipis: menandakan MASIH ADA konten di atas/bawah
-                    // (bisa berupa sisa item, atau ringkasan+tombol Bayar yang belum terlihat).
                     val showTopFade by remember { derivedStateOf { scrollState.canScrollBackward } }
                     val showBottomFade by remember { derivedStateOf { scrollState.canScrollForward } }
                     if (showTopFade) {
