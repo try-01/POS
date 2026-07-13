@@ -7,16 +7,12 @@ import androidx.lifecycle.viewModelScope
 import com.pos.offline.data.backup.BackupManager
 import com.pos.offline.data.backup.BackupOutcome
 import com.pos.offline.data.backup.RestoreOutcome
-import com.pos.offline.data.local.entity.CashierEntity
-import com.pos.offline.data.repository.CashierRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class SettingsUiState(
@@ -24,27 +20,22 @@ data class SettingsUiState(
     val isImporting: Boolean = false,
     // Uri file hasil ACTION_OPEN_DOCUMENT, menunggu konfirmasi user sebelum
     // benar-benar ditimpakan ke database aktif.
-    val pendingRestoreUri: Uri? = null,
-    // Batch 3B: visibilitas dialog "Tambah Kasir" disimpan di sini (bukan
-    // `remember` lokal di Composable) agar konsisten dengan pola
-    // `pendingRestoreUri` — bertahan saat rotasi layar.
-    val showAddCashierDialog: Boolean = false
+    val pendingRestoreUri: Uri? = null
 ) {
     val isBusy: Boolean get() = isExporting || isImporting
 }
 
 /**
- * Backup/Restore murni memanggil [BackupManager] (object stateless).
- * Batch 3B menambah [CashierRepository] sebagai dependency untuk fitur
- * Kelola Kasir — sesuai rencana awal, factory-nya di ServiceLocator sudah
- * disiapkan sejak 3A jadi call-site di MainActivity tidak berubah.
+ * Backup/Restore murni memanggil [BackupManager] (object stateless) — jadi
+ * ViewModel ini SENGAJA tidak menerima dependency apa pun di constructor.
+ * Kelola Kasir (Batch 3B) akan menambah CashierRepository sebagai parameter
+ * konstruktor saat itu tiba; factory-nya sudah disiapkan di ServiceLocator
+ * agar perubahan nanti tidak mengubah pola pemanggilan di MainActivity.
  *
  * `Context` TIDAK disimpan sebagai field (mencegah leak) — selalu diteruskan
  * per-pemanggilan dari Composable yang mengambilnya via `LocalContext.current`.
  */
-class SettingsViewModel(
-    private val cashierRepository: CashierRepository
-) : ViewModel() {
+class SettingsViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -53,18 +44,7 @@ class SettingsViewModel(
     /** Event sekali-pakai untuk ditampilkan sebagai Toast oleh Screen. */
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
-    /**
-     * Seluruh kasir (aktif maupun nonaktif) — sengaja bukan hanya yang aktif,
-     * supaya kasir yang dinonaktifkan tetap terlihat di layar ini (pudar) dan
-     * bisa diaktifkan kembali, bukan hilang selamanya dari UI.
-     */
-    val cashiers: StateFlow<List<CashierEntity>> = cashierRepository.allCashiers
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    // -------------------------------------------------------------------
-    // Backup / Restore (Batch 3A)
-    // -------------------------------------------------------------------
-
+    /** Dipanggil setelah user pilih lokasi simpan lewat ACTION_CREATE_DOCUMENT. */
     fun exportDatabase(context: Context, destinationUri: Uri) {
         if (_uiState.value.isBusy) return
         viewModelScope.launch {
@@ -79,6 +59,7 @@ class SettingsViewModel(
         }
     }
 
+    /** Dipanggil setelah user pilih file lewat ACTION_OPEN_DOCUMENT — belum eksekusi, tunggu konfirmasi. */
     fun requestRestore(uri: Uri) {
         _uiState.value = _uiState.value.copy(pendingRestoreUri = uri)
     }
@@ -87,12 +68,20 @@ class SettingsViewModel(
         _uiState.value = _uiState.value.copy(pendingRestoreUri = null)
     }
 
+    /**
+     * Dipanggil setelah user menekan "Ya, Timpa & Pulihkan" di dialog konfirmasi.
+     * [onRestartRequired] HANYA dipanggil kalau restore benar-benar sukses —
+     * eksekusi `BackupManager.restartApp()` sengaja dilempar balik ke Screen
+     * karena butuh Activity/Application context yang masih hidup saat itu.
+     */
     fun confirmRestore(context: Context, onRestartRequired: () -> Unit) {
         val uri = _uiState.value.pendingRestoreUri ?: return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isImporting = true, pendingRestoreUri = null)
             when (val result = BackupManager.validateAndRestore(context, uri)) {
                 is RestoreOutcome.Success -> {
+                    // Tidak perlu set isImporting = false: proses aplikasi
+                    // akan segera restart, state ini tidak relevan lagi.
                     onRestartRequired()
                 }
                 is RestoreOutcome.InvalidFile -> {
@@ -104,39 +93,6 @@ class SettingsViewModel(
                     _uiState.value = _uiState.value.copy(isImporting = false)
                 }
             }
-        }
-    }
-
-    // -------------------------------------------------------------------
-    // Kelola Kasir (Batch 3B)
-    // -------------------------------------------------------------------
-
-    fun openAddCashierDialog() {
-        _uiState.value = _uiState.value.copy(showAddCashierDialog = true)
-    }
-
-    fun closeAddCashierDialog() {
-        _uiState.value = _uiState.value.copy(showAddCashierDialog = false)
-    }
-
-    /** Validasi minimal: nama tidak boleh kosong/blank. Duplikat nama diperbolehkan. */
-    fun addCashier(name: String) {
-        val trimmed = name.trim()
-        if (trimmed.isEmpty()) {
-            viewModelScope.launch { _messages.emit("Nama kasir tidak boleh kosong.") }
-            return
-        }
-        viewModelScope.launch {
-            cashierRepository.save(CashierEntity(name = trimmed))
-            _messages.emit("Kasir \"$trimmed\" ditambahkan.")
-        }
-        _uiState.value = _uiState.value.copy(showAddCashierDialog = false)
-    }
-
-    /** Soft-delete/restore — dipanggil dari Switch aktif/nonaktif di tiap baris. */
-    fun setCashierActive(id: Long, active: Boolean) {
-        viewModelScope.launch {
-            cashierRepository.setActive(id, active)
         }
     }
 }
