@@ -13,7 +13,6 @@ import com.pos.offline.data.repository.TransactionRepository
 import com.pos.offline.ui.inventory.InventoryViewModel
 import com.pos.offline.ui.pos.PosViewModel
 import com.pos.offline.ui.report.ReportViewModel
-import com.pos.offline.ui.settings.SettingsViewModel
 
 class PosApplication : Application() {
     override fun onCreate() {
@@ -63,10 +62,6 @@ object ServiceLocator {
     fun reportViewModelFactory(): ViewModelProvider.Factory =
         ReportViewModelFactory(transactionRepository)
 
-    // === BARU: Batch 3A — Backup/Restore. Belum ada dependency; siap
-    // menampung CashierRepository di 3B tanpa mengubah call-site MainActivity. ===
-    fun settingsViewModelFactory(): ViewModelProvider.Factory = SettingsViewModelFactory()
-
     // Repositori lain dapat dibuka di sini saat dibutuhkan.
     fun transactionRepository(): TransactionRepository = transactionRepository
     fun productRepository(): ProductRepository = productRepository
@@ -98,10 +93,4 @@ class ReportViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
         ReportViewModel(transactionRepository) as T
-}
-
-class SettingsViewModelFactory : ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        SettingsViewModel() as T
 }
