@@ -231,11 +231,13 @@ class PosViewModel(
         _checkoutState.value = CheckoutState.Processing
         _checkoutState.value = try {
             val shift = openShift.value
+            val currentTotal = totals.value.total
+            val effectivePaid = if (_paid.value <= 0L) currentTotal else _paid.value
             val result = transactionRepository.checkout(
                 cart = currentCart,
                 discount = _discount.value,
                 taxRate = _taxRate.value,
-                paid = _paid.value,
+                paid = effectivePaid,
                 paymentMethod = _paymentMethod.value,
                 cashierId = shift?.cashierId,
                 cashierName = shift?.cashierName ?: "",

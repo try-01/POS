@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pos.offline.data.local.entity.CartItemEntity
 import com.pos.offline.data.local.entity.CashierEntity
+import com.pos.offline.data.local.entity.PaymentMethod
 import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.repository.CartRepository
@@ -53,10 +54,11 @@ sealed interface CheckoutState {
 /**
  * ViewModel layar Kasir.
  *
- * BATCH 3C menambah [CashierRepository] & [ShiftRepository] sebagai
- * dependency untuk fitur Shift — sesuai desain, shift bersifat OPSIONAL:
- * [checkout] tetap berfungsi normal walau tidak ada shift aktif
- * (`cashierId`/`shiftId` terkirim null ke repository).
+ * BATCH 3D menambah state [paymentMethod] — dipilih via toggle di
+ * TotalsSummary SEBELUM tombol Bayar ditekan, dibaca oleh [checkout] saat
+ * dipanggil (bukan dikirim sebagai parameter dari Composable, konsisten
+ * dengan pola atribusi shift/kasir di Batch 3C). QRIS di sini murni
+ * PENCATATAN — tidak ada integrasi payment gateway sungguhan.
  */
 @OptIn(kotlinx.coroutines.FlowPreview::class, ExperimentalCoroutinesApi::class)
 class PosViewModel(
@@ -79,6 +81,10 @@ class PosViewModel(
 
     private val _paid = MutableStateFlow(0L)
     val paid: StateFlow<Long> = _paid.asStateFlow()
+
+    // ---------- BATCH 3D: metode bayar ----------
+    private val _paymentMethod = MutableStateFlow(PaymentMethod.CASH)
+    val paymentMethod: StateFlow<PaymentMethod> = _paymentMethod.asStateFlow()
 
     // ---------- Daftar produk (reaktif, debounce) ----------
     val products: StateFlow<List<ProductEntity>> = _searchQuery
@@ -105,18 +111,12 @@ class PosViewModel(
     val checkoutState: StateFlow<CheckoutState> = _checkoutState.asStateFlow()
 
     // =====================================================================
-    // BATCH 3C — Kasir & Shift
+    // Kasir & Shift (Batch 3C)
     // =====================================================================
 
-    /** Kasir aktif untuk dropdown "Mulai Shift" — nonaktif tidak muncul di sini. */
     val activeCashiers: StateFlow<List<CashierEntity>> = cashierRepository.activeCashiers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /**
-     * Shift yang sedang berjalan (null = belum ada shift dimulai, fitur ini
-     * OPSIONAL — kasir tetap bisa checkout tanpa shift aktif). Ditampilkan
-     * sebagai indikator di topBar PosScreen.
-     */
     val openShift: StateFlow<ShiftEntity?> = shiftRepository.openShift
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -126,7 +126,6 @@ class PosViewModel(
     private val _showEndShiftDialog = MutableStateFlow(false)
     val showEndShiftDialog: StateFlow<Boolean> = _showEndShiftDialog.asStateFlow()
 
-    /** Diisi saat dialog Tutup Shift dibuka (query on-demand, bukan reaktif). */
     private val _shiftSummary = MutableStateFlow<ShiftSummary?>(null)
     val shiftSummary: StateFlow<ShiftSummary?> = _shiftSummary.asStateFlow()
 
@@ -140,7 +139,6 @@ class PosViewModel(
         _uiEvents.emit(PosUiEvent.ShowMessage("Shift dimulai untuk ${cashier.name}."))
     }
 
-    /** Query ringkasan (tunai/QRIS/laba) SEBELUM dialog Tutup Shift ditampilkan. */
     fun openEndShiftDialog() = viewModelScope.launch {
         val shift = openShift.value ?: return@launch
         _shiftSummary.value = shiftRepository.getShiftSummary(shift.id)
@@ -165,6 +163,9 @@ class PosViewModel(
     fun setDiscount(value: Long) { _discount.value = value.coerceAtLeast(0L) }
     fun setTaxRate(rate: Double) { _taxRate.value = rate.coerceIn(0.0, 1.0) }
     fun setPaid(value: Long) { _paid.value = value.coerceAtLeast(0L) }
+
+    /** BATCH 3D: dipanggil dari toggle Tunai/QRIS di TotalsSummary. */
+    fun setPaymentMethod(method: PaymentMethod) { _paymentMethod.value = method }
 
     fun addToCart(product: ProductEntity) = viewModelScope.launch {
         val currentQtyInCart = cart.value.find { it.productId == product.id }?.quantity ?: 0
@@ -218,11 +219,10 @@ class PosViewModel(
     /**
      * Jalankan checkout di background; update state untuk UI.
      *
-     * BATCH 3C: atribusi kasir/shift dibaca dari [openShift] (state internal
-     * ViewModel), BUKAN dikirim sebagai parameter dari Composable — konsisten
-     * dengan pola `checkout()` yang sudah dipanggil tanpa argumen dari
-     * PosScreen. Kalau tidak ada shift aktif, cashierId/shiftId terkirim
-     * null (sesuai desain: fitur shift OPSIONAL, checkout tetap jalan).
+     * BATCH 3D: [paymentMethod] kini dibaca dari state internal (hasil
+     * toggle Tunai/QRIS), bukan lagi selalu CASH. Direset ke CASH setelah
+     * sukses — sama seperti discount/paid — dengan asumsi mayoritas
+     * transaksi berikutnya kemungkinan tunai lagi.
      */
     fun checkout() = viewModelScope.launch {
         val currentCart = cart.value
@@ -236,12 +236,14 @@ class PosViewModel(
                 discount = _discount.value,
                 taxRate = _taxRate.value,
                 paid = _paid.value,
+                paymentMethod = _paymentMethod.value,
                 cashierId = shift?.cashierId,
                 cashierName = shift?.cashierName ?: "",
                 shiftId = shift?.id
             )
             _discount.value = 0L
             _paid.value = 0L
+            _paymentMethod.value = PaymentMethod.CASH
             CheckoutState.Success(result)
         } catch (e: InsufficientStockException) {
             CheckoutState.Error("Stok '${e.productName}' tidak mencukupi.")
