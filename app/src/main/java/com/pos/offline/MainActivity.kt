@@ -32,7 +32,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Assessment
 import androidx.compose.material.icons.rounded.Inventory2
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -62,13 +61,11 @@ import com.pos.offline.ui.pos.PosViewModel
 import com.pos.offline.ui.receipt.ReceiptManager
 import com.pos.offline.ui.report.ReportScreen
 import com.pos.offline.ui.report.ReportViewModel
-import com.pos.offline.ui.settings.SettingsScreen
-import com.pos.offline.ui.settings.SettingsViewModel
 import com.pos.offline.ui.theme.PosTheme
 import kotlinx.coroutines.launch
 
 private enum class Dest(val label: String) {
-    POS("Kasir"), INVENTORY("Inventaris"), REPORT("Laporan"), SETTINGS("Pengaturan")
+    POS("Kasir"), INVENTORY("Inventaris"), REPORT("Laporan")
 }
 
 class MainActivity : ComponentActivity() {
@@ -90,9 +87,6 @@ private fun AppRoot() {
         viewModel(factory = ServiceLocator.inventoryViewModelFactory())
     val reportViewModel: ReportViewModel =
         viewModel(factory = ServiceLocator.reportViewModelFactory())
-    val settingsViewModel: SettingsViewModel =
-        viewModel(factory = ServiceLocator.settingsViewModelFactory())
-        
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var dest by remember { mutableStateOf(Dest.POS) }
@@ -101,63 +95,63 @@ private fun AppRoot() {
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    if (isLandscape) {
-        Row(
-            Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
+if (isLandscape) {
+    Row(
+        Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .imePadding()
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .imePadding()
-            ) {
-                ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel, context, scope, isLandscape = true)
-            }
-            SideNavRail(selected = dest, onSelect = { dest = it })
+            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, context, scope, isLandscape = true) // <-- tambah argumen
         }
-    } else {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
+        SideNavRail(selected = dest, onSelect = { dest = it })
+    }
+} else {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .imePadding()
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .imePadding()
-            ) {
-                ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel, context, scope, isLandscape = false)
-            }
+            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, context, scope, isLandscape = false) // <-- tambah argumen
+        }
 
-            AnimatedVisibility(
-                visible = !imeVisible,
-                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
-            ) {
-                BottomNavBar(selected = dest, onSelect = { dest = it })
-            }
+        AnimatedVisibility(
+            visible = !imeVisible,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+        ) {
+            BottomNavBar(selected = dest, onSelect = { dest = it })
         }
     }
 }
+}
 
+/** Konten layar aktif (Kasir/Inventaris/Laporan) — dipisah agar tidak duplikat antara mode potret & landscape. */
 @Composable
 private fun ScreenContent(
     dest: Dest,
     posViewModel: PosViewModel,
     inventoryViewModel: InventoryViewModel,
     reportViewModel: ReportViewModel,
-    settingsViewModel: SettingsViewModel,
     context: android.content.Context,
     scope: kotlinx.coroutines.CoroutineScope,
-    isLandscape: Boolean
+    isLandscape: Boolean // <-- TAMBAHKAN parameter ini
 ) {
     when (dest) {
         Dest.POS -> PosScreen(
             viewModel = posViewModel,
-            forceWideLayout = isLandscape,
+            forceWideLayout = isLandscape, // <-- TERUSKAN ke sini
             onPrintBluetooth = { result ->
                 scope.launch {
                     val ok = ReceiptManager.printToFirstBonded(context, result)
@@ -176,10 +170,10 @@ private fun ScreenContent(
         )
         Dest.INVENTORY -> InventoryScreen(viewModel = inventoryViewModel)
         Dest.REPORT -> ReportScreen(viewModel = reportViewModel)
-        Dest.SETTINGS -> SettingsScreen(viewModel = settingsViewModel)
     }
 }
 
+/** Bottom Nav — dipakai di mode potret. */
 @Composable
 private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
     Surface(
@@ -223,6 +217,11 @@ private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
     }
 }
 
+/**
+ * Rail navigasi vertikal tipis untuk mode landscape. Selalu terlihat di sisi
+ * kanan layar, tidak memakan ruang horizontal signifikan (lebar tetap ~64dp),
+ * dan tidak perlu di-expand — konsisten dengan prinsip "1 tap ke mana saja".
+ */
 @Composable
 private fun SideNavRail(selected: Dest, onSelect: (Dest) -> Unit) {
     Surface(
@@ -275,5 +274,4 @@ private fun Dest.icon() = when (this) {
     Dest.POS -> Icons.Rounded.ShoppingCart
     Dest.INVENTORY -> Icons.Rounded.Inventory2
     Dest.REPORT -> Icons.Rounded.Assessment
-    Dest.SETTINGS -> Icons.Rounded.Settings
 }

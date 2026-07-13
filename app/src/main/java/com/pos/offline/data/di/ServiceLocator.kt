@@ -13,7 +13,6 @@ import com.pos.offline.data.repository.TransactionRepository
 import com.pos.offline.ui.inventory.InventoryViewModel
 import com.pos.offline.ui.pos.PosViewModel
 import com.pos.offline.ui.report.ReportViewModel
-import com.pos.offline.ui.settings.SettingsViewModel
 
 class PosApplication : Application() {
     override fun onCreate() {
@@ -22,39 +21,39 @@ class PosApplication : Application() {
     }
 }
 
+/**
+ * Dependency Injection manual (Service Locator) memakai `by lazy`.
+ */
 object ServiceLocator {
     private lateinit var appContext: Context
 
-    private var _db: PosDatabase? = null
-    private val db: PosDatabase
-        get() = _db ?: PosDatabase.getInstance(appContext).also { _db = it }
+    private val db: PosDatabase by lazy { PosDatabase.getInstance(appContext) }
 
-    private var _productRepository: ProductRepository? = null
-    private val productRepository: ProductRepository
-        get() = _productRepository ?: ProductRepository(db.productDao()).also { _productRepository = it }
-
-    private var _cartRepository: CartRepository? = null
-    private val cartRepository: CartRepository
-        get() = _cartRepository ?: CartRepository(db.cartDao()).also { _cartRepository = it }
-
-    private var _transactionRepository: TransactionRepository? = null
-    private val transactionRepository: TransactionRepository
-        get() = _transactionRepository ?: TransactionRepository(db, db.transactionDao(), db.cartDao(), db.productDao()).also { _transactionRepository = it }
-
-    private var _cashierRepository: CashierRepository? = null
-    private val cashierRepository: CashierRepository
-        get() = _cashierRepository ?: CashierRepository(db.cashierDao()).also { _cashierRepository = it }
-
-    private var _shiftRepository: ShiftRepository? = null
-    private val shiftRepository: ShiftRepository
-        get() = _shiftRepository ?: ShiftRepository(db.shiftDao()).also { _shiftRepository = it }
+    private val productRepository: ProductRepository by lazy {
+        ProductRepository(db.productDao())
+    }
+    private val cartRepository: CartRepository by lazy {
+        CartRepository(db.cartDao())
+    }
+    private val transactionRepository: TransactionRepository by lazy {
+        TransactionRepository(db, db.transactionDao(), db.cartDao(), db.productDao())
+    }
+    // === BARU: fondasi fitur Kasir/Shift (Batch 1) ===
+    private val cashierRepository: CashierRepository by lazy {
+        CashierRepository(db.cashierDao())
+    }
+    private val shiftRepository: ShiftRepository by lazy {
+        ShiftRepository(db.shiftDao())
+    }
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
     }
 
     fun posViewModelFactory(): ViewModelProvider.Factory = PosViewModelFactory(
-        productRepository, cartRepository, transactionRepository
+        productRepository,
+        cartRepository,
+        transactionRepository
     )
 
     fun inventoryViewModelFactory(): ViewModelProvider.Factory =
@@ -63,30 +62,11 @@ object ServiceLocator {
     fun reportViewModelFactory(): ViewModelProvider.Factory =
         ReportViewModelFactory(transactionRepository)
 
-    fun settingsViewModelFactory(): ViewModelProvider.Factory =
-        SettingsViewModelFactory(cashierRepository)
-
+    // Repositori lain dapat dibuka di sini saat dibutuhkan.
     fun transactionRepository(): TransactionRepository = transactionRepository
     fun productRepository(): ProductRepository = productRepository
     fun cashierRepository(): CashierRepository = cashierRepository
     fun shiftRepository(): ShiftRepository = shiftRepository
-
-    fun closeDatabase() {
-        _db?.let { database ->
-            database.openHelper.writableDatabase
-                .query("PRAGMA wal_checkpoint(TRUNCATE)")
-                .use { it.moveToFirst() }
-
-            PosDatabase.closeAndClearInstance()
-
-            _db = null
-            _productRepository = null
-            _cartRepository = null
-            _transactionRepository = null
-            _cashierRepository = null
-            _shiftRepository = null
-        }
-    }
 }
 
 class PosViewModelFactory(
@@ -113,12 +93,4 @@ class ReportViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
         ReportViewModel(transactionRepository) as T
-}
-
-class SettingsViewModelFactory(
-    private val cashierRepository: CashierRepository
-) : ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        SettingsViewModel(cashierRepository) as T
 }

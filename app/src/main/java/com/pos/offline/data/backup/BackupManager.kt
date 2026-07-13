@@ -1,113 +1,251 @@
 package com.pos.offline.data.backup
 
 import android.content.Context
+import android.content.Intent
+import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
-import com.pos.offline.data.di.ServiceLocator
+import com.pos.offline.data.local.PosDatabase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.IOException
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.io.FileInputStream
+import java.io.FileOutputStream
+
+/** Hasil operasi ekspor database. */
+sealed class BackupOutcome {
+    object Success : BackupOutcome()
+    data class Error(val throwable: Throwable) : BackupOutcome()
+}
+
+/** Hasil operasi impor/restore database. */
+sealed class RestoreOutcome {
+    object Success : RestoreOutcome()
+    data class InvalidFile(val reason: String) : RestoreOutcome()
+    data class Error(val throwable: Throwable) : RestoreOutcome()
+}
 
 /**
- * Mengelola ekspor dan impor database via Storage Access Framework (SAF).
+ * Menangani ekspor & impor database lokal (`pos.db`) melalui Storage Access
+ * Framework (SAF). Murni salin file mentah — TIDAK ada sinkronisasi cloud,
+ * TIDAK butuh FileProvider/permission storage sama sekali, sesuai keputusan
+ * arsitektur aplikasi ini (single-device, offline, "replace penuh").
  *
- * - Export: Force WAL checkpoint -> tutup DB -> salin file fisik -> DB auto-reopen saat dipakai lagi.
- * - Import: Salin ke file temp -> validasi header SQLite -> tutup DB -> hapus file lama -> rename temp jadi DB utama.
+ * ALUR EKSPOR:
+ *  1. Checkpoint WAL penuh — Room default memakai Write-Ahead Logging,
+ *     artinya transaksi terbaru bisa saja masih berada di file `pos.db-wal`
+ *     dan belum masuk ke `pos.db` itu sendiri. `PRAGMA wal_checkpoint(FULL)`
+ *     memaksa semua frame WAL ditulis balik ke file utama sebelum disalin.
+ *  2. Salin `pos.db` mentah ke Uri hasil ACTION_CREATE_DOCUMENT.
+ *
+ * ALUR IMPOR (restore):
+ *  1. Salin file pilihan user ke cache dulu — TIDAK PERNAH langsung menimpa
+ *     database aktif sebelum divalidasi.
+ *  2. Validasi dua lapis (lihat [validateCandidate]).
+ *  3. Kalau valid: tutup koneksi Room aktif, timpa `pos.db` (+ bersihkan sisa
+ *     `-wal`/`-shm`/`-journal` lama), lalu caller WAJIB memanggil
+ *     [restartApp] — arsitektur Service Locator (semua repo singleton
+ *     `by lazy`) tidak aman "disegarkan" tanpa restart proses penuh.
+ *  4. Kalau tidak valid: file sementara dibuang, database aktif tidak
+ *     tersentuh sama sekali.
  */
 object BackupManager {
 
     private const val DB_NAME = "pos.db"
 
-    /**
-     * Mengekspor database ke URI yang dipilih user via SAF (ACTION_CREATE_DOCUMENT).
-     */
-    fun exportDatabase(context: Context, destinationUri: Uri) {
-        // 1. Tutup DB & lakukan WAL Checkpoint
-        ServiceLocator.closeDatabase()
+    /** Nama file default saat dialog "Simpan sebagai" (SAF) muncul. */
+    fun suggestedBackupFileName(): String {
+        val ts = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
+            .format(java.util.Date())
+        return "kasir-offline-backup-$ts.db"
+    }
 
-        // 2. Salin file DB utama ke URI tujuan
-        val dbFile = context.getDatabasePath(DB_NAME)
-        if (!dbFile.exists()) {
-            throw IOException("File database tidak ditemukan.")
-        }
+    // ---------------------------------------------------------------------
+    // EXPORT
+    // ---------------------------------------------------------------------
 
-        context.contentResolver.openOutputStream(destinationUri)?.use { outputStream ->
-            dbFile.inputStream().use { inputStream ->
-                inputStream.copyTo(outputStream)
+    suspend fun exportDatabase(context: Context, destinationUri: Uri): BackupOutcome =
+        withContext(Dispatchers.IO) {
+            try {
+                checkpointWal(context)
+
+                val dbFile = context.getDatabasePath(DB_NAME)
+                if (!dbFile.exists()) {
+                    return@withContext BackupOutcome.Error(
+                        IllegalStateException("File database tidak ditemukan di ${dbFile.absolutePath}")
+                    )
+                }
+
+                val resolver = context.contentResolver
+                val output = resolver.openOutputStream(destinationUri, "rwt")
+                    ?: return@withContext BackupOutcome.Error(
+                        IllegalStateException("Tidak bisa membuka tujuan (Uri tidak valid)")
+                    )
+
+                output.use { out ->
+                    FileInputStream(dbFile).use { input -> input.copyTo(out) }
+                }
+
+                BackupOutcome.Success
+            } catch (t: Throwable) {
+                BackupOutcome.Error(t)
             }
-        } ?: throw IOException("Tidak dapat membuka stream untuk menulis backup.")
-
-        // Setelah ini, instance DB akan dibangkitkan ulang otomatis oleh ServiceLocator
-        // saat ada ViewModel yang mengakses repository.
-    }
+        }
 
     /**
-     * Mengimpor database dari URI hasil pilihan user via SAF (ACTION_OPEN_DOCUMENT).
+     * Memaksa semua isi `-wal` ditulis balik ke `pos.db`. WAJIB dijalankan
+     * sebelum menyalin file — tanpa ini backup bisa kehilangan transaksi
+     * yang baru saja terjadi.
      */
-    fun importDatabase(context: Context, sourceUri: Uri) {
-        // 1. Salin URI ke file sementara di cacheDir.
-        // Kita tidak boleh menimpa DB aktif langsung dari URI karena jika proses
-        // baca terputus di tengah jalan, DB aktif bisa korup.
-        val tempFile = File(context.cacheDir, "restore_temp.db")
+    private fun checkpointWal(context: Context) {
+        val writable = PosDatabase.getInstance(context).openHelper.writableDatabase
+        writable.query("PRAGMA wal_checkpoint(FULL)").use { it.moveToFirst() }
+    }
 
-        context.contentResolver.openInputStream(sourceUri)?.use { inputStream ->
-            tempFile.outputStream().use { outputStream ->
-                inputStream.copyTo(outputStream)
+    // ---------------------------------------------------------------------
+    // IMPORT / RESTORE
+    // ---------------------------------------------------------------------
+
+    /**
+     * Validasi file yang dipilih user & jika lolos, GANTIKAN database aktif.
+     *
+     * Setelah menerima [RestoreOutcome.Success], caller WAJIB segera memanggil
+     * [restartApp] dan TIDAK BOLEH lagi memakai ViewModel/Repository yang
+     * sedang berjalan — koneksi Room lama sudah ditutup paksa di sini.
+     */
+    suspend fun validateAndRestore(context: Context, sourceUri: Uri): RestoreOutcome =
+        withContext(Dispatchers.IO) {
+            val tempFile = File(context.cacheDir, "restore_candidate.db")
+            try {
+                // 1) Salin ke cache dulu — jangan pernah sentuh db aktif
+                //    sebelum yakin file ini valid.
+                val resolver = context.contentResolver
+                val input = resolver.openInputStream(sourceUri)
+                    ?: return@withContext RestoreOutcome.Error(
+                        IllegalStateException("Tidak bisa membaca file sumber (Uri tidak valid)")
+                    )
+                input.use { inp ->
+                    FileOutputStream(tempFile).use { out -> inp.copyTo(out) }
+                }
+
+                // 2) Validasi
+                val invalidReason = validateCandidate(context, tempFile)
+                if (invalidReason != null) {
+                    tempFile.delete()
+                    return@withContext RestoreOutcome.InvalidFile(invalidReason)
+                }
+
+                // 3) Lolos validasi -> tutup koneksi aktif & timpa file
+                PosDatabase.closeActiveInstance()
+
+                val targetDb = context.getDatabasePath(DB_NAME)
+                deleteRelatedDbFiles(targetDb)
+                targetDb.parentFile?.mkdirs()
+
+                FileInputStream(tempFile).use { inp ->
+                    FileOutputStream(targetDb).use { out -> inp.copyTo(out) }
+                }
+                tempFile.delete()
+
+                RestoreOutcome.Success
+            } catch (t: Throwable) {
+                tempFile.delete()
+                RestoreOutcome.Error(t)
             }
-        } ?: throw IOException("Tidak dapat membuka stream untuk membaca backup.")
-
-        // 2. Validasi header SQLite agar user tidak sembarangan memilih file gambar/pdf
-        // yang ujungnya merusak aplikasi.
-        if (!isValidSqliteFile(tempFile)) {
-            tempFile.delete()
-            throw IllegalArgumentException("File bukan backup database SQLite yang valid.")
         }
-
-        // 3. Tutup DB aktif & reset ServiceLocator agar file tidak dikunci OS
-        ServiceLocator.closeDatabase()
-
-        // 4. Hapus file DB lama (serta WAL & SHM journal jika ada)
-        val dbFile = context.getDatabasePath(DB_NAME)
-        val walFile = context.getDatabasePath("$DB_NAME-wal")
-        val shmFile = context.getDatabasePath("$DB_NAME-shm")
-
-        if (dbFile.exists()) dbFile.delete()
-        if (walFile.exists()) walFile.delete()
-        if (shmFile.exists()) shmFile.delete()
-
-        // 5. Pindahkan file sementara menjadi DB utama
-        if (!tempFile.renameTo(dbFile)) {
-            throw IOException("Gagal mengganti file database lama dengan yang baru.")
-        }
-
-        // DB akan otomatis terbuka kembali saat ada akses repository berikutnya.
-        // TODO (BATCH 3): UI layer harus mereset state in-memory (mis. keranjang kasir 
-        // yang sedang aktif di PosViewModel) setelah import sukses. Flow Room hanya 
-        // meng-update data dari DB, bukan state transien di memori ViewModel.
-    }
-
-    private fun isValidSqliteFile(file: File): Boolean {
-        if (file.length() < 16) return false
-        
-        // 16 byte pertama file SQLite selalu: "SQLite format 3\000"
-        val expectedHeader = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
-        val actualHeader = ByteArray(16)
-        
-        file.inputStream().use { input ->
-            val readBytes = input.read(actualHeader)
-            if (readBytes != 16) return false
-        }
-        
-        return actualHeader.contentEquals(expectedHeader)
-    }
 
     /**
-     * Membangkitkan nama file default untuk dialog "Simpan Sebagai".
+     * Mengembalikan `null` kalau file valid, atau pesan alasan penolakan.
+     *
+     * Dua lapis pengecekan:
+     *  1. **Magic header** 16-byte pertama harus "SQLite format 3\u0000" —
+     *     penyaring termurah untuk file yang jelas bukan database SQLite
+     *     (mis. user salah pilih foto/PDF/dokumen lain).
+     *  2. **`identity_hash`** pada tabel internal Room `room_master_table`
+     *     dibandingkan antara file kandidat vs database aktif. Room
+     *     menghitung hash ini dari definisi skema (entity, kolom, indeks).
+     *     Kalau cocok persis, file tersebut nyaris pasti backup dari
+     *     aplikasi & versi skema yang sama — aman langsung dipakai
+     *     menggantikan file aktif tanpa migrasi tambahan.
+     *
+     * Catatan batasan (untuk didiskusikan lagi kalau relevan nanti): kalau
+     * suatu saat skema naik ke v4, backup lama (hash v3) akan otomatis
+     * ditolak oleh pengecekan ini. Itu memang perilaku aman untuk sekarang
+     * (mencegah data korup akibat restore lintas skema) — kalau nanti mau
+     * dukung "restore lalu migrasi otomatis", itu perlu batch terpisah.
      */
-    fun generateBackupFileName(): String {
-        val dateFormat = SimpleDateFormat("yyyyMMdd-HHmm", Locale.getDefault())
-        val currentDate = dateFormat.format(Date())
-        return "kasir-backup-$currentDate.db"
+    private fun validateCandidate(context: Context, candidate: File): String? {
+        if (!hasSqliteHeader(candidate)) {
+            return "File yang dipilih bukan berkas database SQLite yang valid."
+        }
+
+        val candidateHash = try {
+            readIdentityHash(candidate.absolutePath)
+        } catch (t: Throwable) {
+            return "File tidak bisa dibuka sebagai database (rusak/korup)."
+        } ?: return "File database tidak memiliki tabel internal Room yang dikenali."
+
+        val activeHash = try {
+            readIdentityHash(context.getDatabasePath(DB_NAME).absolutePath)
+        } catch (t: Throwable) {
+            null // db aktif belum ada/tidak terbaca -> lewati pengecekan kompatibilitas
+        }
+
+        if (activeHash != null && candidateHash != activeHash) {
+            return "File backup ini berasal dari versi aplikasi yang berbeda (skema tidak cocok)."
+        }
+
+        return null
+    }
+
+    private fun hasSqliteHeader(file: File): Boolean {
+        if (!file.exists() || file.length() < 16) return false
+        val header = ByteArray(16)
+        FileInputStream(file).use { it.read(header) }
+        val magic = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
+        return header.contentEquals(magic)
+    }
+
+    private fun readIdentityHash(path: String): String? {
+        val db = SQLiteDatabase.openDatabase(path, null, SQLiteDatabase.OPEN_READONLY)
+        return db.use {
+            it.rawQuery("SELECT identity_hash FROM room_master_table LIMIT 1", null).use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        }
+    }
+
+    private fun deleteRelatedDbFiles(dbFile: File) {
+        val parent = dbFile.parentFile
+        val base = dbFile.name
+        listOf(base, "$base-wal", "$base-shm", "$base-journal").forEach { name ->
+            File(parent, name).takeIf { it.exists() }?.delete()
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // RESTART APLIKASI (WAJIB dipanggil setelah restore sukses)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Merestart total proses aplikasi memakai `Intent.makeRestartActivityTask`
+     * (API publik Android, tersedia sejak API 11) — melempar user kembali ke
+     * launcher activity di task baru yang bersih, lalu mematikan proses lama.
+     *
+     * Kenapa restart total (bukan sekadar buka ulang koneksi Room diam-diam)?
+     * `ServiceLocator` menyimpan Repository/DAO sebagai singleton `by lazy`
+     * yang sudah dipegang oleh ViewModel yang sedang hidup, dan mungkin ada
+     * Flow yang sedang di-collect dari DAO lama. Membongkar semua itu dengan
+     * aman jauh lebih rumit & rawan bug ("database is closed" mid-collect)
+     * dibanding memulai ulang proses dari nol. Untuk aplikasi single-device
+     * seperti ini, "app sempat kedip restart" adalah trade-off yang jauh
+     * lebih murah.
+     */
+    fun restartApp(context: Context) {
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        val componentName = intent?.component
+        if (componentName != null) {
+            context.startActivity(Intent.makeRestartActivityTask(componentName))
+        }
+        Runtime.getRuntime().exit(0)
     }
 }

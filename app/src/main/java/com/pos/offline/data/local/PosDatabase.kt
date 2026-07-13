@@ -22,6 +22,14 @@ private data class SeedProduct(
     val name: String, val sku: String, val price: Long, val cost: Long
 )
 
+/**
+ * Database tunggal (singleton) untuk seluruh aplikasi.
+ *
+ * v3 menambahkan fondasi fitur Kasir/Shift/Metode Bayar (lihat
+ * [Migrations.MIGRATION_2_3]): tabel baru `cashiers` & `shifts`, serta 4
+ * kolom baru pada `transactions`. Semua bersifat aditif — data existing
+ * (produk, transaksi lama) tidak tersentuh sama sekali.
+ */
 @Database(
     entities = [
         ProductEntity::class,
@@ -60,10 +68,22 @@ abstract class PosDatabase : RoomDatabase() {
             }
 
         /**
-         * Menutup koneksi DB aktif dan mereset cache singleton.
-         * Dipanggil oleh ServiceLocator saat proses Backup/Restore fisik file DB.
+         * Menutup paksa koneksi Room aktif & melepas singleton.
+         *
+         * HANYA dipanggil oleh [com.pos.offline.data.backup.BackupManager]
+         * tepat sebelum file `pos.db` ditimpa dengan hasil restore. Setelah
+         * ini dipanggil, JANGAN pakai DAO/Repository mana pun sampai proses
+         * aplikasi di-restart total — instance lama sudah closed, memanggil
+         * query di atasnya akan melempar "attempt to re-open an already
+         * closed object" atau exception serupa.
+         *
+         * Tidak perlu di-null-kan ulang secara manual di ServiceLocator
+         * karena strategi kita adalah restart proses penuh: begitu proses
+         * baru mulai, `INSTANCE` di sini otomatis null lagi (memory proses
+         * lama sudah dibuang OS), dan `getInstance()` akan membangun ulang
+         * dari file `pos.db` yang baru saja diganti.
          */
-        fun closeAndClearInstance() {
+        fun closeActiveInstance() {
             synchronized(this) {
                 INSTANCE?.close()
                 INSTANCE = null
