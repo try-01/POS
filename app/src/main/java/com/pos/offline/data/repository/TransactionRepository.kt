@@ -6,9 +6,11 @@ import com.pos.offline.data.local.dao.CartDao
 import com.pos.offline.data.local.dao.ProductDao
 import com.pos.offline.data.local.dao.TransactionDao
 import com.pos.offline.data.local.entity.CartItemEntity
+import com.pos.offline.data.local.entity.DiscountType
 import com.pos.offline.data.local.entity.PaymentMethod
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.TransactionItemEntity
+import com.pos.offline.util.roundToRupiah
 import kotlinx.coroutines.flow.Flow
 
 data class CheckoutResult(
@@ -38,12 +40,20 @@ class TransactionRepository(
     /**
      * Proses checkout.
      *
-     * URUTAN KALKULASI (penting):
-     *  1) subtotal  = Σ (hargaSatuan × qty) seluruh item.
-     *  2) diskon dibatasi maksimal sebesar subtotal (tidak boleh negatif).
-     *  3) pajak dihitung dari (subtotal − diskon), BUKAN subtotal → adil & benar.
-     *  4) total     = (subtotal − diskon) + pajak.
-     *  5) kembalian = max(0, paid − total); jika kurang bayar, change = 0.
+     * URUTAN KALKULASI (penting, sesuai aturan PPN Indonesia):
+     *  1) subtotal (bruto) = Σ (hargaSatuan × qty) seluruh item.
+     *  2) diskon dikonversi dari [discountType]+[discountValue] mentah ke
+     *     nominal Rupiah (dibulatkan round-half-up via [roundToRupiah]),
+     *     lalu dibatasi maksimal sebesar subtotal (tidak boleh negatif).
+     *  3) DPP (Dasar Pengenaan Pajak) = subtotal − diskon.
+     *  4) pajak = DPP × taxRate, dibulatkan round-half-up.
+     *  5) total = DPP + pajak.
+     *  6) kembalian = max(0, paid − total); jika kurang bayar, change = 0.
+     *
+     * [discountType] & [discountValue] MURNI disimpan sebagai snapshot audit
+     * ("apa yang diketik kasir") pada [TransactionEntity] — TIDAK dipakai
+     * ulang untuk kalkulasi apa pun setelah ini; `discount` (nominal final)
+     * tetap satu-satunya sumber kebenaran untuk laporan/shift.
      *
      * BATCH 3C: setiap item struk kini menyimpan snapshot `unitCost` (harga
      * modal produk SAAT transaksi ini terjadi) — dasar kalkulasi Laba Kotor
@@ -53,7 +63,8 @@ class TransactionRepository(
      */
     suspend fun checkout(
         cart: List<CartItemEntity>,
-        discount: Long,
+        discountType: DiscountType,
+        discountValue: Double,
         taxRate: Double,
         paid: Long,
         paymentMethod: PaymentMethod = PaymentMethod.CASH,
@@ -64,9 +75,15 @@ class TransactionRepository(
         require(cart.isNotEmpty()) { "Keranjang kosong" }
 
         val subtotal = cart.sumOf { it.unitPrice * it.quantity.toLong() }
-        val discountAmount = discount.coerceIn(0L, subtotal)
-        val taxableBase = (subtotal - discountAmount).coerceAtLeast(0L)
-        val tax = (taxableBase * taxRate).toLong()
+
+        val rawDiscountAmount = (when (discountType) {
+            DiscountType.NOMINAL -> discountValue.roundToRupiah()
+            DiscountType.PERCENT -> (subtotal * (discountValue / 100.0)).roundToRupiah()
+        }).coerceAtLeast(0L)
+        val discountAmount = rawDiscountAmount.coerceAtMost(subtotal)
+
+        val taxableBase = (subtotal - discountAmount).coerceAtLeast(0L) // DPP
+        val tax = (taxableBase * taxRate).roundToRupiah()
         val total = taxableBase + tax
         val change = (paid - total).coerceAtLeast(0L)
 
@@ -85,7 +102,9 @@ class TransactionRepository(
             paymentMethod = paymentMethod.name,
             cashierId = cashierId,
             cashierName = cashierName,
-            shiftId = shiftId
+            shiftId = shiftId,
+            discountType = discountType.name,
+            discountValue = discountValue
         )
 
         // NOTE: `productDao.getById(id)` diasumsikan ada mengikuti pola thin

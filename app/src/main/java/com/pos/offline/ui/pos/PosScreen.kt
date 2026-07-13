@@ -49,8 +49,10 @@ import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ShoppingCart
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -97,9 +99,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.local.entity.CartItemEntity
 import com.pos.offline.data.local.entity.CashierEntity
+import com.pos.offline.data.local.entity.DiscountType
 import com.pos.offline.data.local.entity.PaymentMethod
 import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.data.local.entity.ShiftEntity
+import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.ShiftSummary
 import com.pos.offline.ui.components.GlassCard
@@ -119,20 +123,18 @@ fun PosScreen(
     onExportPdf: (CheckoutResult) -> Unit,
     forceWideLayout: Boolean = false
 ) {
-    // ---- State reaktif (sadarkan-siklus) ----
     val products by viewModel.products.collectAsStateWithLifecycle()
     val cart by viewModel.cart.collectAsStateWithLifecycle()
     val totals by viewModel.totals.collectAsStateWithLifecycle()
     val query by viewModel.searchQuery.collectAsStateWithLifecycle()
-    val discount by viewModel.discount.collectAsStateWithLifecycle()
+    val discountType by viewModel.discountType.collectAsStateWithLifecycle()
+    val discountValue by viewModel.discountValue.collectAsStateWithLifecycle()
     val taxRate by viewModel.taxRate.collectAsStateWithLifecycle()
     val paid by viewModel.paid.collectAsStateWithLifecycle()
     val checkoutState by viewModel.checkoutState.collectAsStateWithLifecycle()
 
-    // ---- BATCH 3D: state metode bayar ----
     val paymentMethod by viewModel.paymentMethod.collectAsStateWithLifecycle()
 
-    // ---- State Kasir & Shift (Batch 3C) ----
     val activeCashiers by viewModel.activeCashiers.collectAsStateWithLifecycle()
     val openShift by viewModel.openShift.collectAsStateWithLifecycle()
     val showStartShiftDialog by viewModel.showStartShiftDialog.collectAsStateWithLifecycle()
@@ -222,13 +224,15 @@ if (isWide) {
                 .widthIn(min = 320.dp, max = 420.dp),
             cart = cart,
             totals = totals,
-            discount = discount,
+            discountType = discountType,
+            discountValue = discountValue,
             taxRate = taxRate,
             paid = paid,
             change = change,
             paymentMethod = paymentMethod,
             stockByProductId = stockByProductId,
-            onDiscountChange = viewModel::setDiscount,
+            onDiscountTypeToggle = viewModel::toggleDiscountType,
+            onDiscountValueChange = viewModel::setDiscountValue,
             onTaxRateChange = viewModel::setTaxRate,
             onPaidChange = viewModel::setPaid,
             onPaymentMethodChange = viewModel::setPaymentMethod,
@@ -264,13 +268,15 @@ if (isWide) {
                         },
                         cart = cart,
                         totals = totals,
-                        discount = discount,
+                        discountType = discountType,
+                        discountValue = discountValue,
                         taxRate = taxRate,
                         paid = paid,
                         change = change,
                         paymentMethod = paymentMethod,
                         stockByProductId = stockByProductId,
-                        onDiscountChange = viewModel::setDiscount,
+                        onDiscountTypeToggle = viewModel::toggleDiscountType,
+                        onDiscountValueChange = viewModel::setDiscountValue,
                         onTaxRateChange = viewModel::setTaxRate,
                         onPaidChange = viewModel::setPaid,
                         onPaymentMethodChange = viewModel::setPaymentMethod,
@@ -291,7 +297,6 @@ if (isWide) {
         }
     }
 
-    // ---- Dialog hasil checkout ----
     when (val state = checkoutState) {
         is CheckoutState.Success -> SuccessDialog(
             result = state.result,
@@ -308,7 +313,6 @@ if (isWide) {
         else -> Unit
     }
 
-    // ---- Dialog Mulai/Tutup Shift ----
     if (showStartShiftDialog) {
         StartShiftDialog(
             cashiers = activeCashiers,
@@ -620,13 +624,15 @@ private fun CartPane(
     modifier: Modifier,
     cart: List<CartItemEntity>,
     totals: Totals,
-    discount: Long,
+    discountType: DiscountType,
+    discountValue: Double,
     taxRate: Double,
     paid: Long,
     change: Long,
     paymentMethod: PaymentMethod,
     stockByProductId: Map<Long, Int>,
-    onDiscountChange: (Long) -> Unit,
+    onDiscountTypeToggle: () -> Unit,
+    onDiscountValueChange: (Double) -> Unit,
     onTaxRateChange: (Double) -> Unit,
     onPaidChange: (Long) -> Unit,
     onPaymentMethodChange: (PaymentMethod) -> Unit,
@@ -645,6 +651,20 @@ private fun CartPane(
     var showClearConfirm by remember { mutableStateOf(false) }
     var qtyEditItem by remember { mutableStateOf<CartItemEntity?>(null) }
     val showFull = !collapsible || expanded
+
+    // ---- BARU: peringatan pembayaran kurang ----
+    // Muncul HANYA kalau kasir mengisi manual (paid > 0) tapi nominalnya
+    // masih di bawah total. Kalau paid == 0 (dikosongkan), itu berarti
+    // "uang pas" (lihat PosViewModel.checkout()) — TIDAK perlu diperingatkan
+    // karena memang bukan kesalahan kasir, itu perilaku yang disengaja.
+    var showInsufficientPaymentDialog by remember { mutableStateOf(false) }
+    fun attemptCheckout() {
+        if (paid in 1 until totals.total) {
+            showInsufficientPaymentDialog = true
+        } else {
+            onCheckout()
+        }
+    }
 
     val scrollState = rememberScrollState()
 
@@ -767,11 +787,13 @@ private fun CartPane(
                         TotalsSummary(
                             totals = totals,
                             change = change,
-                            discount = discount,
+                            discountType = discountType,
+                            discountValue = discountValue,
                             taxRate = taxRate,
                             paid = paid,
                             paymentMethod = paymentMethod,
-                            onDiscountChange = onDiscountChange,
+                            onDiscountTypeToggle = onDiscountTypeToggle,
+                            onDiscountValueChange = onDiscountValueChange,
                             onTaxRateChange = onTaxRateChange,
                             onPaidChange = onPaidChange,
                             onPaymentMethodChange = onPaymentMethodChange
@@ -779,7 +801,7 @@ private fun CartPane(
 
                         Spacer(Modifier.height(6.dp))
                         Button(
-                            onClick = onCheckout,
+                            onClick = ::attemptCheckout,
                             enabled = canCheckout,
                             modifier = Modifier.fillMaxWidth().height(42.dp),
                             shape = RoundedCornerShape(12.dp)
@@ -830,7 +852,7 @@ private fun CartPane(
                         modifier = Modifier.weight(1f)
                     )
                     Button(
-                        onClick = onCheckout,
+                        onClick = ::attemptCheckout,
                         enabled = canCheckout,
                         modifier = Modifier.height(36.dp),
                         shape = RoundedCornerShape(10.dp),
@@ -884,8 +906,72 @@ private fun CartPane(
             onDismiss = { qtyEditItem = null }
         )
     }
+
+    if (showInsufficientPaymentDialog) {
+        InsufficientPaymentDialog(
+            paid = paid,
+            total = totals.total,
+            onDismiss = { showInsufficientPaymentDialog = false },
+            onConfirm = {
+                showInsufficientPaymentDialog = false
+                onCheckout()
+            }
+        )
+    }
 }
 
+/**
+ * Peringatan sebelum checkout kalau nominal "Bayar" yang diisi manual masih
+ * kurang dari total. TIDAK memblokir transaksi (mis. untuk kasus kasbon/utang
+ * pelanggan) — hanya memastikan kasir sadar & sengaja, bukan salah ketik.
+ */
+@Composable
+private fun InsufficientPaymentDialog(
+    paid: Long,
+    total: Long,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val shortfall = (total - paid).coerceAtLeast(0L)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Rounded.Warning,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error
+            )
+        },
+        title = { Text("Pembayaran Kurang") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Uang yang diterima (${paid.toRupiah()}) kurang dari total (${total.toRupiah()}).")
+                Text(
+                    "Kekurangan: ${shortfall.toRupiah()}",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Pastikan ini disengaja (mis. dicatat sebagai piutang), bukan salah ketik.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Tetap Lanjutkan")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Periksa Lagi") }
+        }
+    )
+}
 
 @Composable
 private fun CartRow(
@@ -1018,11 +1104,13 @@ private fun CompactActionBox(
 private fun TotalsSummary(
     totals: Totals,
     change: Long,
-    discount: Long,
+    discountType: DiscountType,
+    discountValue: Double,
     taxRate: Double,
     paid: Long,
     paymentMethod: PaymentMethod,
-    onDiscountChange: (Long) -> Unit,
+    onDiscountTypeToggle: () -> Unit,
+    onDiscountValueChange: (Double) -> Unit,
     onTaxRateChange: (Double) -> Unit,
     onPaidChange: (Long) -> Unit,
     onPaymentMethodChange: (PaymentMethod) -> Unit
@@ -1034,10 +1122,11 @@ private fun TotalsSummary(
             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            MoneyField(
-                label = "Diskon",
-                value = discount,
-                onValueChange = onDiscountChange,
+            DiscountField(
+                type = discountType,
+                rawValue = discountValue,
+                onToggleType = onDiscountTypeToggle,
+                onValueChange = onDiscountValueChange,
                 modifier = Modifier.weight(1f).height(40.dp)
             )
             DecimalField(
@@ -1048,14 +1137,32 @@ private fun TotalsSummary(
             )
         }
 
-        if (totals.discount > 0) SummaryLine("Diskon", "- ${totals.discount.toRupiah()}")
+        // Peringatan non-blocking: nilai diskon mentah melebihi subtotal
+        // sehingga otomatis dipangkas saat kalkulasi. Sengaja TEKS INLINE
+        // (bukan dialog) karena field ini di-edit live sambil kasir
+        // mengetik — dialog modal akan muncul-hilang mengganggu di setiap
+        // ketukan digit sebelum angka akhir selesai diketik.
+        if (totals.discountCapped) {
+            Text(
+                text = "⚠ Diskon melebihi subtotal, dibatasi menjadi ${totals.discount.toRupiah()}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
+        if (totals.discount > 0) {
+            val label = if (discountType == DiscountType.PERCENT) {
+                "Diskon (${formatTrim(discountValue)}%)"
+            } else {
+                "Diskon"
+            }
+            SummaryLine(label, "- ${totals.discount.toRupiah()}")
+        }
         if (totals.tax > 0) SummaryLine("Pajak", totals.tax.toRupiah())
 
         HorizontalDivider(Modifier.padding(vertical = 2.dp))
         SummaryLine("Total", totals.total.toRupiah(), emphasize = true)
 
-        // BATCH 3D: toggle metode bayar — sengaja diletakkan SEBELUM field
-        // "Bayar" (kasir pilih metode dulu, baru input nominal diterima).
         Spacer(Modifier.height(2.dp))
         PaymentMethodToggle(
             selected = paymentMethod,
@@ -1073,16 +1180,6 @@ private fun TotalsSummary(
     }
 }
 
-/**
- * Toggle Tunai/QRIS bergaya "pill" 2-opsi. Sengaja custom Row (bukan
- * SegmentedButton Material3) — API SegmentedButton masih @ExperimentalMaterial3Api
- * dan rawan berubah antar rilis BOM; custom Row jauh lebih stabil & mudah
- * dijaga tetap compact.
- *
- * QRIS di sini MURNI pencatatan (bukan integrasi payment gateway) — sesuai
- * keputusan desain: agar laporan tahu uang QRIS masuk rekening bank, bukan
- * ke laci kasir fisik.
- */
 @Composable
 private fun PaymentMethodToggle(
     selected: PaymentMethod,
@@ -1196,6 +1293,120 @@ private fun MoneyField(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Box(Modifier.weight(1f)) {
+                    if (text.isEmpty()) {
+                        Text(
+                            text = "0",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        }
+    )
+}
+
+/**
+ * Field diskon dual-mode (Nominal/Persen).
+ *
+ * Sesuai desain yang disepakati: HANYA tipe yang sedang aktif yang tampil
+ * sebagai teks tappable di sisi kiri ("Rp ⟲" / "% ⟲") — bukan switch 2
+ * opsi berdampingan. Ini memberi target sentuh lebih besar (seluruh segmen
+ * kiri, bukan cuma ikon kecil) DAN menyisakan ruang lebih luas untuk digit
+ * angka. Menekan segmen ini membalik tipe (lihat [PosViewModel.toggleDiscountType],
+ * yang juga me-reset nilai ke 0 agar tidak salah tafsir angka lama).
+ */
+@Composable
+private fun DiscountField(
+    type: DiscountType,
+    rawValue: Double,
+    onToggleType: () -> Unit,
+    onValueChange: (Double) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var text by remember(type, rawValue) {
+        mutableStateOf(
+            when {
+                rawValue <= 0.0 -> ""
+                type == DiscountType.NOMINAL -> rawValue.toLong().toString()
+                else -> formatTrim(rawValue)
+            }
+        )
+    }
+
+    val isNominal = type == DiscountType.NOMINAL
+    val keyboardType = if (isNominal) KeyboardType.Number else KeyboardType.Decimal
+    val visualTransformation = if (isNominal) ThousandsSeparatorTransformation else VisualTransformation.None
+
+    BasicTextField(
+        value = text,
+        onValueChange = { input ->
+            val cleaned = if (isNominal) {
+                input.filter { it.isDigit() }
+            } else {
+                buildString {
+                    var dotSeen = false
+                    for (c in input) {
+                        when {
+                            c.isDigit() -> append(c)
+                            c == '.' && !dotSeen -> { append(c); dotSeen = true }
+                        }
+                    }
+                }
+            }
+            text = cleaned
+            onValueChange(cleaned.toDoubleOrNull() ?: 0.0)
+        },
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        singleLine = true,
+        visualTransformation = visualTransformation,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold
+        ),
+        modifier = modifier,
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp))
+                        .clickable(onClick = onToggleType)
+                        .padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isNominal) "Rp" else "%",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(2.dp))
+                    Text(
+                        text = "⟲",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .fillMaxHeight(0.6f)
+                        .background(MaterialTheme.colorScheme.outlineVariant)
+                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 10.dp)
+                ) {
                     if (text.isEmpty()) {
                         Text(
                             text = "0",
@@ -1383,13 +1594,28 @@ private fun QuantityEditDialog(
     )
 }
 
-/** BATCH 3D: label tampil untuk metode bayar di dialog sukses. */
 private fun paymentMethodLabel(raw: String): String = when (raw) {
     PaymentMethod.CASH.name -> "Tunai"
     PaymentMethod.QRIS.name -> "QRIS"
     PaymentMethod.TRANSFER.name -> "Transfer"
     PaymentMethod.OTHER.name -> "Lainnya"
     else -> raw
+}
+
+/**
+ * Label diskon untuk ditampilkan di [SuccessDialog], mis. "Diskon: 10% (Rp
+ * 5.000)" untuk mode persen, atau "Diskon: Rp 5.000" untuk mode nominal.
+ * Membaca [TransactionEntity.discountType]/[discountValue] — snapshot audit
+ * "apa yang diketik kasir" — TIDAK mempengaruhi [TransactionEntity.discount]
+ * (nominal final) yang sudah ditampilkan di baris Total.
+ */
+private fun discountLabel(tx: TransactionEntity): String? {
+    if (tx.discount <= 0L) return null
+    return if (tx.discountType == DiscountType.PERCENT.name) {
+        "Diskon: ${formatTrim(tx.discountValue)}% (${tx.discount.toRupiah()})"
+    } else {
+        "Diskon: ${tx.discount.toRupiah()}"
+    }
 }
 
 @Composable
@@ -1415,6 +1641,9 @@ private fun SuccessDialog(
                         "Metode Bayar: ${paymentMethodLabel(result.transaction.paymentMethod)}",
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
+                    discountLabel(result.transaction)?.let { label ->
+                        Text(label, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                    }
                     Text("Total: ${result.transaction.total.toRupiah()}", fontWeight = FontWeight.SemiBold)
                     Text("Bayar: ${result.transaction.paidAmount.toRupiah()}")
                     Text("Kembali: ${result.transaction.change.toRupiah()}", color = MaterialTheme.colorScheme.primary)

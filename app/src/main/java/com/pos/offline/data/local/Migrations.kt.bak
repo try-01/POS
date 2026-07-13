@@ -32,19 +32,9 @@ object Migrations {
 
     /**
      * v2 → v3: fondasi fitur Kasir/Shift/Metode Bayar.
-     *
-     *  1) Tabel `transactions` mendapat 4 kolom baru — semua ADD COLUMN bersifat
-     *     aditif (tidak mengubah/menghapus baris lama). Transaksi historis
-     *     otomatis terisi `paymentMethod='CASH'`, `cashierName=''`,
-     *     `cashierId=NULL`, `shiftId=NULL` — konsisten dgn asumsi bahwa
-     *     transaksi lama (sebelum fitur ini ada) dianggap tunai tanpa kasir
-     *     tercatat.
-     *  2) Tabel baru `cashiers` & `shifts` dibuat dari nol (belum ada baris
-     *     apa pun sebelumnya, jadi tidak perlu strategi migrasi data).
      */
     val MIGRATION_2_3 = object : Migration(2, 3) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            // ---- Kolom baru di transactions ----
             db.execSQL(
                 "ALTER TABLE transactions ADD COLUMN paymentMethod TEXT NOT NULL DEFAULT 'CASH'"
             )
@@ -58,7 +48,6 @@ object Migrations {
                 "ALTER TABLE transactions ADD COLUMN shiftId INTEGER"
             )
 
-            // ---- Tabel baru: cashiers ----
             db.execSQL(
                 """
                 CREATE TABLE IF NOT EXISTS `cashiers` (
@@ -71,7 +60,6 @@ object Migrations {
                 """.trimIndent()
             )
 
-            // ---- Tabel baru: shifts ----
             db.execSQL(
                 """
                 CREATE TABLE IF NOT EXISTS `shifts` (
@@ -96,6 +84,21 @@ object Migrations {
         }
     }
 
+    /**
+     * v3 → v4: tambah kolom `unitCost` pada `transaction_items` — snapshot
+     * harga modal produk saat transaksi terjadi, dasar kalkulasi Laba Kotor
+     * per shift (lihat [ShiftRepository.getShiftSummary]). Transaksi lama
+     * otomatis terisi `unitCost = 0` (lihat catatan batasan di
+     * [TransactionItemEntity.unitCost]).
+     */
+    val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE transaction_items ADD COLUMN unitCost INTEGER NOT NULL DEFAULT 0"
+            )
+        }
+    }
+
     /** Daftar semua migrasi yang terdaftar pada [androidx.room.RoomDatabase]. */
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
 }

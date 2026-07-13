@@ -49,8 +49,10 @@ import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ShoppingCart
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -97,6 +99,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.local.entity.CartItemEntity
 import com.pos.offline.data.local.entity.CashierEntity
+import com.pos.offline.data.local.entity.PaymentMethod
 import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.repository.CheckoutResult
@@ -118,7 +121,6 @@ fun PosScreen(
     onExportPdf: (CheckoutResult) -> Unit,
     forceWideLayout: Boolean = false
 ) {
-    // ---- State reaktif (sadarkan-siklus) ----
     val products by viewModel.products.collectAsStateWithLifecycle()
     val cart by viewModel.cart.collectAsStateWithLifecycle()
     val totals by viewModel.totals.collectAsStateWithLifecycle()
@@ -128,7 +130,8 @@ fun PosScreen(
     val paid by viewModel.paid.collectAsStateWithLifecycle()
     val checkoutState by viewModel.checkoutState.collectAsStateWithLifecycle()
 
-    // ---- BATCH 3C: state Kasir & Shift ----
+    val paymentMethod by viewModel.paymentMethod.collectAsStateWithLifecycle()
+
     val activeCashiers by viewModel.activeCashiers.collectAsStateWithLifecycle()
     val openShift by viewModel.openShift.collectAsStateWithLifecycle()
     val showStartShiftDialog by viewModel.showStartShiftDialog.collectAsStateWithLifecycle()
@@ -175,7 +178,6 @@ fun PosScreen(
                     .padding(horizontal = 12.dp)
                     .padding(top = 4.dp, bottom = 6.dp)
             ) {
-                // BATCH 3C: indikator shift — tap untuk buka dialog Mulai/Tutup Shift.
                 ShiftIndicatorBar(
                     openShift = openShift,
                     onClick = {
@@ -223,10 +225,12 @@ if (isWide) {
             taxRate = taxRate,
             paid = paid,
             change = change,
+            paymentMethod = paymentMethod,
             stockByProductId = stockByProductId,
             onDiscountChange = viewModel::setDiscount,
             onTaxRateChange = viewModel::setTaxRate,
             onPaidChange = viewModel::setPaid,
+            onPaymentMethodChange = viewModel::setPaymentMethod,
             onSetQuantity = viewModel::setQuantityDirect,
             onIncrease = viewModel::increaseQty,
             onDecrease = viewModel::decreaseQty,
@@ -263,10 +267,12 @@ if (isWide) {
                         taxRate = taxRate,
                         paid = paid,
                         change = change,
+                        paymentMethod = paymentMethod,
                         stockByProductId = stockByProductId,
                         onDiscountChange = viewModel::setDiscount,
                         onTaxRateChange = viewModel::setTaxRate,
                         onPaidChange = viewModel::setPaid,
+                        onPaymentMethodChange = viewModel::setPaymentMethod,
                         onSetQuantity = viewModel::setQuantityDirect,
                         onIncrease = viewModel::increaseQty,
                         onDecrease = viewModel::decreaseQty,
@@ -284,7 +290,6 @@ if (isWide) {
         }
     }
 
-    // ---- Dialog hasil checkout ----
     when (val state = checkoutState) {
         is CheckoutState.Success -> SuccessDialog(
             result = state.result,
@@ -301,7 +306,6 @@ if (isWide) {
         else -> Unit
     }
 
-    // ---- BATCH 3C: dialog Mulai/Tutup Shift ----
     if (showStartShiftDialog) {
         StartShiftDialog(
             cashiers = activeCashiers,
@@ -321,9 +325,8 @@ if (isWide) {
     }
 }
 
-// ============================ INDIKATOR & DIALOG SHIFT (BATCH 3C) ============================
+// ============================ INDIKATOR & DIALOG SHIFT ============================
 
-/** Baris tipis di topBar — hijau+nama kasir saat shift aktif, abu-abu saat tidak. */
 @Composable
 private fun ShiftIndicatorBar(openShift: ShiftEntity?, onClick: () -> Unit) {
     Row(
@@ -354,12 +357,6 @@ private fun ShiftIndicatorBar(openShift: ShiftEntity?, onClick: () -> Unit) {
     }
 }
 
-/**
- * Dropdown pilih kasir — sengaja pakai [DropdownMenu] biasa (bukan
- * ExposedDropdownMenuBox) karena API-nya stabil lintas versi Material3
- * (menghindari risiko `menuAnchor()` yang sempat berubah signature antar
- * rilis BOM), dan lebih mudah dikontrol tampilannya agar tetap compact.
- */
 @Composable
 private fun CashierDropdownField(
     cashiers: List<CashierEntity>,
@@ -624,10 +621,12 @@ private fun CartPane(
     taxRate: Double,
     paid: Long,
     change: Long,
+    paymentMethod: PaymentMethod,
     stockByProductId: Map<Long, Int>,
     onDiscountChange: (Long) -> Unit,
     onTaxRateChange: (Double) -> Unit,
     onPaidChange: (Long) -> Unit,
+    onPaymentMethodChange: (PaymentMethod) -> Unit,
     onIncrease: (CartItemEntity) -> Unit,
     onDecrease: (CartItemEntity) -> Unit,
     onSetQuantity: (CartItemEntity, Int) -> Unit,
@@ -643,6 +642,20 @@ private fun CartPane(
     var showClearConfirm by remember { mutableStateOf(false) }
     var qtyEditItem by remember { mutableStateOf<CartItemEntity?>(null) }
     val showFull = !collapsible || expanded
+
+    // ---- BARU: peringatan pembayaran kurang ----
+    // Muncul HANYA kalau kasir mengisi manual (paid > 0) tapi nominalnya
+    // masih di bawah total. Kalau paid == 0 (dikosongkan), itu berarti
+    // "uang pas" (lihat PosViewModel.checkout()) — TIDAK perlu diperingatkan
+    // karena memang bukan kesalahan kasir, itu perilaku yang disengaja.
+    var showInsufficientPaymentDialog by remember { mutableStateOf(false) }
+    fun attemptCheckout() {
+        if (paid in 1 until totals.total) {
+            showInsufficientPaymentDialog = true
+        } else {
+            onCheckout()
+        }
+    }
 
     val scrollState = rememberScrollState()
 
@@ -768,14 +781,16 @@ private fun CartPane(
                             discount = discount,
                             taxRate = taxRate,
                             paid = paid,
+                            paymentMethod = paymentMethod,
                             onDiscountChange = onDiscountChange,
                             onTaxRateChange = onTaxRateChange,
-                            onPaidChange = onPaidChange
+                            onPaidChange = onPaidChange,
+                            onPaymentMethodChange = onPaymentMethodChange
                         )
 
                         Spacer(Modifier.height(6.dp))
                         Button(
-                            onClick = onCheckout,
+                            onClick = ::attemptCheckout,
                             enabled = canCheckout,
                             modifier = Modifier.fillMaxWidth().height(42.dp),
                             shape = RoundedCornerShape(12.dp)
@@ -826,7 +841,7 @@ private fun CartPane(
                         modifier = Modifier.weight(1f)
                     )
                     Button(
-                        onClick = onCheckout,
+                        onClick = ::attemptCheckout,
                         enabled = canCheckout,
                         modifier = Modifier.height(36.dp),
                         shape = RoundedCornerShape(10.dp),
@@ -880,8 +895,72 @@ private fun CartPane(
             onDismiss = { qtyEditItem = null }
         )
     }
+
+    if (showInsufficientPaymentDialog) {
+        InsufficientPaymentDialog(
+            paid = paid,
+            total = totals.total,
+            onDismiss = { showInsufficientPaymentDialog = false },
+            onConfirm = {
+                showInsufficientPaymentDialog = false
+                onCheckout()
+            }
+        )
+    }
 }
 
+/**
+ * Peringatan sebelum checkout kalau nominal "Bayar" yang diisi manual masih
+ * kurang dari total. TIDAK memblokir transaksi (mis. untuk kasus kasbon/utang
+ * pelanggan) — hanya memastikan kasir sadar & sengaja, bukan salah ketik.
+ */
+@Composable
+private fun InsufficientPaymentDialog(
+    paid: Long,
+    total: Long,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val shortfall = (total - paid).coerceAtLeast(0L)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Rounded.Warning,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error
+            )
+        },
+        title = { Text("Pembayaran Kurang") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Uang yang diterima (${paid.toRupiah()}) kurang dari total (${total.toRupiah()}).")
+                Text(
+                    "Kekurangan: ${shortfall.toRupiah()}",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Pastikan ini disengaja (mis. dicatat sebagai piutang), bukan salah ketik.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Tetap Lanjutkan")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Periksa Lagi") }
+        }
+    )
+}
 
 @Composable
 private fun CartRow(
@@ -1017,9 +1096,11 @@ private fun TotalsSummary(
     discount: Long,
     taxRate: Double,
     paid: Long,
+    paymentMethod: PaymentMethod,
     onDiscountChange: (Long) -> Unit,
     onTaxRateChange: (Double) -> Unit,
-    onPaidChange: (Long) -> Unit
+    onPaidChange: (Long) -> Unit,
+    onPaymentMethodChange: (PaymentMethod) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         SummaryLine("Subtotal", totals.subtotal.toRupiah())
@@ -1048,6 +1129,13 @@ private fun TotalsSummary(
         HorizontalDivider(Modifier.padding(vertical = 2.dp))
         SummaryLine("Total", totals.total.toRupiah(), emphasize = true)
 
+        Spacer(Modifier.height(2.dp))
+        PaymentMethodToggle(
+            selected = paymentMethod,
+            onSelect = onPaymentMethodChange
+        )
+        Spacer(Modifier.height(2.dp))
+
         MoneyField(
             label = "Bayar",
             value = paid,
@@ -1055,6 +1143,62 @@ private fun TotalsSummary(
             modifier = Modifier.fillMaxWidth().height(44.dp)
         )
         if (paid > 0) SummaryLine("Kembalian", change.toRupiah(), color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+@Composable
+private fun PaymentMethodToggle(
+    selected: PaymentMethod,
+    onSelect: (PaymentMethod) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        PaymentMethodChip(
+            label = "Tunai",
+            selected = selected == PaymentMethod.CASH,
+            onClick = { onSelect(PaymentMethod.CASH) },
+            modifier = Modifier.weight(1f)
+        )
+        PaymentMethodChip(
+            label = "QRIS",
+            selected = selected == PaymentMethod.QRIS,
+            onClick = { onSelect(PaymentMethod.QRIS) },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun PaymentMethodChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else Color.Transparent
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -1302,6 +1446,14 @@ private fun QuantityEditDialog(
     )
 }
 
+private fun paymentMethodLabel(raw: String): String = when (raw) {
+    PaymentMethod.CASH.name -> "Tunai"
+    PaymentMethod.QRIS.name -> "QRIS"
+    PaymentMethod.TRANSFER.name -> "Transfer"
+    PaymentMethod.OTHER.name -> "Lainnya"
+    else -> raw
+}
+
 @Composable
 private fun SuccessDialog(
     result: CheckoutResult,
@@ -1321,6 +1473,10 @@ private fun SuccessDialog(
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("No. Struk: ${result.transaction.id}")
+                    Text(
+                        "Metode Bayar: ${paymentMethodLabel(result.transaction.paymentMethod)}",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
                     Text("Total: ${result.transaction.total.toRupiah()}", fontWeight = FontWeight.SemiBold)
                     Text("Bayar: ${result.transaction.paidAmount.toRupiah()}")
                     Text("Kembali: ${result.transaction.change.toRupiah()}", color = MaterialTheme.colorScheme.primary)

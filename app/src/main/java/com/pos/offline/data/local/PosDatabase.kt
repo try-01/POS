@@ -24,9 +24,11 @@ private data class SeedProduct(
 /**
  * Database tunggal (singleton) untuk seluruh aplikasi.
  *
- * v4 menambahkan kolom `unitCost` pada `transaction_items` (lihat
- * [Migrations.MIGRATION_3_4]) — snapshot harga modal produk saat transaksi
- * terjadi, dasar kalkulasi Laba Kotor per shift.
+ * v5 menambahkan kolom `discountType`/`discountValue` pada `transactions`
+ * (lihat [Migrations.MIGRATION_4_5]) — snapshot audit tipe & nilai mentah
+ * diskon (Nominal/Persen) yang diketik kasir. Kolom `discount` (nominal
+ * final) TIDAK berubah maknanya, tetap satu-satunya sumber kebenaran untuk
+ * kalkulasi & laporan.
  */
 @Database(
     entities = [
@@ -37,7 +39,7 @@ private data class SeedProduct(
         CashierEntity::class,
         ShiftEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class PosDatabase : RoomDatabase() {
