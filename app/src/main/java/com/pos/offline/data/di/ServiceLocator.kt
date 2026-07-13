@@ -22,29 +22,36 @@ class PosApplication : Application() {
 }
 
 /**
- * Dependency Injection manual (Service Locator) memakai `by lazy`.
+ * Dependency Injection manual (Service Locator).
+ * Custom getter dipakai menggantikan `by lazy` agar instance bisa di-reset
+ * saat proses Backup/Restore database fisik.
  */
 object ServiceLocator {
     private lateinit var appContext: Context
 
-    private val db: PosDatabase by lazy { PosDatabase.getInstance(appContext) }
+    private var _db: PosDatabase? = null
+    private val db: PosDatabase
+        get() = _db ?: PosDatabase.getInstance(appContext).also { _db = it }
 
-    private val productRepository: ProductRepository by lazy {
-        ProductRepository(db.productDao())
-    }
-    private val cartRepository: CartRepository by lazy {
-        CartRepository(db.cartDao())
-    }
-    private val transactionRepository: TransactionRepository by lazy {
-        TransactionRepository(db, db.transactionDao(), db.cartDao(), db.productDao())
-    }
-    // === BARU: fondasi fitur Kasir/Shift (Batch 1) ===
-    private val cashierRepository: CashierRepository by lazy {
-        CashierRepository(db.cashierDao())
-    }
-    private val shiftRepository: ShiftRepository by lazy {
-        ShiftRepository(db.shiftDao())
-    }
+    private var _productRepository: ProductRepository? = null
+    private val productRepository: ProductRepository
+        get() = _productRepository ?: ProductRepository(db.productDao()).also { _productRepository = it }
+
+    private var _cartRepository: CartRepository? = null
+    private val cartRepository: CartRepository
+        get() = _cartRepository ?: CartRepository(db.cartDao()).also { _cartRepository = it }
+
+    private var _transactionRepository: TransactionRepository? = null
+    private val transactionRepository: TransactionRepository
+        get() = _transactionRepository ?: TransactionRepository(db, db.transactionDao(), db.cartDao(), db.productDao()).also { _transactionRepository = it }
+
+    private var _cashierRepository: CashierRepository? = null
+    private val cashierRepository: CashierRepository
+        get() = _cashierRepository ?: CashierRepository(db.cashierDao()).also { _cashierRepository = it }
+
+    private var _shiftRepository: ShiftRepository? = null
+    private val shiftRepository: ShiftRepository
+        get() = _shiftRepository ?: ShiftRepository(db.shiftDao()).also { _shiftRepository = it }
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
@@ -62,11 +69,33 @@ object ServiceLocator {
     fun reportViewModelFactory(): ViewModelProvider.Factory =
         ReportViewModelFactory(transactionRepository)
 
-    // Repositori lain dapat dibuka di sini saat dibutuhkan.
     fun transactionRepository(): TransactionRepository = transactionRepository
     fun productRepository(): ProductRepository = productRepository
     fun cashierRepository(): CashierRepository = cashierRepository
     fun shiftRepository(): ShiftRepository = shiftRepository
+
+    /**
+     * Menutup koneksi database dan mereset cache repository di ServiceLocator.
+     * Memaksa WAL checkpoint sebelum close agar tidak ada transaksi nanggung hilang.
+     */
+    fun closeDatabase() {
+        _db?.let { database ->
+            // Force WAL checkpoint TRUNCATE: memindahkan semua data dari pos.db-wal
+            // ke pos.db utama, lalu mengosongkan file wal. Wajib sebelum backup fisik.
+            database.openHelper.writableDatabase
+                .query("PRAGMA wal_checkpoint(TRUNCATE)")
+                .use { it.moveToFirst() }
+
+            PosDatabase.closeAndClearInstance()
+
+            _db = null
+            _productRepository = null
+            _cartRepository = null
+            _transactionRepository = null
+            _cashierRepository = null
+            _shiftRepository = null
+        }
+    }
 }
 
 class PosViewModelFactory(

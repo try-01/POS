@@ -22,14 +22,6 @@ private data class SeedProduct(
     val name: String, val sku: String, val price: Long, val cost: Long
 )
 
-/**
- * Database tunggal (singleton) untuk seluruh aplikasi.
- *
- * v3 menambahkan fondasi fitur Kasir/Shift/Metode Bayar (lihat
- * [Migrations.MIGRATION_2_3]): tabel baru `cashiers` & `shifts`, serta 4
- * kolom baru pada `transactions`. Semua bersifat aditif — data existing
- * (produk, transaksi lama) tidak tersentuh sama sekali.
- */
 @Database(
     entities = [
         ProductEntity::class,
@@ -66,6 +58,17 @@ abstract class PosDatabase : RoomDatabase() {
                     .build()
                     .also { INSTANCE = it }
             }
+
+        /**
+         * Menutup koneksi DB aktif dan mereset cache singleton.
+         * Dipanggil oleh ServiceLocator saat proses Backup/Restore fisik file DB.
+         */
+        fun closeAndClearInstance() {
+            synchronized(this) {
+                INSTANCE?.close()
+                INSTANCE = null
+            }
+        }
 
         private val SEED_CALLBACK = object : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
