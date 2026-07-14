@@ -18,31 +18,8 @@ interface ShiftDao {
 
     @Query("SELECT * FROM shifts ORDER BY startedAt DESC")
     fun observeAll(): Flow<List<ShiftEntity>>
-
-    /**
-     * BATCH F (Fitur 1): SEMUA shift yang masih terbuka (`endedAt IS NULL`),
-     * BUKAN hanya satu "yang ditunjuk aktif" seperti [observeOpenShift].
-     * Dipakai layar "Kelola Shift" di PosScreen untuk menampilkan shift
-     * kasir lain yang mungkin tertinggal terbuka (multi-shift-aktif
-     * dibolehkan sesuai keputusan arsitektur — lihat [ShiftEntity]).
-     *
-     * Diurutkan ASC (paling lama terbuka di atas) — shift yang sudah lama
-     * menggantung dianggap paling butuh perhatian/paling mudah terlupa.
-     */
     @Query("SELECT * FROM shifts WHERE endedAt IS NULL ORDER BY startedAt ASC")
     fun observeOpenShifts(): Flow<List<ShiftEntity>>
-
-    /**
-     * BATCH G (Fitur 2): shift yang SUDAH ditutup (`endedAt` tidak null) dalam
-     * rentang waktu tertentu — dasar "Riwayat Tutup Shift" di ReportScreen,
-     * ikut filter tanggal yang sedang dipilih pada layar tsb (bukan rentang
-     * bebas/independen).
-     *
-     * Diurutkan DESC (paling baru ditutup di atas) — BERBEDA dari
-     * [observeOpenShifts] yang ASC, karena tujuannya berbeda: shift yang
-     * terbuka butuh perhatian dari yang paling lama menggantung, sedangkan
-     * shift historis yang paling relevan dilihat adalah yang paling baru.
-     */
     @Query(
         """
         SELECT * FROM shifts
@@ -60,22 +37,8 @@ interface ShiftDao {
 
     @Query("SELECT * FROM shifts WHERE id = :id")
     suspend fun getById(id: Long): ShiftEntity?
-
-    /**
-     * BATCH B: cek apakah kasir tertentu masih punya shift berjalan
-     * (`endedAt IS NULL`) — dipakai untuk MEMBLOKIR nonaktifkan kasir yang
-     * shift-nya belum ditutup (mencegah shift "menggantung" tanpa rekonsiliasi
-     * kas). Tidak peduli shift itu "yang ditunjuk aktif" versi UI (terbaru)
-     * atau tertinggal terbuka dari sesi sebelumnya — keduanya tetap harus
-     * ditutup dulu sebelum kasirnya dinonaktifkan.
-     */
     @Query("SELECT EXISTS(SELECT 1 FROM shifts WHERE cashierId = :cashierId AND endedAt IS NULL)")
     suspend fun hasOpenShiftForCashier(cashierId: Long): Boolean
-
-    /**
-     * BATCH D: exclude status VOID — transaksi yang dibatalkan tidak boleh
-     * ikut dihitung dalam rekonsiliasi kas laci fisik.
-     */
     @Query(
         """
         SELECT COALESCE(SUM(total), 0) FROM transactions
@@ -83,12 +46,6 @@ interface ShiftDao {
         """
     )
     suspend fun cashRevenueForShift(shiftId: Long): Long
-
-    /**
-     * BATCH 3C: total penjualan QRIS selama shift — uangnya masuk rekening
-     * bank, BUKAN ke laci fisik, jadi sengaja dipisah dari cashRevenueForShift.
-     * BATCH D: exclude status VOID.
-     */
     @Query(
         """
         SELECT COALESCE(SUM(total), 0) FROM transactions
@@ -97,14 +54,6 @@ interface ShiftDao {
     )
     suspend fun qrisRevenueForShift(shiftId: Long): Long
 
-    /**
-     * BATCH 3C: total modal (Σ unitCost × qty) seluruh item yang terjual
-     * dalam shift ini — dasar kalkulasi Laba Kotor. Join ke `transactions`
-     * untuk memfilter berdasarkan `shiftId` (kolom itu ada di header, bukan
-     * di `transaction_items`).
-     * BATCH D: exclude status VOID — modal barang dari transaksi yang
-     * dibatalkan tidak boleh ikut mengurangi Laba Kotor.
-     */
     @Query(
         """
         SELECT COALESCE(SUM(ti.unitCost * ti.quantity), 0)
@@ -114,4 +63,19 @@ interface ShiftDao {
         """
     )
     suspend fun totalCostForShift(shiftId: Long): Long
+
+    /**
+     * Total refund TUNAI yang dikaitkan ke shift ini (shiftId di ReturnEntity =
+     * shift yang AKTIF SAAT RETUR TERJADI, bukan shift transaksi asal) — dasar
+     * pengurang estimasi kas di laci saat Tutup Shift (Batch E).
+     * Query lintas tabel `returns` langsung, konsisten dengan pola
+     * cashRevenueForShift/totalCostForShift di atas yang juga query tabel lain.
+     */
+    @Query(
+        """
+        SELECT COALESCE(SUM(refundAmount), 0) FROM returns
+        WHERE shiftId = :shiftId AND refundMethod = 'CASH'
+        """
+    )
+    suspend fun cashRefundsForShift(shiftId: Long): Long
 }

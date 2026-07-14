@@ -5,9 +5,6 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/**
- * Header transaksi (1 struk = 1 baris). Nomor invoice [id] sebagai PK.
- */
 @Entity(tableName = "transactions")
 data class TransactionEntity(
     @PrimaryKey
@@ -18,9 +15,7 @@ data class TransactionEntity(
     val tax: Long,           // nominal pajak (Rupiah), dihitung setelah diskon
     val total: Long,         // subtotal - diskon + pajak (yang harus dibayar)
     val paidAmount: Long,    // uang diterima dari pelanggan
-    val change: Long,        // kembalian = max(0, paidAmount - total)
-
-    // ============ KOLOM v3 — lihat Migrations.MIGRATION_2_3 ============
+    val change: Long,
     @ColumnInfo(defaultValue = "'CASH'")
     val paymentMethod: String = PaymentMethod.CASH.name,
 
@@ -30,36 +25,30 @@ data class TransactionEntity(
     val cashierName: String = "",
 
     val shiftId: Long? = null,
-
-    // ============ KOLOM v5 — lihat Migrations.MIGRATION_4_5 ============
-    // Snapshot AUDIT: apa yang benar-benar diketik kasir saat memberi
-    // diskon. TIDAK dipakai untuk kalkulasi ulang apa pun — `discount`
-    // di atas tetap satu-satunya sumber kebenaran nominal final.
     @ColumnInfo(defaultValue = "'NOMINAL'")
     val discountType: String = DiscountType.NOMINAL.name,
 
     @ColumnInfo(defaultValue = "0.0")
     val discountValue: Double = 0.0,
-
-    // ============ KOLOM v6 — lihat Migrations.MIGRATION_5_6 (BATCH D) ============
-    // Status transaksi: COMPLETED (default) atau VOID (dibatalkan/soft-delete).
-    // Baris VOID tetap ada di DB (audit, nomor struk tidak hilang) tapi
-    // dikecualikan dari semua kalkulasi pendapatan/laba — lihat filter
-    // `status = 'COMPLETED'` di TransactionDao & ShiftDao.
     @ColumnInfo(defaultValue = "'COMPLETED'")
     val status: String = TransactionStatus.COMPLETED.name,
 
     /** Timestamp epoch millis saat transaksi dibatalkan; null jika belum pernah di-void. */
     val voidedAt: Long? = null,
+    val voidReason: String? = null,
 
     /**
-     * Alasan pembatalan — OPSIONAL, tidak diisi wajib lewat UI saat ini
-     * (dialog konfirmasi Void hanya ya/tidak, tanpa input teks). Kolom ini
-     * disiapkan untuk kebutuhan audit yang lebih ketat di masa depan tanpa
-     * perlu migrasi skema lagi.
+     * FK logis ke ReturnEntity.id (tanpa @ForeignKey, ikut pola TransactionItemEntity).
+     * null = belum pernah diretur. Sekali terisi, PERMANEN — "sekali retur = final",
+     * tombol "Retur Item" di UI disembunyikan selamanya untuk transaksi ini.
+     * Ditambahkan di v7 (lihat MIGRATION_6_7). Kolom ini SENGAJA di tabel `transactions`
+     * (bukan cuma dilihat dari keberadaan record di tabel `returns`) supaya Room Flow
+     * daftar transaksi otomatis ter-refresh reaktif saat retur baru saja diproses.
      */
-    val voidReason: String? = null
+    val returnId: Long? = null
 )
+
+/** Shortcut baca: true jika transaksi ini berstatus VOID (dibatalkan). Ada di TransactionStatus.kt */
 
 @Entity(
     tableName = "transaction_items",
@@ -76,12 +65,9 @@ data class TransactionItemEntity(
 
     @ColumnInfo(defaultValue = "0")
     val unitCost: Long = 0L,
-
-    // ============ KOLOM v6 — lihat Migrations.MIGRATION_5_6 (BATCH D) ============
-    // FK "lunak" ke products.id (BUKAN foreign key constraint sungguhan —
-    // produk boleh dihapus, struk lama tetap utuh via `productName`).
-    // NULL untuk transaksi lama (sebelum migrasi ini) — item semacam ini
-    // TIDAK BISA di-reversal stok otomatis saat Void (tidak ada cara aman
-    // menebak produk mana lewat nama saja), lihat TransactionRepository.voidTransaction().
     val productId: Long? = null
 )
+
+/** Shortcut baca: true jika transaksi ini sudah pernah diretur (final, tidak bisa diretur lagi). */
+val TransactionEntity.hasReturn: Boolean
+    get() = returnId != null

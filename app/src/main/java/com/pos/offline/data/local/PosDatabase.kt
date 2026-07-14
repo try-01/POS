@@ -8,11 +8,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.pos.offline.data.local.dao.CartDao
 import com.pos.offline.data.local.dao.CashierDao
 import com.pos.offline.data.local.dao.ProductDao
+import com.pos.offline.data.local.dao.ReturnDao
 import com.pos.offline.data.local.dao.ShiftDao
 import com.pos.offline.data.local.dao.TransactionDao
 import com.pos.offline.data.local.entity.CartItemEntity
 import com.pos.offline.data.local.entity.CashierEntity
 import com.pos.offline.data.local.entity.ProductEntity
+import com.pos.offline.data.local.entity.ReturnEntity
+import com.pos.offline.data.local.entity.ReturnItemEntity
 import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.TransactionItemEntity
@@ -20,15 +23,6 @@ import com.pos.offline.data.local.entity.TransactionItemEntity
 private data class SeedProduct(
     val name: String, val sku: String, val price: Long, val cost: Long
 )
-
-/**
- * Database tunggal (singleton) untuk seluruh aplikasi.
- *
- * v6 (BATCH D) menambahkan dukungan Void Transaksi (soft-delete):
- * `transactions.status`/`voidedAt`/`voidReason`, dan
- * `transaction_items.productId` (dasar reversal stok saat void) — lihat
- * [Migrations.MIGRATION_5_6].
- */
 @Database(
     entities = [
         ProductEntity::class,
@@ -36,9 +30,11 @@ private data class SeedProduct(
         TransactionEntity::class,
         TransactionItemEntity::class,
         CashierEntity::class,
-        ShiftEntity::class
+        ShiftEntity::class,
+        ReturnEntity::class,
+        ReturnItemEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class PosDatabase : RoomDatabase() {
@@ -47,6 +43,7 @@ abstract class PosDatabase : RoomDatabase() {
     abstract fun transactionDao(): TransactionDao
     abstract fun cashierDao(): CashierDao
     abstract fun shiftDao(): ShiftDao
+    abstract fun returnDao(): ReturnDao
 
     companion object {
         @Volatile

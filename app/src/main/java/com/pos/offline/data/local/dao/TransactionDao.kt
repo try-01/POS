@@ -7,11 +7,6 @@ import androidx.room.Transaction
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.TransactionItemEntity
 import kotlinx.coroutines.flow.Flow
-
-/**
- * Akses data transaksi (riwayat & laporan). Header + detail ditulis bersamaan
- * dalam satu [Transaction] (konsistensi penuh, atau rollback seluruhnya).
- */
 @Dao
 interface TransactionDao {
 
@@ -23,14 +18,6 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<TransactionEntity>>
-
-    /**
-     * Ambil transaksi pada rentang hari tertentu (untuk laporan harian).
-     * SENGAJA tidak difilter status — transaksi VOID tetap harus tampil di
-     * daftar riwayat (dengan badge "Dibatalkan"); pengecualian dari
-     * agregat pendapatan dilakukan di layer ViewModel ([ReportViewModel.aggregate]),
-     * bukan di query ini.
-     */
     @Query(
         """
         SELECT * FROM transactions
@@ -39,12 +26,6 @@ interface TransactionDao {
         """
     )
     fun observeByDateRange(startOfDay: Long, endOfDay: Long): Flow<List<TransactionEntity>>
-
-    /**
-     * COALESCE menjaga hasil tetap 0 ketika belum ada transaksi (tidak null).
-     * BATCH D: exclude status VOID — pendapatan transaksi yang dibatalkan
-     * tidak boleh ikut terhitung.
-     */
     @Query(
         """
         SELECT COALESCE(SUM(total), 0) FROM transactions
@@ -63,11 +44,6 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE shiftId = :shiftId ORDER BY createdAt ASC")
     fun observeByShift(shiftId: Long): Flow<List<TransactionEntity>>
 
-    /**
-     * BATCH D: ubah status transaksi menjadi VOID (soft-delete) + catat
-     * jejak audit waktu & alasan (opsional). Tidak pernah menghapus baris —
-     * nomor struk tetap ada di riwayat untuk audit.
-     */
     @Query(
         """
         UPDATE transactions
@@ -76,6 +52,14 @@ interface TransactionDao {
         """
     )
     suspend fun setStatus(id: String, status: String, voidedAt: Long?, reason: String?)
+
+    /**
+     * Tandai transaksi sudah diretur (FINAL — "sekali retur = final"). Dipanggil
+     * dalam satu database transaction bersama insert ReturnEntity/ReturnItemEntity
+     * oleh ReturnRepository.processReturn(), supaya konsisten atomik.
+     */
+    @Query("UPDATE transactions SET returnId = :returnId WHERE id = :id")
+    suspend fun setReturnId(id: String, returnId: Long)
 
     /** Tulis header + semua item dalam satu transaksi DB. */
     @Transaction
