@@ -33,14 +33,19 @@ object ServiceLocator {
     private val cartRepository: CartRepository by lazy {
         CartRepository(db.cartDao())
     }
-    private val transactionRepository: TransactionRepository by lazy {
-        TransactionRepository(db, db.transactionDao(), db.cartDao(), db.productDao())
-    }
     private val cashierRepository: CashierRepository by lazy {
         CashierRepository(db.cashierDao())
     }
     private val shiftRepository: ShiftRepository by lazy {
         ShiftRepository(db.shiftDao())
+    }
+
+    // BATCH D: TransactionRepository kini butuh ShiftRepository untuk
+    // memvalidasi status shift (terbuka/tertutup) sebelum mengizinkan Void.
+    // Deklarasi shiftRepository di atas (bukan urutan penting untuk `by lazy`,
+    // tapi lebih jelas dibaca top-down sesuai urutan dependency).
+    private val transactionRepository: TransactionRepository by lazy {
+        TransactionRepository(db, db.transactionDao(), db.cartDao(), db.productDao(), shiftRepository)
     }
 
     fun initialize(context: Context) {

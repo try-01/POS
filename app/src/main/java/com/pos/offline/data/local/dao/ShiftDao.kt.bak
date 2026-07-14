@@ -28,6 +28,17 @@ interface ShiftDao {
     @Query("SELECT * FROM shifts WHERE id = :id")
     suspend fun getById(id: Long): ShiftEntity?
 
+    /**
+     * BATCH B: cek apakah kasir tertentu masih punya shift berjalan
+     * (`endedAt IS NULL`) — dipakai untuk MEMBLOKIR nonaktifkan kasir yang
+     * shift-nya belum ditutup (mencegah shift "menggantung" tanpa rekonsiliasi
+     * kas). Tidak peduli shift itu "yang ditunjuk aktif" versi UI (terbaru)
+     * atau tertinggal terbuka dari sesi sebelumnya — keduanya tetap harus
+     * ditutup dulu sebelum kasirnya dinonaktifkan.
+     */
+    @Query("SELECT EXISTS(SELECT 1 FROM shifts WHERE cashierId = :cashierId AND endedAt IS NULL)")
+    suspend fun hasOpenShiftForCashier(cashierId: Long): Boolean
+
     @Query(
         """
         SELECT COALESCE(SUM(total), 0) FROM transactions

@@ -55,20 +55,6 @@ interface ProductDao {
     suspend fun decrementStock(id: Long, qty: Int, now: Long): Int
 
     /**
-     * BATCH D: kebalikan [decrementStock] — dipakai saat Void Transaksi untuk
-     * mengembalikan stok item yang dibatalkan. Tidak perlu guard kondisi
-     * (menambah stok selalu aman, tidak ada risiko race "kekurangan").
-     */
-    @Query(
-        """
-        UPDATE products
-        SET stock = stock + :qty, updatedAt = :now
-        WHERE id = :id
-        """
-    )
-    suspend fun incrementStock(id: Long, qty: Int, now: Long)
-
-    /**
      * Soft-delete (arsipkan): set `active = false` agar produk menghilang dari
      * katalog & layar kasir, namun baris data tetap ada. Aman karena transaksi
      * yang sudah dicatat menyimpan snapshot produk → riwayat tidak rusak.

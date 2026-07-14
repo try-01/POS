@@ -118,6 +118,38 @@ object Migrations {
         }
     }
 
+    /**
+     * v5 → v6 (BATCH D): dukungan Void Transaksi (soft-delete).
+     *
+     *  - `transactions.status`: 'COMPLETED' (default, seluruh transaksi lama
+     *    otomatis dianggap COMPLETED) atau 'VOID'.
+     *  - `transactions.voidedAt` / `voidReason`: jejak audit kapan & (opsional)
+     *    kenapa dibatalkan.
+     *  - `transaction_items.productId`: FK "lunak" ke `products.id`, dasar
+     *    reversal stok saat Void. NULL untuk seluruh baris lama (sebelum
+     *    migrasi ini) — item semacam ini dilewati saat reversal stok
+     *    (tidak ditebak lewat nama produk), lihat
+     *    [com.pos.offline.data.repository.TransactionRepository.voidTransaction].
+     */
+    val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE transactions ADD COLUMN status TEXT NOT NULL DEFAULT 'COMPLETED'"
+            )
+            db.execSQL(
+                "ALTER TABLE transactions ADD COLUMN voidedAt INTEGER"
+            )
+            db.execSQL(
+                "ALTER TABLE transactions ADD COLUMN voidReason TEXT"
+            )
+            db.execSQL(
+                "ALTER TABLE transaction_items ADD COLUMN productId INTEGER"
+            )
+        }
+    }
+
     /** Daftar semua migrasi yang terdaftar pada [androidx.room.RoomDatabase]. */
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+    val ALL: Array<Migration> = arrayOf(
+        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6
+    )
 }

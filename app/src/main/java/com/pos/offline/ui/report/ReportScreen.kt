@@ -37,12 +37,17 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -63,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.local.entity.TransactionEntity
+import com.pos.offline.data.local.entity.isVoid
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.discountRowLabel
@@ -80,10 +86,14 @@ import java.time.Instant
  *  - Daftar transaksi `LazyColumn` dengan `key` + `contentType`.
  *  - State dikoleksi sadar-siklus.
  *
- * BATCH C: setiap baris transaksi kini bisa diketuk untuk membuka
- * [TransactionDetailDialog] — rincian lengkap read-only (item, diskon,
- * pajak, metode bayar, kasir, shift). Fondasi untuk Void (Batch D) &
- * Retur (Batch E) nanti — tombol aksi akan ditambahkan di dialog ini.
+ * BATCH C: setiap baris transaksi bisa diketuk untuk membuka
+ * [TransactionDetailDialog] — rincian lengkap read-only.
+ *
+ * BATCH D: transaksi berstatus VOID ditampilkan dengan badge "DIBATALKAN"
+ * (redup, strikethrough visual) di daftar & detail; dialog detail
+ * menyediakan tombol "Batalkan Transaksi" (hanya untuk yang masih
+ * COMPLETED) + dialog konfirmasi 2-langkah sebelum eksekusi. Hasil aksi
+ * dilaporkan lewat Snackbar ([ReportViewModel.messages]).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,8 +102,15 @@ fun ReportScreen(viewModel: ReportViewModel) {
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     val isToday by viewModel.isToday.collectAsStateWithLifecycle()
     val selectedTransaction by viewModel.selectedTransaction.collectAsStateWithLifecycle()
+    var pendingVoidConfirm by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(Unit) {
+        viewModel.messages.collect { msg -> snackbarHostState.showSnackbar(msg) }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             Row(
                 modifier = Modifier
@@ -137,21 +154,26 @@ fun ReportScreen(viewModel: ReportViewModel) {
             // ---------- Ringkasan ----------
             item(key = "summary") { SummarySection(report = report) }
 
-if (report.transactionCount > 0) {
-    item(key = "chart") {
-        RevenueTrendChart(
-            date = report.date,
-            transactions = report.transactions,
-            totalRevenue = report.totalRevenue,
-            hourly = report.hourlyRevenue
-        )
-    }
-}
+            if (report.transactionCount > 0) {
+                item(key = "chart") {
+                    // BATCH D: hanya transaksi COMPLETED yang masuk kurva —
+                    // konsisten dengan totalRevenue yang jadi skala sumbu Y.
+                    RevenueTrendChart(
+                        date = report.date,
+                        transactions = report.transactions.filterNot { it.isVoid },
+                        totalRevenue = report.totalRevenue,
+                        hourly = report.hourlyRevenue
+                    )
+                }
+            }
 
             // ---------- Daftar transaksi ----------
             item(key = "list_header") {
+                // BATCH D: jumlah di judul = SEMUA baris (termasuk VOID) —
+                // literal jumlah yang tampil di daftar di bawahnya. Berbeda
+                // dari StatCard "Jumlah Transaksi" yang hanya COMPLETED.
                 Text(
-                    "Daftar Transaksi (${report.transactionCount})",
+                    "Daftar Transaksi (${report.transactions.size})",
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(top = 2.dp)
@@ -175,10 +197,25 @@ if (report.transactionCount > 0) {
         }
     }
 
-    selectedTransaction?.let { result ->
+    if (selectedTransaction != null && !pendingVoidConfirm) {
         TransactionDetailDialog(
-            result = result,
-            onDismiss = viewModel::closeTransactionDetail
+            result = selectedTransaction!!,
+            onVoidClick = { pendingVoidConfirm = true },
+            onDismiss = {
+                pendingVoidConfirm = false
+                viewModel.closeTransactionDetail()
+            }
+        )
+    }
+
+    if (pendingVoidConfirm) {
+        VoidConfirmDialog(
+            invoiceId = selectedTransaction?.transaction?.id.orEmpty(),
+            onConfirm = {
+                viewModel.voidSelectedTransaction()
+                pendingVoidConfirm = false
+            },
+            onDismiss = { pendingVoidConfirm = false }
         )
     }
 }
@@ -326,9 +363,10 @@ private fun SummarySection(report: DailyReport) {
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "${report.transactionCount} transaksi" +
-                        if (report.totalDiscount > 0 || report.totalTax > 0)
+                        (if (report.totalDiscount > 0 || report.totalTax > 0)
                             " · diskon ${report.totalDiscount.toRupiah()} · pajak ${report.totalTax.toRupiah()}"
-                        else "",
+                        else "") +
+                        (if (report.voidedCount > 0) " · ${report.voidedCount} dibatalkan" else ""),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
@@ -420,6 +458,10 @@ private fun Long.toCompactRupiah(): String {
  * "nyasar" seperti pada implementasi bar chart sebelumnya (yang memakai
  * dua sistem koordinat berbeda: Row.SpaceBetween untuk label vs rumus
  * manual untuk bar).
+ *
+ * BATCH D: [transactions] yang diterima WAJIB sudah difilter COMPLETED
+ * oleh pemanggil (lihat [ReportScreen]) — komponen ini tidak melakukan
+ * filter sendiri, murni penggambaran.
  */
 @Composable
 private fun RevenueTrendChart(
@@ -593,6 +635,9 @@ private fun RevenueTrendChart(
 
 @Composable
 private fun TransactionRow(tx: TransactionEntity, onClick: () -> Unit) {
+    val isVoid = tx.isVoid
+    val dimmedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 12.dp,
@@ -605,16 +650,23 @@ private fun TransactionRow(tx: TransactionEntity, onClick: () -> Unit) {
                 ReportViewModel.timeFmt.format(Instant.ofEpochMilli(tx.createdAt)),
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary
+                color = if (isVoid) dimmedColor else MaterialTheme.colorScheme.primary
             )
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(
-                    tx.id,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        tx.id,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = if (isVoid) dimmedColor else Color.Unspecified
+                    )
+                    if (isVoid) {
+                        Spacer(Modifier.width(6.dp))
+                        VoidBadge()
+                    }
+                }
                 Text(
                     "Dibayar ${tx.paidAmount.toRupiah()} · ${paymentMethodLabel(tx.paymentMethod)}",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
@@ -624,7 +676,8 @@ private fun TransactionRow(tx: TransactionEntity, onClick: () -> Unit) {
             Text(
                 tx.total.toRupiah(),
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = if (isVoid) dimmedColor else Color.Unspecified
             )
             Spacer(Modifier.width(4.dp))
             Icon(
@@ -637,24 +690,42 @@ private fun TransactionRow(tx: TransactionEntity, onClick: () -> Unit) {
     }
 }
 
-// ============================ DETAIL TRANSAKSI (BATCH C) ============================
+/** Badge kecil "DIBATALKAN" — dipakai di daftar & dialog detail. */
+@Composable
+private fun VoidBadge() {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+    ) {
+        Text(
+            "DIBATALKAN",
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+            color = MaterialTheme.colorScheme.error,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+        )
+    }
+}
+
+// ============================ DETAIL TRANSAKSI ============================
 
 /**
  * Dialog rincian transaksi — read-only. Menampilkan SELENGKAP mungkin:
- * nomor struk, tanggal+jam presisi detik, daftar item, subtotal, diskon
- * (dengan label persen/nominal sesuai yang diketik kasir), pajak, total,
- * bayar, kembalian, metode bayar, kasir, dan nomor shift (kalau ada).
+ * nomor struk, tanggal+jam presisi detik, daftar item, subtotal, diskon,
+ * pajak, total, bayar, kembalian, metode bayar, kasir, nomor shift.
  *
- * Fondasi untuk Batch D (Void) — tombol aksi akan ditambahkan di
- * `confirmButton`/`dismissButton` slot ini nanti, tanpa perlu merombak
- * struktur dialog.
+ * BATCH D: menampilkan badge & jejak waktu VOID jika transaksi sudah
+ * dibatalkan; tombol "Batalkan Transaksi" (dismissButton slot) hanya
+ * muncul untuk transaksi yang masih COMPLETED.
  */
 @Composable
 private fun TransactionDetailDialog(
     result: CheckoutResult,
+    onVoidClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val tx = result.transaction
+    val isVoid = tx.isVoid
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -666,16 +737,29 @@ private fun TransactionDetailDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    tx.id,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        tx.id,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (isVoid) {
+                        Spacer(Modifier.width(8.dp))
+                        VoidBadge()
+                    }
+                }
                 Text(
                     ReportViewModel.dateTimeFmt.format(Instant.ofEpochMilli(tx.createdAt)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
+                if (isVoid && tx.voidedAt != null) {
+                    Text(
+                        "Dibatalkan pada ${ReportViewModel.dateTimeFmt.format(Instant.ofEpochMilli(tx.voidedAt))}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
 
                 Spacer(Modifier.height(8.dp))
                 Text("Item", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
@@ -735,6 +819,43 @@ private fun TransactionDetailDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("Tutup") }
+        },
+        dismissButton = {
+            if (!isVoid) {
+                TextButton(onClick = onVoidClick) {
+                    Text("Batalkan Transaksi", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    )
+}
+
+/**
+ * BATCH D: dialog konfirmasi 2-langkah sebelum Void benar-benar dieksekusi
+ * — mencegah pembatalan tidak sengaja (aksi ini tidak bisa diurungkan).
+ */
+@Composable
+private fun VoidConfirmDialog(
+    invoiceId: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Batalkan Transaksi?") },
+        text = {
+            Text(
+                "Transaksi $invoiceId akan dibatalkan dan stok item akan dikembalikan. " +
+                    "Tindakan ini tidak dapat diurungkan."
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Ya, Batalkan", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Tidak") }
         }
     )
 }

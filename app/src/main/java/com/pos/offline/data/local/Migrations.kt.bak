@@ -99,6 +99,25 @@ object Migrations {
         }
     }
 
+    /**
+     * v4 → v5: dukungan diskon Nominal/Persen di level struk.
+     *
+     * `discount` (Long) TIDAK berubah — tetap nominal final yang dipakai
+     * untuk semua kalkulasi/laporan. Dua kolom baru ini MURNI snapshot
+     * audit: tipe & nilai mentah yang diketik kasir, supaya struk/riwayat
+     * bisa menampilkan "Diskon 10% (Rp X)" alih-alih cuma "Diskon Rp X".
+     */
+    val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE transactions ADD COLUMN discountType TEXT NOT NULL DEFAULT 'NOMINAL'"
+            )
+            db.execSQL(
+                "ALTER TABLE transactions ADD COLUMN discountValue REAL NOT NULL DEFAULT 0.0"
+            )
+        }
+    }
+
     /** Daftar semua migrasi yang terdaftar pada [androidx.room.RoomDatabase]. */
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 }

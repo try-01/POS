@@ -24,11 +24,10 @@ private data class SeedProduct(
 /**
  * Database tunggal (singleton) untuk seluruh aplikasi.
  *
- * v5 menambahkan kolom `discountType`/`discountValue` pada `transactions`
- * (lihat [Migrations.MIGRATION_4_5]) — snapshot audit tipe & nilai mentah
- * diskon (Nominal/Persen) yang diketik kasir. Kolom `discount` (nominal
- * final) TIDAK berubah maknanya, tetap satu-satunya sumber kebenaran untuk
- * kalkulasi & laporan.
+ * v6 (BATCH D) menambahkan dukungan Void Transaksi (soft-delete):
+ * `transactions.status`/`voidedAt`/`voidReason`, dan
+ * `transaction_items.productId` (dasar reversal stok saat void) — lihat
+ * [Migrations.MIGRATION_5_6].
  */
 @Database(
     entities = [
@@ -39,7 +38,7 @@ private data class SeedProduct(
         CashierEntity::class,
         ShiftEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class PosDatabase : RoomDatabase() {

@@ -25,6 +25,14 @@ class ShiftRepository(private val shiftDao: ShiftDao) {
     suspend fun getOpenShift(): ShiftEntity? = shiftDao.getOpenShift()
 
     /**
+     * BATCH D: dipakai [TransactionRepository.voidTransaction] untuk
+     * memvalidasi apakah shift dari suatu transaksi masih terbuka
+     * (`endedAt == null`) sebelum mengizinkan pembatalan — sesuai aturan
+     * "Void dibatasi hanya untuk transaksi yang shift-nya masih terbuka".
+     */
+    suspend fun getById(shiftId: Long): ShiftEntity? = shiftDao.getById(shiftId)
+
+    /**
      * BATCH B: dipakai [SettingsViewModel] untuk memblokir nonaktifkan kasir
      * yang masih punya shift berjalan (belum direkonsiliasi kasnya).
      */

@@ -39,7 +39,26 @@ data class TransactionEntity(
     val discountType: String = DiscountType.NOMINAL.name,
 
     @ColumnInfo(defaultValue = "0.0")
-    val discountValue: Double = 0.0
+    val discountValue: Double = 0.0,
+
+    // ============ KOLOM v6 — lihat Migrations.MIGRATION_5_6 (BATCH D) ============
+    // Status transaksi: COMPLETED (default) atau VOID (dibatalkan/soft-delete).
+    // Baris VOID tetap ada di DB (audit, nomor struk tidak hilang) tapi
+    // dikecualikan dari semua kalkulasi pendapatan/laba — lihat filter
+    // `status = 'COMPLETED'` di TransactionDao & ShiftDao.
+    @ColumnInfo(defaultValue = "'COMPLETED'")
+    val status: String = TransactionStatus.COMPLETED.name,
+
+    /** Timestamp epoch millis saat transaksi dibatalkan; null jika belum pernah di-void. */
+    val voidedAt: Long? = null,
+
+    /**
+     * Alasan pembatalan — OPSIONAL, tidak diisi wajib lewat UI saat ini
+     * (dialog konfirmasi Void hanya ya/tidak, tanpa input teks). Kolom ini
+     * disiapkan untuk kebutuhan audit yang lebih ketat di masa depan tanpa
+     * perlu migrasi skema lagi.
+     */
+    val voidReason: String? = null
 )
 
 @Entity(
@@ -56,5 +75,13 @@ data class TransactionItemEntity(
     val lineTotal: Long,
 
     @ColumnInfo(defaultValue = "0")
-    val unitCost: Long = 0L
+    val unitCost: Long = 0L,
+
+    // ============ KOLOM v6 — lihat Migrations.MIGRATION_5_6 (BATCH D) ============
+    // FK "lunak" ke products.id (BUKAN foreign key constraint sungguhan —
+    // produk boleh dihapus, struk lama tetap utuh via `productName`).
+    // NULL untuk transaksi lama (sebelum migrasi ini) — item semacam ini
+    // TIDAK BISA di-reversal stok otomatis saat Void (tidak ada cara aman
+    // menebak produk mana lewat nama saja), lihat TransactionRepository.voidTransaction().
+    val productId: Long? = null
 )

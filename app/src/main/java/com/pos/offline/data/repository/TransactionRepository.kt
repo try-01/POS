@@ -10,6 +10,8 @@ import com.pos.offline.data.local.entity.DiscountType
 import com.pos.offline.data.local.entity.PaymentMethod
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.TransactionItemEntity
+import com.pos.offline.data.local.entity.TransactionStatus
+import com.pos.offline.data.local.entity.isVoid
 import com.pos.offline.util.roundToRupiah
 import kotlinx.coroutines.flow.Flow
 
@@ -20,11 +22,32 @@ data class CheckoutResult(
 
 class InsufficientStockException(val productName: String) : RuntimeException()
 
+/**
+ * Hasil operasi [TransactionRepository.voidTransaction] — sealed class
+ * (bukan exception) karena kegagalan validasi (shift tertutup, sudah
+ * di-void, dsb) adalah alur normal yang harus ditampilkan sebagai pesan
+ * ke kasir, bukan crash.
+ */
+sealed class VoidOutcome {
+    /**
+     * @param restoredStockCount jumlah baris item yang stoknya berhasil dikembalikan
+     * @param skippedStockCount jumlah baris item yang DILEWATI (data lama,
+     *   `productId` null — tidak bisa ditebak aman lewat nama produk saja)
+     */
+    data class Success(val restoredStockCount: Int, val skippedStockCount: Int) : VoidOutcome()
+    data object AlreadyVoided : VoidOutcome()
+    data object NotFound : VoidOutcome()
+
+    /** Shift dari transaksi ini sudah ditutup — Void diblokir (aturan final). */
+    data object ShiftClosed : VoidOutcome()
+}
+
 class TransactionRepository(
     private val database: PosDatabase,
     private val transactionDao: TransactionDao,
     private val cartDao: CartDao,
-    private val productDao: ProductDao
+    private val productDao: ProductDao,
+    private val shiftRepository: ShiftRepository
 ) {
     val transactions: Flow<List<TransactionEntity>> = transactionDao.observeAll()
 
@@ -57,9 +80,10 @@ class TransactionRepository(
      *
      * BATCH 3C: setiap item struk kini menyimpan snapshot `unitCost` (harga
      * modal produk SAAT transaksi ini terjadi) — dasar kalkulasi Laba Kotor
-     * per shift di [ShiftRepository.getShiftSummary]. Diambil via query
-     * terpisah per item (bukan batch) karena jumlah item per struk kasir
-     * kecil (biasanya < 20), N+1 query di sini tidak signifikan.
+     * per shift di [ShiftRepository.getShiftSummary].
+     *
+     * BATCH D: setiap item struk kini juga menyimpan `productId` — dasar
+     * reversal stok otomatis saat [voidTransaction] dipanggil nanti.
      */
     suspend fun checkout(
         cart: List<CartItemEntity>,
@@ -107,14 +131,11 @@ class TransactionRepository(
             discountValue = discountValue
         )
 
-        // NOTE: `productDao.getById(id)` diasumsikan ada mengikuti pola thin
-        // wrapper yang sudah terbukti di CashierRepository/ShiftRepository.
-        // Kalau nama fungsi asli di ProductDao berbeda, build akan gagal
-        // persis di baris ini — sesuaikan nama sesuai DAO Anda.
         val items = cart.map { cartItem ->
             val unitCost = productDao.getById(cartItem.productId)?.cost ?: 0L
             TransactionItemEntity(
                 transactionId = invoiceId,
+                productId = cartItem.productId,
                 productName = cartItem.name,
                 unitPrice = cartItem.unitPrice,
                 quantity = cartItem.quantity,
@@ -141,5 +162,56 @@ class TransactionRepository(
         val tx = transactionDao.getById(invoiceId) ?: return null
         val items = transactionDao.getItems(invoiceId)
         return CheckoutResult(tx, items)
+    }
+
+    /**
+     * BATCH D: batalkan (void/soft-delete) sebuah transaksi.
+     *
+     * Aturan (final, disepakati sebelumnya):
+     *  - Transaksi TANPA shift (`shiftId == null`) SELALU boleh di-void
+     *    kapan saja — tidak terikat rekonsiliasi shift manapun.
+     *  - Transaksi DENGAN shift hanya boleh di-void SELAMA shift tsb masih
+     *    terbuka (`endedAt == null`). Begitu shift ditutup, transaksi
+     *    "terkunci" — mencegah "Selisih" yang sudah dicatat kasir saat tutup
+     *    shift jadi tidak match lagi secara retroaktif.
+     *  - Reversal stok: HANYA untuk item yang punya `productId` (transaksi
+     *    baru, pasca migrasi v6). Item lama (`productId == null`) DILEWATI
+     *    apa adanya (dilaporkan via [VoidOutcome.Success.skippedStockCount])
+     *    — tidak pernah ditebak lewat `productName` yang berisiko salah.
+     */
+    suspend fun voidTransaction(invoiceId: String): VoidOutcome {
+        val tx = transactionDao.getById(invoiceId) ?: return VoidOutcome.NotFound
+        if (tx.isVoid) return VoidOutcome.AlreadyVoided
+
+        val shiftId = tx.shiftId
+        if (shiftId != null) {
+            val shift = shiftRepository.getById(shiftId)
+            if (shift?.endedAt != null) return VoidOutcome.ShiftClosed
+        }
+
+        val items = transactionDao.getItems(invoiceId)
+        val now = System.currentTimeMillis()
+        var restored = 0
+        var skipped = 0
+
+        database.withTransaction {
+            items.forEach { item ->
+                val pid = item.productId
+                if (pid != null) {
+                    productDao.incrementStock(pid, item.quantity, now)
+                    restored++
+                } else {
+                    skipped++
+                }
+            }
+            transactionDao.setStatus(
+                id = invoiceId,
+                status = TransactionStatus.VOID.name,
+                voidedAt = now,
+                reason = null
+            )
+        }
+
+        return VoidOutcome.Success(restoredStockCount = restored, skippedStockCount = skipped)
     }
 }

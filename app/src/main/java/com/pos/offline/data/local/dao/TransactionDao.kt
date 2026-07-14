@@ -24,7 +24,13 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<TransactionEntity>>
 
-    /** Ambil transaksi pada rentang hari tertentu (untuk laporan harian). */
+    /**
+     * Ambil transaksi pada rentang hari tertentu (untuk laporan harian).
+     * SENGAJA tidak difilter status — transaksi VOID tetap harus tampil di
+     * daftar riwayat (dengan badge "Dibatalkan"); pengecualian dari
+     * agregat pendapatan dilakukan di layer ViewModel ([ReportViewModel.aggregate]),
+     * bukan di query ini.
+     */
     @Query(
         """
         SELECT * FROM transactions
@@ -34,11 +40,15 @@ interface TransactionDao {
     )
     fun observeByDateRange(startOfDay: Long, endOfDay: Long): Flow<List<TransactionEntity>>
 
-    /** COALESCE menjaga hasil tetap 0 ketika belum ada transaksi (tidak null). */
+    /**
+     * COALESCE menjaga hasil tetap 0 ketika belum ada transaksi (tidak null).
+     * BATCH D: exclude status VOID — pendapatan transaksi yang dibatalkan
+     * tidak boleh ikut terhitung.
+     */
     @Query(
         """
         SELECT COALESCE(SUM(total), 0) FROM transactions
-        WHERE createdAt >= :startOfDay AND createdAt < :endOfDay
+        WHERE createdAt >= :startOfDay AND createdAt < :endOfDay AND status = 'COMPLETED'
         """
     )
     fun observeDailyRevenue(startOfDay: Long, endOfDay: Long): Flow<Long>
@@ -52,6 +62,20 @@ interface TransactionDao {
     /** Semua transaksi dalam satu sesi shift — dasar Laporan Tutup Shift. */
     @Query("SELECT * FROM transactions WHERE shiftId = :shiftId ORDER BY createdAt ASC")
     fun observeByShift(shiftId: Long): Flow<List<TransactionEntity>>
+
+    /**
+     * BATCH D: ubah status transaksi menjadi VOID (soft-delete) + catat
+     * jejak audit waktu & alasan (opsional). Tidak pernah menghapus baris —
+     * nomor struk tetap ada di riwayat untuk audit.
+     */
+    @Query(
+        """
+        UPDATE transactions
+        SET status = :status, voidedAt = :voidedAt, voidReason = :reason
+        WHERE id = :id
+        """
+    )
+    suspend fun setStatus(id: String, status: String, voidedAt: Long?, reason: String?)
 
     /** Tulis header + semua item dalam satu transaksi DB. */
     @Transaction

@@ -14,7 +14,7 @@ data class TransactionEntity(
     val id: String,          // nomor invoice, mis. "INV-1700000000000"
     val createdAt: Long,     // epoch millis — dipakai filter harian & urutan
     val subtotal: Long,      // Σ (harga × qty) sebelum diskon/pajak
-    val discount: Long,      // nominal diskon (Rupiah)
+    val discount: Long,      // nominal diskon FINAL (Rupiah) — sumber kebenaran kalkulasi
     val tax: Long,           // nominal pajak (Rupiah), dihitung setelah diskon
     val total: Long,         // subtotal - diskon + pajak (yang harus dibayar)
     val paidAmount: Long,    // uang diterima dari pelanggan
@@ -29,14 +29,19 @@ data class TransactionEntity(
     @ColumnInfo(defaultValue = "''")
     val cashierName: String = "",
 
-    val shiftId: Long? = null
+    val shiftId: Long? = null,
+
+    // ============ KOLOM v5 — lihat Migrations.MIGRATION_4_5 ============
+    // Snapshot AUDIT: apa yang benar-benar diketik kasir saat memberi
+    // diskon. TIDAK dipakai untuk kalkulasi ulang apa pun — `discount`
+    // di atas tetap satu-satunya sumber kebenaran nominal final.
+    @ColumnInfo(defaultValue = "'NOMINAL'")
+    val discountType: String = DiscountType.NOMINAL.name,
+
+    @ColumnInfo(defaultValue = "0.0")
+    val discountValue: Double = 0.0
 )
 
-/**
- * Detail item dari sebuah transaksi (baris produk dalam struk).
- * Di-snapshot (tidak FK ke produk) agar riwayat tidak berubah walau produk
- * master diubah/dihapus kemudian hari.
- */
 @Entity(
     tableName = "transaction_items",
     indices = [Index(value = ["transactionId"])] // lookup item per struk cepat
@@ -48,21 +53,8 @@ data class TransactionItemEntity(
     val productName: String,
     val unitPrice: Long,
     val quantity: Int,
-    val lineTotal: Long,      // unitPrice × quantity (disimpan utk laporan cepat)
+    val lineTotal: Long,
 
-    // ============ KOLOM BARU (v4) — lihat Migrations.MIGRATION_3_4 ============
-    /**
-     * Snapshot harga modal (cost) produk PADA SAAT transaksi terjadi — bukan
-     * cost produk saat ini. Ini krusial untuk keakuratan laba historis: kalau
-     * modal produk berubah minggu depan, laba transaksi minggu lalu tidak
-     * boleh ikut berubah retroaktif.
-     *
-     * Transaksi lama (sebelum v4) akan punya nilai default 0 di sini — kalau
-     * suatu saat laba dihitung untuk shift/periode SEBELUM update aplikasi
-     * ini, hasilnya akan terlihat overstated (modal dianggap 0). Ini
-     * batasan yang disengaja & diketahui, bukan bug — shift BARU (dibuat
-     * setelah update) akan selalu punya unitCost yang akurat.
-     */
     @ColumnInfo(defaultValue = "0")
     val unitCost: Long = 0L
 )
