@@ -19,6 +19,19 @@ interface ShiftDao {
     @Query("SELECT * FROM shifts ORDER BY startedAt DESC")
     fun observeAll(): Flow<List<ShiftEntity>>
 
+    /**
+     * BATCH F (Fitur 1): SEMUA shift yang masih terbuka (`endedAt IS NULL`),
+     * BUKAN hanya satu "yang ditunjuk aktif" seperti [observeOpenShift].
+     * Dipakai layar "Kelola Shift" di PosScreen untuk menampilkan shift
+     * kasir lain yang mungkin tertinggal terbuka (multi-shift-aktif
+     * dibolehkan sesuai keputusan arsitektur — lihat [ShiftEntity]).
+     *
+     * Diurutkan ASC (paling lama terbuka di atas) — shift yang sudah lama
+     * menggantung dianggap paling butuh perhatian/paling mudah terlupa.
+     */
+    @Query("SELECT * FROM shifts WHERE endedAt IS NULL ORDER BY startedAt ASC")
+    fun observeOpenShifts(): Flow<List<ShiftEntity>>
+
     @Insert
     suspend fun insert(shift: ShiftEntity): Long
 

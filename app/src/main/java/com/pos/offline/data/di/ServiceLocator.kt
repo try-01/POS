@@ -42,8 +42,6 @@ object ServiceLocator {
 
     // BATCH D: TransactionRepository kini butuh ShiftRepository untuk
     // memvalidasi status shift (terbuka/tertutup) sebelum mengizinkan Void.
-    // Deklarasi shiftRepository di atas (bukan urutan penting untuk `by lazy`,
-    // tapi lebih jelas dibaca top-down sesuai urutan dependency).
     private val transactionRepository: TransactionRepository by lazy {
         TransactionRepository(db, db.transactionDao(), db.cartDao(), db.productDao(), shiftRepository)
     }
@@ -65,8 +63,11 @@ object ServiceLocator {
     fun inventoryViewModelFactory(): ViewModelProvider.Factory =
         InventoryViewModelFactory(productRepository)
 
+    // === BATCH G: ReportViewModel kini butuh ShiftRepository untuk
+    // "Riwayat Tutup Shift" (Fitur 2). Call-site di MainActivity TIDAK
+    // berubah (masih 0 argumen ke factory). ===
     fun reportViewModelFactory(): ViewModelProvider.Factory =
-        ReportViewModelFactory(transactionRepository)
+        ReportViewModelFactory(transactionRepository, shiftRepository)
 
     // === BATCH B: SettingsViewModel kini butuh ShiftRepository untuk
     // validasi "kasir masih punya shift berjalan?" sebelum dinonaktifkan.
@@ -107,11 +108,12 @@ class InventoryViewModelFactory(
 }
 
 class ReportViewModelFactory(
-    private val transactionRepository: TransactionRepository
+    private val transactionRepository: TransactionRepository,
+    private val shiftRepository: ShiftRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        ReportViewModel(transactionRepository) as T
+        ReportViewModel(transactionRepository, shiftRepository) as T
 }
 
 class SettingsViewModelFactory(

@@ -2,9 +2,13 @@ package com.pos.offline.ui.report
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pos.offline.data.local.entity.PaymentMethod
+import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.isVoid
 import com.pos.offline.data.repository.CheckoutResult
+import com.pos.offline.data.repository.ShiftRepository
+import com.pos.offline.data.repository.ShiftSummary
 import com.pos.offline.data.repository.TransactionRepository
 import com.pos.offline.data.repository.VoidOutcome
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -37,6 +41,11 @@ import java.util.Locale
  *    sumber untuk kartu statistik & grafik tren (transaksi dibatalkan tidak
  *    boleh mendistorsi angka pendapatan/laba).
  *  - [voidedCount]: jumlah transaksi VOID pada hari ini (info tambahan).
+ *
+ * BATCH G (Fitur 2) — [cashRevenue]/[qrisRevenue]: breakdown pendapatan per
+ * metode bayar, HANYA dari transaksi COMPLETED (konsisten dgn [totalRevenue]).
+ * Diturunkan di memori dari [transactions] yang sudah ada — TIDAK butuh
+ * query DB baru.
  */
 data class DailyReport(
     val date: LocalDate,
@@ -47,7 +56,9 @@ data class DailyReport(
     val totalDiscount: Long,       // Σ diskon transaksi COMPLETED
     val totalTax: Long,            // Σ pajak transaksi COMPLETED
     val hourlyRevenue: List<Long>, // panjang 24; hanya dari transaksi COMPLETED
-    val voidedCount: Int            // jumlah transaksi VOID hari ini
+    val voidedCount: Int,           // jumlah transaksi VOID hari ini
+    val cashRevenue: Long,         // BATCH G: Σ total transaksi COMPLETED metode CASH
+    val qrisRevenue: Long          // BATCH G: Σ total transaksi COMPLETED metode QRIS
 ) {
     companion object {
         fun empty(date: LocalDate) = DailyReport(
@@ -59,7 +70,9 @@ data class DailyReport(
             totalDiscount = 0L,
             totalTax = 0L,
             hourlyRevenue = List(24) { 0L },
-            voidedCount = 0
+            voidedCount = 0,
+            cashRevenue = 0L,
+            qrisRevenue = 0L
         )
     }
 }
@@ -77,12 +90,30 @@ data class DailyReport(
 data class ReportMessage(val text: String, val isError: Boolean = false)
 
 /**
+ * BATCH G (Fitur 2): tab konten bagian BAWAH layar Laporan. Bagian ATAS
+ * (navigator tanggal, kartu ringkasan pendapatan, kurva tren) SELALU tampil
+ * apa pun tab yang aktif — hanya konten di bawahnya yang berganti.
+ */
+enum class ReportTab { TRANSACTIONS, SHIFTS }
+
+/**
+ * BATCH G: detail shift historis yang sedang dibuka pengguna — gabungan
+ * [shift] (entity tersimpan, untuk `endingCashActual`/`note`/timestamp ASLI
+ * saat shift itu ditutup dulu) + [summary] (hasil hitung ulang on-demand
+ * via [ShiftRepository.getShiftSummary], untuk breakdown Tunai/QRIS/Laba
+ * Kotor). Rekomputasi ini AMAN karena transaksi pada shift yang SUDAH
+ * DITUTUP tidak bisa lagi di-Void (aturan Batch D) — angkanya dijamin selalu
+ * konsisten dengan kondisi saat shift ditutup dulu.
+ */
+data class ClosedShiftDetail(val shift: ShiftEntity, val summary: ShiftSummary)
+
+/**
  * ViewModel Laporan Harian.
  *
  * Prinsip performa:
- *  - Satu-satunya query DB adalah `dailyTransactions(start, end)`; sisanya
- *    (pendapatan, jumlah, rata-rata, distribusi per jam) diturunkan di-memori
- *    lewat [map] → hemat round-trip DB.
+ *  - Satu-satunya query DB transaksi adalah `dailyTransactions(start, end)`;
+ *    sisanya (pendapatan, jumlah, rata-rata, distribusi per jam, breakdown
+ *    metode bayar) diturunkan di-memori lewat [map] → hemat round-trip DB.
  *  - `flatMapLatest` membatalkan query tanggal lama saat pengguna pindah hari.
  *  - `WhileSubscribed(5000)` → Flow berhenti saat layar tak terlihat (hemat baterai).
  *
@@ -96,10 +127,15 @@ data class ReportMessage(val text: String, val isError: Boolean = false)
  * pesan satu-kali. UI ([ReportScreen]) yang memutuskan cara menampilkannya
  * (banner inline dalam dialog vs Snackbar) tergantung apakah dialog detail
  * sedang terbuka — lihat catatan di [ReportMessage].
+ *
+ * BATCH G (Fitur 2): tambah [ShiftRepository] sebagai dependency baru untuk
+ * "Riwayat Tutup Shift" — [closedShifts] mengikuti filter tanggal yang sama
+ * dengan [report] (BUKAN rentang independen), sesuai keputusan final.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReportViewModel(
-    private val transactionRepository: TransactionRepository
+    private val transactionRepository: TransactionRepository,
+    private val shiftRepository: ShiftRepository
 ) : ViewModel() {
 
     private val zone: ZoneId = ZoneId.systemDefault()
@@ -120,6 +156,45 @@ class ReportViewModel(
             transactionRepository.dailyTransactions(start, end).map { aggregate(date, it) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DailyReport.empty(LocalDate.now()))
+
+    // ---------- BATCH G (Fitur 2): tab & riwayat tutup shift ----------
+
+    private val _selectedTab = MutableStateFlow(ReportTab.TRANSACTIONS)
+    val selectedTab: StateFlow<ReportTab> = _selectedTab.asStateFlow()
+
+    fun selectTab(tab: ReportTab) {
+        _selectedTab.value = tab
+    }
+
+    /**
+     * Shift yang `endedAt`-nya jatuh pada tanggal terpilih — ikut filter
+     * tanggal `ReportScreen` yang sama dengan [report] (bukan rentang bebas
+     * terpisah, sesuai keputusan final).
+     */
+    val closedShifts: StateFlow<List<ShiftEntity>> = _selectedDate
+        .flatMapLatest { date ->
+            val (start, end) = dayBounds(date)
+            shiftRepository.closedShiftsBetween(start, end)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _selectedShiftDetail = MutableStateFlow<ClosedShiftDetail?>(null)
+    /** Detail shift historis yang sedang dilihat (null = dialog tertutup). */
+    val selectedShiftDetail: StateFlow<ClosedShiftDetail?> = _selectedShiftDetail.asStateFlow()
+
+    /** Buka dialog read-only untuk satu shift historis — hitung ulang ringkasan on-demand. */
+    fun openShiftDetail(shift: ShiftEntity) {
+        viewModelScope.launch {
+            _selectedShiftDetail.value = ClosedShiftDetail(
+                shift = shift,
+                summary = shiftRepository.getShiftSummary(shift.id)
+            )
+        }
+    }
+
+    fun closeShiftDetail() {
+        _selectedShiftDetail.value = null
+    }
 
     // ---------- BATCH C: Detail Transaksi (read-only) ----------
 
@@ -189,7 +264,8 @@ class ReportViewModel(
 
     /**
      * Batas hari dalam epoch millis. `end` = awal hari berikutnya (eksklusif),
-     * cocok dengan query `createdAt >= start AND createdAt < end`.
+     * cocok dengan query `createdAt >= start AND createdAt < end` /
+     * `endedAt >= start AND endedAt < end`.
      */
     private fun dayBounds(date: LocalDate): Pair<Long, Long> {
         val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
@@ -198,12 +274,17 @@ class ReportViewModel(
     }
 
     /**
-     * Agregasi harian + distribusi pendapatan per jam.
+     * Agregasi harian + distribusi pendapatan per jam + breakdown metode bayar.
      *
      * BATCH D: [txs] berisi SEMUA transaksi (termasuk VOID) untuk daftar
      * riwayat UI, tapi seluruh statistik (pendapatan, diskon, pajak, rata-rata,
      * distribusi per jam) HANYA dihitung dari transaksi COMPLETED — transaksi
      * VOID dikecualikan total dari angka-angka ini.
+     *
+     * BATCH G: [cashRevenue]/[qrisRevenue] juga HANYA dari transaksi
+     * COMPLETED, filter berdasarkan `paymentMethod` (disimpan sebagai String
+     * di [TransactionEntity], dibandingkan dgn `PaymentMethod.CASH.name`/
+     * `PaymentMethod.QRIS.name`).
      */
     private fun aggregate(date: LocalDate, txs: List<TransactionEntity>): DailyReport {
         if (txs.isEmpty()) return DailyReport.empty(date)
@@ -215,6 +296,13 @@ class ReportViewModel(
         val totalDiscount = completed.sumOf { it.discount }
         val totalTax = completed.sumOf { it.tax }
         val count = completed.size
+
+        val cashRevenue = completed
+            .filter { it.paymentMethod == PaymentMethod.CASH.name }
+            .sumOf { it.total }
+        val qrisRevenue = completed
+            .filter { it.paymentMethod == PaymentMethod.QRIS.name }
+            .sumOf { it.total }
 
         // Distribusi per jam: bucket-kan setiap transaksi COMPLETED ke jam kejadian.
         val hourly = MutableList(24) { 0L }
@@ -234,7 +322,9 @@ class ReportViewModel(
             totalDiscount = totalDiscount,
             totalTax = totalTax,
             hourlyRevenue = hourly,
-            voidedCount = voidedCount
+            voidedCount = voidedCount,
+            cashRevenue = cashRevenue,
+            qrisRevenue = qrisRevenue
         )
     }
 
@@ -262,9 +352,7 @@ class ReportViewModel(
 
         /**
          * BATCH C: format tanggal+jam LENGKAP (dengan detik) untuk Detail
-         * Transaksi — mis. "Senin, 5 Mei 2025 · 14:05:32". Detik disengaja
-         * disertakan (berbeda dari [timeFmt] yang dipakai daftar ringkas)
-         * karena konteks audit/detail butuh presisi lebih tinggi.
+         * Transaksi & Detail Shift — mis. "Senin, 5 Mei 2025 · 14:05:32".
          */
         val dateTimeFmt: DateTimeFormatter =
             DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy · HH:mm:ss", Locale.forLanguageTag("id-ID"))

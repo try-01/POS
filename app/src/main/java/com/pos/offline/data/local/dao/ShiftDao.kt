@@ -32,6 +32,26 @@ interface ShiftDao {
     @Query("SELECT * FROM shifts WHERE endedAt IS NULL ORDER BY startedAt ASC")
     fun observeOpenShifts(): Flow<List<ShiftEntity>>
 
+    /**
+     * BATCH G (Fitur 2): shift yang SUDAH ditutup (`endedAt` tidak null) dalam
+     * rentang waktu tertentu — dasar "Riwayat Tutup Shift" di ReportScreen,
+     * ikut filter tanggal yang sedang dipilih pada layar tsb (bukan rentang
+     * bebas/independen).
+     *
+     * Diurutkan DESC (paling baru ditutup di atas) — BERBEDA dari
+     * [observeOpenShifts] yang ASC, karena tujuannya berbeda: shift yang
+     * terbuka butuh perhatian dari yang paling lama menggantung, sedangkan
+     * shift historis yang paling relevan dilihat adalah yang paling baru.
+     */
+    @Query(
+        """
+        SELECT * FROM shifts
+        WHERE endedAt >= :start AND endedAt < :end
+        ORDER BY endedAt DESC
+        """
+    )
+    fun observeClosedShiftsBetween(start: Long, end: Long): Flow<List<ShiftEntity>>
+
     @Insert
     suspend fun insert(shift: ShiftEntity): Long
 

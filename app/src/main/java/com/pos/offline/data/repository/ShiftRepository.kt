@@ -33,6 +33,13 @@ class ShiftRepository(private val shiftDao: ShiftDao) {
     suspend fun getOpenShift(): ShiftEntity? = shiftDao.getOpenShift()
 
     /**
+     * BATCH G (Fitur 2): shift yang sudah ditutup dalam rentang waktu
+     * tertentu — dasar "Riwayat Tutup Shift" di ReportScreen.
+     */
+    fun closedShiftsBetween(start: Long, end: Long): Flow<List<ShiftEntity>> =
+        shiftDao.observeClosedShiftsBetween(start, end)
+
+    /**
      * BATCH D: dipakai [TransactionRepository.voidTransaction] untuk
      * memvalidasi apakah shift dari suatu transaksi masih terbuka
      * (`endedAt == null`) sebelum mengizinkan pembatalan — sesuai aturan
@@ -57,7 +64,12 @@ class ShiftRepository(private val shiftDao: ShiftDao) {
         return shiftDao.insert(shift)
     }
 
-    /** Dipanggil saat dialog Tutup Shift dibuka — sebelum kasir input kas aktual. */
+    /**
+     * Dipanggil saat dialog Tutup Shift dibuka (shift terbuka) — MAUPUN saat
+     * membuka detail shift historis yang sudah ditutup (Batch G). Aman
+     * dipakai untuk keduanya karena hanya menghitung agregat berdasarkan
+     * `shiftId`, tidak peduli status buka/tutup shift itu sendiri.
+     */
     suspend fun getShiftSummary(shiftId: Long): ShiftSummary {
         val shift = shiftDao.getById(shiftId) ?: error("Shift #$shiftId tidak ditemukan")
         return ShiftSummary(
