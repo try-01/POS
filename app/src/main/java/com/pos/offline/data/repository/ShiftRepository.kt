@@ -22,6 +22,14 @@ class ShiftRepository(private val shiftDao: ShiftDao) {
     val openShift: Flow<ShiftEntity?> = shiftDao.observeOpenShift()
     val allShifts: Flow<List<ShiftEntity>> = shiftDao.observeAll()
 
+    /**
+     * BATCH F (Fitur 1): SEMUA shift terbuka (multi-shift-aktif dibolehkan
+     * sesuai keputusan arsitektur) — dipakai layar "Kelola Shift" di
+     * PosScreen, BEDA dari [openShift] yang hanya shift "ditunjuk aktif"
+     * (startedAt terbaru).
+     */
+    val openShifts: Flow<List<ShiftEntity>> = shiftDao.observeOpenShifts()
+
     suspend fun getOpenShift(): ShiftEntity? = shiftDao.getOpenShift()
 
     /**

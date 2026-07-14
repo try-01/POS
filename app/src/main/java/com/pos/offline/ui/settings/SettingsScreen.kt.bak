@@ -20,7 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.People
+import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -29,20 +29,29 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pos.offline.data.backup.BackupManager
+import com.pos.offline.data.local.entity.CashierEntity
 import com.pos.offline.ui.components.GlassCard
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,22 +59,17 @@ import com.pos.offline.ui.components.GlassCard
 fun SettingsScreen(viewModel: SettingsViewModel) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+    val cashiers by viewModel.cashiers.collectAsState()
 
     // --- SAF launchers ---
-    // Mime "application/octet-stream" untuk export (generik biner, dialog
-    // "Simpan sebagai" akan pakai nama file yang kita usulkan).
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri -> if (uri != null) viewModel.exportDatabase(context, uri) }
 
-    // Mime "*/*" untuk import — sengaja TIDAK difilter ke tipe spesifik,
-    // karena banyak perangkat tidak mengenali asosiasi mime SQLite dan bisa
-    // menyembunyikan file backup dari picker kalau difilter ketat.
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri -> if (uri != null) viewModel.requestRestore(uri) }
 
-    // Toast sekali-pakai dari ViewModel (konsisten dgn pola print/export PDF).
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg ->
             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
@@ -80,6 +84,13 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                     BackupManager.restartApp(context)
                 }
             }
+        )
+    }
+
+    if (uiState.showAddCashierDialog) {
+        AddCashierDialog(
+            onDismiss = { viewModel.closeAddCashierDialog() },
+            onConfirm = { name -> viewModel.addCashier(name) }
         )
     }
 
@@ -166,31 +177,118 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                 }
             }
 
-            SectionLabel("Kasir & Shift")
+            SectionLabel("Kelola Kasir")
 
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(14.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Rounded.People,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "Kelola Kasir — segera hadir",
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (cashiers.isEmpty()) {
+                        Text(
+                            "Belum ada kasir. Fitur ini opsional — aplikasi tetap " +
+                                "bisa dipakai tanpa memilih kasir/shift sama sekali.",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        cashiers.forEach { cashier ->
+                            CashierRow(
+                                cashier = cashier,
+                                onToggleActive = { active ->
+                                    viewModel.setCashierActive(cashier.id, active)
+                                }
+                            )
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = { viewModel.openAddCashierDialog() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Rounded.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Tambah Kasir", fontSize = 13.sp)
+                    }
                 }
             }
 
             Spacer(Modifier.height(8.dp))
         }
     }
+}
+
+@Composable
+private fun CashierRow(
+    cashier: CashierEntity,
+    onToggleActive: (Boolean) -> Unit
+) {
+    val contentColor = if (cashier.active) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column {
+            Text(
+                text = cashier.name,
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                fontWeight = FontWeight.Medium,
+                color = contentColor
+            )
+            Text(
+                text = if (cashier.active) "Aktif" else "Nonaktif",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                color = if (cashier.active) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                }
+            )
+        }
+        Switch(
+            checked = cashier.active,
+            onCheckedChange = onToggleActive,
+            colors = SwitchDefaults.colors()
+        )
+    }
+}
+
+@Composable
+private fun AddCashierDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Tambah Kasir", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Nama Kasir", fontSize = 12.sp) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(name) }) {
+                Text("Tambah", fontSize = 13.sp)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Batal", fontSize = 13.sp)
+            }
+        }
+    )
 }
 
 @Composable

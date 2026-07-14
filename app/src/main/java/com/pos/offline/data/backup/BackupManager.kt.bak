@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
-import androidx.core.content.FileProvider
 import com.pos.offline.data.local.PosDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -23,16 +22,6 @@ sealed class RestoreOutcome {
     object Success : RestoreOutcome()
     data class InvalidFile(val reason: String) : RestoreOutcome()
     data class Error(val throwable: Throwable) : RestoreOutcome()
-}
-
-/**
- * Hasil operasi menyiapkan salinan database untuk dibagikan (share) — BARU.
- * Terpisah dari [BackupOutcome] karena butuh mengembalikan [File] hasil
- * salinan (dipakai [BackupManager.buildShareIntent]), bukan cuma status.
- */
-sealed class ShareOutcome {
-    data class Success(val file: File) : ShareOutcome()
-    data class Error(val throwable: Throwable) : ShareOutcome()
 }
 
 /**
@@ -58,20 +47,12 @@ sealed class ShareOutcome {
  *     `by lazy`) tidak aman "disegarkan" tanpa restart proses penuh.
  *  4. Kalau tidak valid: file sementara dibuang, database aktif tidak
  *     tersentuh sama sekali.
- *
- * ALUR BAGIKAN (share) — BARU:
- *  Fitur independen dari SAF export (Opsi A: tombol terpisah, tidak
- *  menunggu user pilih folder dulu). Checkpoint WAL yang sama dipakai
- *  ulang, lalu salinan ditaruh di cache app & dibagikan via [FileProvider]
- *  — pola identik dengan `ReceiptManager.buildShareIntent` untuk struk.
  */
 object BackupManager {
 
     private const val DB_NAME = "pos.db"
 
-    /** Nama file default saat dialog "Simpan sebagai" (SAF) muncul — juga
-     *  dipakai sebagai nama file saat dibagikan (share), supaya penerima
-     *  (mis. lewat WhatsApp) melihat nama yang jelas & unik, bukan "pos.db". */
+    /** Nama file default saat dialog "Simpan sebagai" (SAF) muncul. */
     fun suggestedBackupFileName(): String {
         val ts = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
             .format(java.util.Date())
@@ -187,11 +168,10 @@ object BackupManager {
      *     menggantikan file aktif tanpa migrasi tambahan.
      *
      * Catatan batasan (untuk didiskusikan lagi kalau relevan nanti): kalau
-     * suatu saat skema naik ke versi baru, backup lama (hash lama) akan
-     * otomatis ditolak oleh pengecekan ini. Itu memang perilaku aman untuk
-     * sekarang (mencegah data korup akibat restore lintas skema) — kalau
-     * nanti mau dukung "restore lalu migrasi otomatis", itu perlu batch
-     * terpisah.
+     * suatu saat skema naik ke v4, backup lama (hash v3) akan otomatis
+     * ditolak oleh pengecekan ini. Itu memang perilaku aman untuk sekarang
+     * (mencegah data korup akibat restore lintas skema) — kalau nanti mau
+     * dukung "restore lalu migrasi otomatis", itu perlu batch terpisah.
      */
     private fun validateCandidate(context: Context, candidate: File): String? {
         if (!hasSqliteHeader(candidate)) {
@@ -240,80 +220,6 @@ object BackupManager {
         listOf(base, "$base-wal", "$base-shm", "$base-journal").forEach { name ->
             File(parent, name).takeIf { it.exists() }?.delete()
         }
-    }
-
-    // ---------------------------------------------------------------------
-    // BAGIKAN (SHARE) — BARU
-    // ---------------------------------------------------------------------
-
-    /**
-     * Menyiapkan salinan database di `cacheDir/shared_backups/` untuk
-     * dibagikan lewat [buildShareIntent] — TIDAK menyentuh alur SAF export
-     * sama sekali (fitur independen/Opsi A: pemilik toko bisa langsung
-     * kirim cadangan via WhatsApp/Email tanpa harus memilih folder SAF
-     * dulu).
-     *
-     * Sama seperti [exportDatabase], WAJIB checkpoint WAL dulu — kalau
-     * tidak, salinan bisa kehilangan transaksi terbaru yang masih ada di
-     * `-wal` dan belum ditulis balik ke `pos.db`.
-     *
-     * Nama file memakai [suggestedBackupFileName] — pola sama persis dengan
-     * export SAF (ada timestamp), supaya file yang diterima penerima (mis.
-     * lewat WhatsApp) punya nama unik & informatif, bukan "pos.db" polos.
-     *
-     * Folder ini dibersihkan dulu sebelum menulis salinan baru — BERBEDA
-     * dari `shared_receipts/` milik ReceiptManager (dibiarkan menumpuk
-     * karena file struk kecil). File database bisa jauh lebih besar,
-     * sehingga tidak dibiarkan menumpuk tak terbatas di cache.
-     */
-    suspend fun prepareShareableCopy(context: Context): ShareOutcome =
-        withContext(Dispatchers.IO) {
-            try {
-                checkpointWal(context)
-
-                val dbFile = context.getDatabasePath(DB_NAME)
-                if (!dbFile.exists()) {
-                    return@withContext ShareOutcome.Error(
-                        IllegalStateException("File database tidak ditemukan di ${dbFile.absolutePath}")
-                    )
-                }
-
-                val dir = File(context.cacheDir, "shared_backups").apply { mkdirs() }
-                dir.listFiles()?.forEach { it.delete() } // bersihkan salinan lama
-
-                val file = File(dir, suggestedBackupFileName())
-                FileInputStream(dbFile).use { input ->
-                    FileOutputStream(file).use { output -> input.copyTo(output) }
-                }
-
-                ShareOutcome.Success(file)
-            } catch (t: Throwable) {
-                ShareOutcome.Error(t)
-            }
-        }
-
-    /**
-     * Bangun [Intent] chooser untuk membagikan file cadangan ke aplikasi
-     * lain. Memakai [FileProvider] — pola identik dengan
-     * `ReceiptManager.buildShareIntent` (authority sama:
-     * `"${applicationId}.fileprovider"`, sudah terdaftar di manifest).
-     *
-     * Mime type `"application/octet-stream"` — sama seperti yang dipakai
-     * `ActivityResultContracts.CreateDocument` pada alur export SAF, supaya
-     * aplikasi penerima (mis. Google Drive/Files) memperlakukan file ini
-     * sebagai berkas biner mentah, bukan mencoba membukanya sebagai
-     * gambar/dokumen lain.
-     */
-    fun buildShareIntent(context: Context, file: File): Intent {
-        val authority = "${context.packageName}.fileprovider"
-        val uri = FileProvider.getUriForFile(context, authority, file)
-
-        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/octet-stream"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        return Intent.createChooser(sendIntent, "Bagikan Cadangan Database")
     }
 
     // ---------------------------------------------------------------------

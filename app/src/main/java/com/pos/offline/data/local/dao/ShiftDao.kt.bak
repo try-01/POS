@@ -39,10 +39,14 @@ interface ShiftDao {
     @Query("SELECT EXISTS(SELECT 1 FROM shifts WHERE cashierId = :cashierId AND endedAt IS NULL)")
     suspend fun hasOpenShiftForCashier(cashierId: Long): Boolean
 
+    /**
+     * BATCH D: exclude status VOID — transaksi yang dibatalkan tidak boleh
+     * ikut dihitung dalam rekonsiliasi kas laci fisik.
+     */
     @Query(
         """
         SELECT COALESCE(SUM(total), 0) FROM transactions
-        WHERE shiftId = :shiftId AND paymentMethod = 'CASH'
+        WHERE shiftId = :shiftId AND paymentMethod = 'CASH' AND status = 'COMPLETED'
         """
     )
     suspend fun cashRevenueForShift(shiftId: Long): Long
@@ -50,11 +54,12 @@ interface ShiftDao {
     /**
      * BATCH 3C: total penjualan QRIS selama shift — uangnya masuk rekening
      * bank, BUKAN ke laci fisik, jadi sengaja dipisah dari cashRevenueForShift.
+     * BATCH D: exclude status VOID.
      */
     @Query(
         """
         SELECT COALESCE(SUM(total), 0) FROM transactions
-        WHERE shiftId = :shiftId AND paymentMethod = 'QRIS'
+        WHERE shiftId = :shiftId AND paymentMethod = 'QRIS' AND status = 'COMPLETED'
         """
     )
     suspend fun qrisRevenueForShift(shiftId: Long): Long
@@ -64,13 +69,15 @@ interface ShiftDao {
      * dalam shift ini — dasar kalkulasi Laba Kotor. Join ke `transactions`
      * untuk memfilter berdasarkan `shiftId` (kolom itu ada di header, bukan
      * di `transaction_items`).
+     * BATCH D: exclude status VOID — modal barang dari transaksi yang
+     * dibatalkan tidak boleh ikut mengurangi Laba Kotor.
      */
     @Query(
         """
         SELECT COALESCE(SUM(ti.unitCost * ti.quantity), 0)
         FROM transaction_items ti
         INNER JOIN transactions t ON t.id = ti.transactionId
-        WHERE t.shiftId = :shiftId
+        WHERE t.shiftId = :shiftId AND t.status = 'COMPLETED'
         """
     )
     suspend fun totalCostForShift(shiftId: Long): Long

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.pos.offline.data.backup.BackupManager
 import com.pos.offline.data.backup.BackupOutcome
 import com.pos.offline.data.backup.RestoreOutcome
+import com.pos.offline.data.backup.ShareOutcome
 import com.pos.offline.data.local.entity.CashierEntity
 import com.pos.offline.data.repository.CashierRepository
 import com.pos.offline.data.repository.ShiftRepository
@@ -23,6 +24,9 @@ import kotlinx.coroutines.launch
 data class SettingsUiState(
     val isExporting: Boolean = false,
     val isImporting: Boolean = false,
+    // BARU: menyiapkan salinan database untuk dibagikan (share) — terpisah
+    // dari isExporting karena tidak melalui SAF sama sekali (Opsi A).
+    val isSharing: Boolean = false,
     // Uri file hasil ACTION_OPEN_DOCUMENT, menunggu konfirmasi user sebelum
     // benar-benar ditimpakan ke database aktif.
     val pendingRestoreUri: Uri? = null,
@@ -31,7 +35,7 @@ data class SettingsUiState(
     // `pendingRestoreUri` — bertahan saat rotasi layar.
     val showAddCashierDialog: Boolean = false
 ) {
-    val isBusy: Boolean get() = isExporting || isImporting
+    val isBusy: Boolean get() = isExporting || isImporting || isSharing
 }
 
 /**
@@ -44,6 +48,13 @@ data class SettingsUiState(
  * "apakah kasir ini masih punya shift berjalan" sebelum dinonaktifkan.
  * Sengaja tidak meng-observe apa pun dari sini (tidak perlu daftar shift di
  * layar ini), murni panggilan sekali-jalan di [setCashierActive].
+ *
+ * BARU: [shareDatabase] — menyiapkan salinan lalu langsung memicu share
+ * chooser Android. TIDAK butuh dependency baru (BackupManager tetap
+ * stateless), dan TIDAK melalui MainActivity seperti fitur share struk di
+ * ReportScreen — karena share Intent tidak butuh penanganan permission
+ * runtime apa pun (beda dari cetak Bluetooth), jadi cukup dipanggil
+ * langsung dari sini persis pola `restartApp(context)` yang sudah ada.
  *
  * `Context` TIDAK disimpan sebagai field (mencegah leak) — selalu diteruskan
  * per-pemanggilan dari Composable yang mengambilnya via `LocalContext.current`.
@@ -83,6 +94,31 @@ class SettingsViewModel(
                     _messages.emit("Gagal membuat cadangan: ${result.throwable.message}")
             }
             _uiState.value = _uiState.value.copy(isExporting = false)
+        }
+    }
+
+    /**
+     * BARU: siapkan salinan database ke cache lalu langsung buka chooser
+     * "Bagikan" Android (WhatsApp/Email/Drive/dsb) — tidak melalui SAF sama
+     * sekali (Opsi A: tombol independen dari Export).
+     *
+     * `context.startActivity` dipanggil di sini dari parameter yang
+     * diteruskan per-pemanggilan (bukan field tersimpan) — pola sama dengan
+     * `restartApp(context)` yang sudah dipanggil dari `confirmRestore`.
+     */
+    fun shareDatabase(context: Context) {
+        if (_uiState.value.isBusy) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSharing = true)
+            when (val result = BackupManager.prepareShareableCopy(context)) {
+                is ShareOutcome.Success -> {
+                    val intent = BackupManager.buildShareIntent(context, result.file)
+                    context.startActivity(intent)
+                }
+                is ShareOutcome.Error ->
+                    _messages.emit("Gagal menyiapkan cadangan untuk dibagikan: ${result.throwable.message}")
+            }
+            _uiState.value = _uiState.value.copy(isSharing = false)
         }
     }
 

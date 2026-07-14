@@ -9,6 +9,7 @@ import com.pos.offline.data.backup.BackupOutcome
 import com.pos.offline.data.backup.RestoreOutcome
 import com.pos.offline.data.local.entity.CashierEntity
 import com.pos.offline.data.repository.CashierRepository
+import com.pos.offline.data.repository.ShiftRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -39,11 +40,17 @@ data class SettingsUiState(
  * Kelola Kasir — sesuai rencana awal, factory-nya di ServiceLocator sudah
  * disiapkan sejak 3A jadi call-site di MainActivity tidak berubah.
  *
+ * BATCH B menambah [ShiftRepository] — dipakai HANYA untuk memvalidasi
+ * "apakah kasir ini masih punya shift berjalan" sebelum dinonaktifkan.
+ * Sengaja tidak meng-observe apa pun dari sini (tidak perlu daftar shift di
+ * layar ini), murni panggilan sekali-jalan di [setCashierActive].
+ *
  * `Context` TIDAK disimpan sebagai field (mencegah leak) — selalu diteruskan
  * per-pemanggilan dari Composable yang mengambilnya via `LocalContext.current`.
  */
 class SettingsViewModel(
-    private val cashierRepository: CashierRepository
+    private val cashierRepository: CashierRepository,
+    private val shiftRepository: ShiftRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -108,7 +115,7 @@ class SettingsViewModel(
     }
 
     // -------------------------------------------------------------------
-    // Kelola Kasir (Batch 3B)
+    // Kelola Kasir (Batch 3B + Batch B: validasi nonaktifkan)
     // -------------------------------------------------------------------
 
     fun openAddCashierDialog() {
@@ -133,9 +140,28 @@ class SettingsViewModel(
         _uiState.value = _uiState.value.copy(showAddCashierDialog = false)
     }
 
-    /** Soft-delete/restore — dipanggil dari Switch aktif/nonaktif di tiap baris. */
+    /**
+     * Soft-delete/restore — dipanggil dari Switch aktif/nonaktif di tiap baris.
+     *
+     * BATCH B: sebelum MENONAKTIFKAN (active = false), divalidasi dulu
+     * apakah kasir ini masih punya shift berjalan (`endedAt IS NULL`). Kalau
+     * ya, operasi DIBATALKAN dengan pesan penjelasan — mencegah shift
+     * "menggantung" tanpa rekonsiliasi kas fisik yang pernah dicatat.
+     * Switch di UI tidak akan bergeser karena state sumbernya (`cashier.active`
+     * dari StateFlow) memang tidak berubah.
+     *
+     * MENGAKTIFKAN kembali (active = true) TIDAK divalidasi — dianggap aman
+     * tanpa efek samping ke shift mana pun.
+     */
     fun setCashierActive(id: Long, active: Boolean) {
         viewModelScope.launch {
+            if (!active && shiftRepository.hasOpenShift(id)) {
+                _messages.emit(
+                    "Tidak bisa menonaktifkan kasir ini karena masih memiliki " +
+                        "shift yang berjalan. Tutup shift-nya terlebih dahulu."
+                )
+                return@launch
+            }
             cashierRepository.setActive(id, active)
         }
     }

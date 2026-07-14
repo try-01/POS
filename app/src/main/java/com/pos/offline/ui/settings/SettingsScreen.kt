@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PersonAdd
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -45,9 +46,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pos.offline.data.backup.BackupManager
@@ -132,30 +133,51 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                         Spacer(Modifier.width(6.dp))
                         Text(
                             "Cadangan tersimpan sebagai satu berkas (.db). Simpan " +
-                                "di tempat aman (mis. Google Drive/folder pribadi) — " +
-                                "aplikasi tidak menyinkronkan data secara otomatis.",
+                                "ke folder pilihan Anda, atau bagikan langsung ke " +
+                                "WhatsApp/Email/Drive — aplikasi tidak menyinkronkan " +
+                                "data secara otomatis.",
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
-                    Button(
-                        onClick = { exportLauncher.launch(BackupManager.suggestedBackupFileName()) },
-                        enabled = !uiState.isBusy,
-                        modifier = Modifier.fillMaxWidth()
+                    // BARU: 2 tombol sejajar — "Simpan" (SAF, seperti semula)
+                    // & "Bagikan" (share Intent langsung, Opsi A: independen
+                    // dari alur SAF, tidak perlu pilih folder dulu).
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        if (uiState.isExporting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(14.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Menyimpan…", fontSize = 13.sp)
-                        } else {
-                            Icon(Icons.Rounded.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Buat Cadangan (Export)", fontSize = 13.sp)
+                        Button(
+                            onClick = { exportLauncher.launch(BackupManager.suggestedBackupFileName()) },
+                            enabled = !uiState.isBusy,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            if (uiState.isExporting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            } else {
+                                Icon(Icons.Rounded.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Simpan", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = { viewModel.shareDatabase(context) },
+                            enabled = !uiState.isBusy,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            if (uiState.isSharing) {
+                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Rounded.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Bagikan", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
 
