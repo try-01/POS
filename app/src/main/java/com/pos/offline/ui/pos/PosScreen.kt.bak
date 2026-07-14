@@ -41,10 +41,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
@@ -67,6 +69,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -111,11 +114,21 @@ import com.pos.offline.ui.components.formatPercentTrim
 import com.pos.offline.ui.components.paymentMethodLabel
 import com.pos.offline.util.toRupiah
 import com.pos.offline.ui.components.ThousandsSeparatorTransformation
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Layar Kasir utama. Layout responsif: tablet/landscape → katalog + keranjang
  * berdampingan; ponsel → tumpuk vertikal dengan keranjang yang bisa
  * di-collapse/expand agar katalog dapat ruang maksimal saat tidak dibutuhkan.
+ *
+ * BATCH F (Fitur 1): [ShiftIndicatorBar] kini punya 2 jalur independen —
+ * tap utama tetap perilaku lama (mulai/tutup shift "yang ditunjuk aktif"),
+ * sedangkan ikon ⋯ baru membuka [ManageShiftsDialog] (daftar SEMUA shift
+ * terbuka + tombol "Mulai Shift Baru", terlepas status shift lain — mengisi
+ * celah yang ditemukan saat testing Batch B: sebelumnya tidak ada jalur UI
+ * untuk memulai shift baru selama ADA shift lain yang masih terbuka).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -139,8 +152,10 @@ fun PosScreen(
 
     val activeCashiers by viewModel.activeCashiers.collectAsStateWithLifecycle()
     val openShift by viewModel.openShift.collectAsStateWithLifecycle()
+    val openShifts by viewModel.openShifts.collectAsStateWithLifecycle()
     val showStartShiftDialog by viewModel.showStartShiftDialog.collectAsStateWithLifecycle()
     val showEndShiftDialog by viewModel.showEndShiftDialog.collectAsStateWithLifecycle()
+    val showShiftListDialog by viewModel.showShiftListDialog.collectAsStateWithLifecycle()
     val shiftSummary by viewModel.shiftSummary.collectAsStateWithLifecycle()
 
     val isCartEmpty by remember { derivedStateOf { cart.isEmpty() } }
@@ -186,9 +201,11 @@ fun PosScreen(
                 ShiftIndicatorBar(
                     openShift = openShift,
                     onClick = {
-                        if (openShift == null) viewModel.openStartShiftDialog()
-                        else viewModel.openEndShiftDialog()
-                    }
+                        val shift = openShift
+                        if (shift == null) viewModel.openStartShiftDialog()
+                        else viewModel.openEndShiftDialog(shift)
+                    },
+                    onManageClick = viewModel::openShiftListDialog
                 )
                 Spacer(Modifier.height(4.dp))
                 CompactSearchBar(
@@ -332,37 +349,215 @@ if (isWide) {
             )
         }
     }
+
+    // BATCH F: layar "Kelola Shift" — daftar SEMUA shift terbuka + tombol
+    // mulai shift baru, terlepas status shift lain (Opsi B yang disepakati:
+    // fitur ini yang akhirnya menyediakan jalur "mulai shift baru walau ada
+    // shift lain terbuka", bukan ditempel terpisah di ShiftIndicatorBar).
+    if (showShiftListDialog) {
+        ManageShiftsDialog(
+            shifts = openShifts,
+            activeShiftId = openShift?.id,
+            onSelectShift = { shift ->
+                viewModel.dismissShiftListDialog()
+                viewModel.openEndShiftDialog(shift)
+            },
+            onStartNewShift = {
+                viewModel.dismissShiftListDialog()
+                viewModel.openStartShiftDialog()
+            },
+            onDismiss = viewModel::dismissShiftListDialog
+        )
+    }
 }
 
 // ============================ INDIKATOR & DIALOG SHIFT ============================
 
 @Composable
-private fun ShiftIndicatorBar(openShift: ShiftEntity?, onClick: () -> Unit) {
+private fun ShiftIndicatorBar(
+    openShift: ShiftEntity?,
+    onClick: () -> Unit,
+    onManageClick: () -> Unit
+) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 3.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 4.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (openShift != null) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    )
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = if (openShift != null) "${openShift.cashierName} · Shift Aktif"
+                       else "Tanpa Shift · Ketuk untuk mulai",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                color = if (openShift != null) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+        }
+        // BARU (Batch F): entry point terpisah untuk melihat/mengelola
+        // SEMUA shift terbuka & memulai shift baru kapan pun — tap utama
+        // di atas TETAP hanya mengurus shift "yang ditunjuk aktif".
         Box(
             modifier = Modifier
-                .size(6.dp)
+                .size(26.dp)
                 .clip(CircleShape)
-                .background(
-                    if (openShift != null) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                .clickable(onClick = onManageClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Rounded.MoreHoriz,
+                contentDescription = "Kelola semua shift",
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+        }
+    }
+}
+
+private val shiftDateFmt = SimpleDateFormat("dd/MM HH:mm", Locale.forLanguageTag("id-ID"))
+
+/** "berjalan 2j 15m" / "berjalan 40m" — dihitung sekali saat dialog dibuka (tidak live-update). */
+private fun formatElapsedSince(startedAt: Long): String {
+    val diffMs = (System.currentTimeMillis() - startedAt).coerceAtLeast(0L)
+    val totalMinutes = diffMs / 60_000
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
+    return if (hours > 0) "berjalan ${hours}j ${minutes}m" else "berjalan ${minutes}m"
+}
+
+/**
+ * BATCH F: dialog "Kelola Shift" — daftar SEMUA shift terbuka (bisa lebih
+ * dari satu, sesuai keputusan arsitektur multi-shift-aktif dibolehkan) +
+ * tombol "Mulai Shift Baru" yang SELALU aktif terlepas status shift lain.
+ *
+ * Tap baris shift mana pun akan memicu [onSelectShift] — TIDAK ada
+ * pembatasan siapa boleh menutup shift siapa (Opsi A yang disepakati:
+ * sistem tanpa role/login sungguhan, "kasir" murni label atribusi).
+ */
+@Composable
+private fun ManageShiftsDialog(
+    shifts: List<ShiftEntity>,
+    activeShiftId: Long?,
+    onSelectShift: (ShiftEntity) -> Unit,
+    onStartNewShift: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Kelola Shift") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 380.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (shifts.isEmpty()) {
+                    Text(
+                        "Tidak ada shift yang sedang berjalan.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                } else {
+                    Text(
+                        "Ketuk shift untuk menutupnya. Semua kasir bisa menutup shift siapa pun.",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    shifts.forEach { shift ->
+                        OpenShiftRow(
+                            shift = shift,
+                            isDesignatedActive = shift.id == activeShiftId,
+                            onClick = { onSelectShift(shift) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onStartNewShift) {
+                Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Mulai Shift Baru")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Tutup") }
+        }
+    )
+}
+
+@Composable
+private fun OpenShiftRow(
+    shift: ShiftEntity,
+    isDesignatedActive: Boolean,
+    onClick: () -> Unit
+) {
+    val elapsed = remember(shift.id, shift.startedAt) { formatElapsedSince(shift.startedAt) }
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 12.dp,
+        contentPadding = PaddingValues(10.dp),
+        onClick = onClick
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        shift.cashierName,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (isDesignatedActive) {
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                "SAAT INI",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+                Text(
+                    "Mulai: ${shiftDateFmt.format(Date(shift.startedAt))} · $elapsed",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = if (openShift != null) "${openShift.cashierName} · Shift Aktif"
-                   else "Tanpa Shift · Ketuk untuk mulai",
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-            color = if (openShift != null) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-        )
+                Text(
+                    "Kas awal: ${shift.startingCash.toRupiah()}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+            Icon(
+                Icons.Rounded.ChevronRight,
+                contentDescription = "Tutup shift ini",
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+            )
+        }
     }
 }
 

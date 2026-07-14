@@ -683,6 +683,18 @@ private fun EndShiftDialog(
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Kas Awal (Modal)", summary.startingCash.toRupiah())
                 SummaryLine("Penjualan Tunai", summary.cashRevenue.toRupiah())
+                // BATCH E4: baris "Refund Tunai" ditampilkan EKSPLISIT (bukan
+                // cuma tersembunyi di dalam kalkulasi expectedCashInDrawer)
+                // untuk transparansi ke kasir SEBELUM shift ditutup — konsisten
+                // dengan penambahan yang sama di ClosedShiftDetailDialog
+                // (ReportScreen.kt) untuk shift yang sudah ditutup.
+                if (summary.cashRefunds > 0L) {
+                    SummaryLine(
+                        "Refund Tunai",
+                        "- ${summary.cashRefunds.toRupiah()}",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Estimasi di Laci", expected.toRupiah(), emphasize = true)
 

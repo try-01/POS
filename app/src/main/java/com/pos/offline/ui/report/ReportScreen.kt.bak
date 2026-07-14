@@ -2,6 +2,7 @@ package com.pos.offline.ui.report
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,22 +24,32 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AttachMoney
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.Print
+import androidx.compose.material.icons.rounded.QrCode
+import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -66,14 +77,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pos.offline.data.local.entity.PaymentMethod
+import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.local.entity.TransactionEntity
+import com.pos.offline.data.local.entity.hasReturn
 import com.pos.offline.data.local.entity.isVoid
 import com.pos.offline.data.repository.CheckoutResult
+import com.pos.offline.data.repository.ReturnItemInput
 import com.pos.offline.ui.components.GlassCard
+import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 import com.pos.offline.ui.components.discountRowLabel
 import com.pos.offline.ui.components.paymentMethodLabel
 import com.pos.offline.util.toRupiah
@@ -95,14 +113,28 @@ import java.time.Instant
  * Snackbar) — `AlertDialog` adalah window Android terpisah yang menutupi
  * `SnackbarHost` milik `Scaffold` (window utama).
  *
- * BATCH BARU: dialog detail kini juga punya 3 aksi cetak-ulang (Cetak
- * Bluetooth / Ekspor PDF / Bagikan) — reuse [onPrintBluetooth]/[onExportPdf]/
- * [onShare] yang di-inject dari [com.pos.offline.MainActivity], PERSIS pola
- * yang sudah terbukti di `PosScreen.SuccessDialog` (feedback via Toast,
- * BUKAN Snackbar — Toast adalah window sistem terpisah yang tampil di atas
- * AlertDialog, terbukti sudah jalan normal di alur checkout). Diizinkan
- * untuk transaksi VOID sekalipun (keputusan final: berguna untuk bukti
- * pembatalan/dokumentasi internal).
+ * BATCH (cetak ulang): dialog detail transaksi punya 3 aksi cetak-ulang
+ * (Cetak Bluetooth / Ekspor PDF / Bagikan) — reuse
+ * [onPrintBluetooth]/[onExportPdf]/[onShare] yang di-inject dari
+ * [com.pos.offline.MainActivity], feedback via Toast.
+ *
+ * BATCH G (Fitur 2): bagian ATAS layar (navigator tanggal, ringkasan
+ * pendapatan, kurva tren) SELALU tampil terlepas tab aktif. Bagian BAWAH
+ * berganti lewat tab "Transaksi"/"Shift":
+ *  - Tab "Transaksi": daftar riwayat transaksi (perilaku lama, tidak berubah).
+ *  - Tab "Shift": breakdown Tunai/QRIS untuk tanggal terpilih + "Riwayat
+ *    Tutup Shift" (shift yang ditutup pada tanggal itu) — klik baris shift
+ *    untuk lihat detail read-only (mirip dialog Tutup Shift di PosScreen,
+ *    tapi angkanya sudah final/tersimpan, bukan input baru).
+ *
+ * BATCH E3: [TransactionDetailDialog] kini punya badge "SUDAH DIRETUR" +
+ * tombol "Retur Item" (berdampingan dengan "Batalkan Transaksi", dipindah
+ * dari slot `dismissButton` ke dalam konten karena `AlertDialog` cuma
+ * punya 2 slot tombol bawaan). Dialog baru [ReturnItemDialog] menampilkan
+ * checklist item + stepper qty + checkbox "Kembalikan ke stok?" per baris +
+ * nominal pengembalian (sugesti bisa di-override manual) + metode refund.
+ * Hanya SATU dialog yang tampil bergantian (detail / konfirmasi Void /
+ * Retur) — pola sudah ada sejak Batch D untuk Void, sekarang diperluas.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -116,13 +148,19 @@ fun ReportScreen(
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     val isToday by viewModel.isToday.collectAsStateWithLifecycle()
     val selectedTransaction by viewModel.selectedTransaction.collectAsStateWithLifecycle()
+    val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
+    val closedShifts by viewModel.closedShifts.collectAsStateWithLifecycle()
+    val selectedShiftDetail by viewModel.selectedShiftDetail.collectAsStateWithLifecycle()
+    val showReturnDialog by viewModel.showReturnDialog.collectAsStateWithLifecycle()
+    val returnMessage by viewModel.returnMessage.collectAsStateWithLifecycle()
+    val returnSubmitting by viewModel.returnSubmitting.collectAsStateWithLifecycle()
     var pendingVoidConfirm by remember { mutableStateOf(false) }
     var voidBanner by remember { mutableStateOf<ReportMessage?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Routing pesan Void: kalau dialog detail SEDANG TERBUKA saat pesan tiba,
-    // tampilkan sebagai banner di dalam dialog (window-nya sendiri). Kalau
-    // dialog sudah tertutup, pakai Snackbar biasa di window utama.
+    // Routing pesan Void/Retur-sukses: kalau dialog detail SEDANG TERBUKA
+    // saat pesan tiba, tampilkan sebagai banner di dalam dialog (window-nya
+    // sendiri). Kalau dialog sudah tertutup, pakai Snackbar biasa di window utama.
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg ->
             if (selectedTransaction != null) {
@@ -183,7 +221,7 @@ fun ReportScreen(
                 )
             }
 
-            // ---------- Ringkasan ----------
+            // ---------- Ringkasan (SELALU tampil, terlepas tab) ----------
             item(key = "summary") { SummarySection(report = report) }
 
             if (report.transactionCount > 0) {
@@ -199,42 +237,87 @@ fun ReportScreen(
                 }
             }
 
-            // ---------- Daftar transaksi ----------
-            item(key = "list_header") {
-                // BATCH D: jumlah di judul = SEMUA baris (termasuk VOID) —
-                // literal jumlah yang tampil di daftar di bawahnya. Berbeda
-                // dari StatCard "Jumlah Transaksi" yang hanya COMPLETED.
-                Text(
-                    "Daftar Transaksi (${report.transactions.size})",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
+            // ---------- BATCH G: Tab switcher (bagian bawah berganti) ----------
+            item(key = "tab_switcher") {
+                ReportTabSwitcher(selected = selectedTab, onSelect = viewModel::selectTab)
             }
 
-            if (report.transactions.isEmpty()) {
-                item(key = "empty") { EmptyReport() }
-            } else {
-                items(
-                    items = report.transactions,
-                    key = { it.id },
-                    contentType = { "transaction" }
-                ) { tx ->
-                    TransactionRow(
-                        tx = tx,
-                        onClick = { viewModel.openTransactionDetail(tx.id) }
-                    )
+            when (selectedTab) {
+                ReportTab.TRANSACTIONS -> {
+                    item(key = "list_header") {
+                        // BATCH D: jumlah di judul = SEMUA baris (termasuk VOID) —
+                        // literal jumlah yang tampil di daftar di bawahnya.
+                        Text(
+                            "Daftar Transaksi (${report.transactions.size})",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+
+                    if (report.transactions.isEmpty()) {
+                        item(key = "empty") { EmptyReport() }
+                    } else {
+                        items(
+                            items = report.transactions,
+                            key = { it.id },
+                            contentType = { "transaction" }
+                        ) { tx ->
+                            TransactionRow(
+                                tx = tx,
+                                onClick = { viewModel.openTransactionDetail(tx.id) }
+                            )
+                        }
+                    }
+                }
+
+                ReportTab.SHIFTS -> {
+                    // BATCH G: breakdown Tunai/QRIS untuk tanggal terpilih.
+                    item(key = "payment_breakdown") {
+                        PaymentBreakdownSection(
+                            cashRevenue = report.cashRevenue,
+                            qrisRevenue = report.qrisRevenue
+                        )
+                    }
+
+                    item(key = "closed_shifts_header") {
+                        Text(
+                            "Riwayat Tutup Shift (${closedShifts.size})",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+
+                    if (closedShifts.isEmpty()) {
+                        item(key = "empty_shifts") { EmptyClosedShifts() }
+                    } else {
+                        items(
+                            items = closedShifts,
+                            key = { it.id },
+                            contentType = { "closed_shift" }
+                        ) { shift ->
+                            ClosedShiftRow(
+                                shift = shift,
+                                onClick = { viewModel.openShiftDetail(shift) }
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 
-    if (selectedTransaction != null && !pendingVoidConfirm) {
+    // BATCH E3: hanya SATU dialog yang tampil pada satu waktu — detail
+    // transaksi disembunyikan sementara kalau konfirmasi Void ATAU dialog
+    // Retur sedang terbuka (pola sama dgn `pendingVoidConfirm` sejak Batch D).
+    if (selectedTransaction != null && !pendingVoidConfirm && !showReturnDialog) {
         val current = selectedTransaction!!
         TransactionDetailDialog(
             result = current,
             banner = voidBanner,
             onVoidClick = { pendingVoidConfirm = true },
+            onReturnClick = { viewModel.openReturnDialog() },
             onPrint = { onPrintBluetooth(current) },
             onExport = { onExportPdf(current) },
             onShare = { onShare(current) },
@@ -254,6 +337,26 @@ fun ReportScreen(
                 pendingVoidConfirm = false
             },
             onDismiss = { pendingVoidConfirm = false }
+        )
+    }
+
+    if (showReturnDialog && selectedTransaction != null) {
+        ReturnItemDialog(
+            result = selectedTransaction!!,
+            submitting = returnSubmitting,
+            message = returnMessage,
+            onDismiss = viewModel::closeReturnDialog,
+            onSubmit = { items, refundAmount, refundMethod, note ->
+                viewModel.submitReturn(items, refundAmount, refundMethod, note)
+            }
+        )
+    }
+
+    // BATCH G: dialog detail shift historis (read-only).
+    selectedShiftDetail?.let { detail ->
+        ClosedShiftDetailDialog(
+            detail = detail,
+            onDismiss = viewModel::closeShiftDetail
         )
     }
 }
@@ -662,6 +765,88 @@ private fun RevenueTrendChart(
     }
 }
 
+// ============================ TAB SWITCHER (BATCH G) ============================
+
+@Composable
+private fun ReportTabSwitcher(
+    selected: ReportTab,
+    onSelect: (ReportTab) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        ReportTabChip(
+            label = "Transaksi",
+            selected = selected == ReportTab.TRANSACTIONS,
+            onClick = { onSelect(ReportTab.TRANSACTIONS) },
+            modifier = Modifier.weight(1f)
+        )
+        ReportTabChip(
+            label = "Shift",
+            selected = selected == ReportTab.SHIFTS,
+            onClick = { onSelect(ReportTab.SHIFTS) },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun ReportTabChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+// ============================ BREAKDOWN METODE BAYAR (BATCH G) ============================
+
+@Composable
+private fun PaymentBreakdownSection(cashRevenue: Long, qrisRevenue: Long) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            "Breakdown Metode Bayar",
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+            fontWeight = FontWeight.SemiBold
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            StatCard(
+                modifier = Modifier.weight(1f),
+                label = "Tunai",
+                value = cashRevenue.toRupiah(),
+                icon = Icons.Rounded.AttachMoney
+            )
+            StatCard(
+                modifier = Modifier.weight(1f),
+                label = "QRIS",
+                value = qrisRevenue.toRupiah(),
+                icon = Icons.Rounded.QrCode
+            )
+        }
+    }
+}
+
 // ============================ BARIS TRANSAKSI ============================
 
 @Composable
@@ -738,16 +923,25 @@ private fun VoidBadge() {
     }
 }
 
-// ============================ AKSI CETAK ULANG (BARU) ============================
+/** BATCH E3: Badge kecil "SUDAH DIRETUR" — mirip [VoidBadge], warna beda (tertiary). */
+@Composable
+private fun ReturnedBadge() {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
+    ) {
+        Text(
+            "SUDAH DIRETUR",
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+            color = MaterialTheme.colorScheme.tertiary,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+        )
+    }
+}
 
-/**
- * Row 3 ikon kecil sejajar: Cetak Bluetooth / Ekspor PDF / Bagikan.
- * Diizinkan untuk transaksi VOID sekalipun (keputusan final — berguna
- * sebagai bukti pembatalan/dokumentasi internal). Hasil aksi (sukses/gagal)
- * dilaporkan via Toast oleh pemanggil di MainActivity — pola identik dengan
- * `PosScreen.SuccessDialog`, TIDAK memakai banner/Snackbar (Toast adalah
- * window sistem yang tampil aman di atas dialog ini).
- */
+// ============================ AKSI CETAK ULANG ============================
+
 @Composable
 private fun ReceiptActionsRow(
     onPrint: () -> Unit,
@@ -812,22 +1006,19 @@ private fun ReceiptActionButton(
 // ============================ DETAIL TRANSAKSI ============================
 
 /**
- * Dialog rincian transaksi — read-only. Menampilkan SELENGKAP mungkin:
- * nomor struk, tanggal+jam presisi detik, daftar item, subtotal, diskon,
- * pajak, total, bayar, kembalian, metode bayar, kasir, nomor shift.
- *
- * BATCH D: menampilkan badge & jejak waktu VOID jika transaksi sudah
- * dibatalkan; tombol "Batalkan Transaksi" (dismissButton slot) hanya
- * muncul untuk transaksi yang masih COMPLETED. [banner] = pesan hasil Void.
- *
- * BATCH BARU: [onPrint]/[onExport]/[onShare] — 3 aksi cetak-ulang, SELALU
- * tersedia terlepas status VOID/COMPLETED.
+ * BATCH E3: [onReturnClick] & tombol "Batalkan Transaksi" kini ditaruh
+ * berdampingan di dalam KONTEN dialog (bukan slot `dismissButton` bawaan
+ * `AlertDialog`) — karena `AlertDialog` cuma punya 2 slot tombol
+ * (`confirmButton`/`dismissButton`), sementara kita butuh sampai 3 aksi:
+ * "Tutup" + "Retur Item" (kondisional) + "Batalkan Transaksi" (kondisional).
+ * `confirmButton` sekarang murni "Tutup".
  */
 @Composable
 private fun TransactionDetailDialog(
     result: CheckoutResult,
     banner: ReportMessage?,
     onVoidClick: () -> Unit,
+    onReturnClick: () -> Unit,
     onPrint: () -> Unit,
     onExport: () -> Unit,
     onShare: () -> Unit,
@@ -835,6 +1026,7 @@ private fun TransactionDetailDialog(
 ) {
     val tx = result.transaction
     val isVoid = tx.isVoid
+    val hasReturn = tx.hasReturn
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -874,6 +1066,10 @@ private fun TransactionDetailDialog(
                         Spacer(Modifier.width(8.dp))
                         VoidBadge()
                     }
+                    if (hasReturn) {
+                        Spacer(Modifier.width(8.dp))
+                        ReturnedBadge()
+                    }
                 }
                 Text(
                     ReportViewModel.dateTimeFmt.format(Instant.ofEpochMilli(tx.createdAt)),
@@ -890,6 +1086,26 @@ private fun TransactionDetailDialog(
 
                 Spacer(Modifier.height(8.dp))
                 ReceiptActionsRow(onPrint = onPrint, onExport = onExport, onShare = onShare)
+
+                // BATCH E3: aksi Retur & Void berdampingan — Retur hanya
+                // muncul jika belum pernah diretur; Void tetap mengikuti
+                // aturan lama (tidak terpengaruh status retur).
+                if (!isVoid) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (!hasReturn) {
+                            TextButton(onClick = onReturnClick, modifier = Modifier.weight(1f)) {
+                                Text("Retur Item", color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        TextButton(onClick = onVoidClick, modifier = Modifier.weight(1f)) {
+                            Text("Batalkan Transaksi", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
 
                 Spacer(Modifier.height(10.dp))
                 Text("Item", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
@@ -949,21 +1165,10 @@ private fun TransactionDetailDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("Tutup") }
-        },
-        dismissButton = {
-            if (!isVoid) {
-                TextButton(onClick = onVoidClick) {
-                    Text("Batalkan Transaksi", color = MaterialTheme.colorScheme.error)
-                }
-            }
         }
     )
 }
 
-/**
- * BATCH D: dialog konfirmasi 2-langkah sebelum Void benar-benar dieksekusi
- * — mencegah pembatalan tidak sengaja (aksi ini tidak bisa diurungkan).
- */
 @Composable
 private fun VoidConfirmDialog(
     invoiceId: String,
@@ -988,6 +1193,578 @@ private fun VoidConfirmDialog(
             TextButton(onClick = onDismiss) { Text("Tidak") }
         }
     )
+}
+
+// ============================ DIALOG RETUR ITEM (BATCH E3) ============================
+
+/**
+ * State UI per baris item di dialog Retur — MURNI di memori Composable,
+ * lingkup hidupnya persis sama dengan dialog terbuka (dibuat ulang dari
+ * [com.pos.offline.data.local.entity.TransactionItemEntity] asli setiap kali
+ * dialog dibuka, dibuang saat ditutup) — konsisten dengan pola
+ * `pendingVoidConfirm`/`QuantityEditDialog` yang sudah ada di file ini.
+ *
+ * [restocked] default `true` HANYA jika [productId] tersedia — item dari
+ * data transaksi lama (pra-migrasi, `productId == null`) otomatis `false`
+ * & checkbox-nya dinonaktifkan di UI, karena efek stok memang selalu
+ * dilewati aman untuk kasus ini (sama seperti reversal Void).
+ */
+private data class ReturnRowState(
+    val transactionItemId: Long,
+    val productId: Long?,
+    val productName: String,
+    val unitPrice: Long,
+    val maxQuantity: Int,
+    val included: Boolean = false,
+    val quantity: Int = maxQuantity,
+    val restocked: Boolean = productId != null
+)
+
+@Composable
+private fun ReturnItemDialog(
+    result: CheckoutResult,
+    submitting: Boolean,
+    message: ReportMessage?,
+    onDismiss: () -> Unit,
+    onSubmit: (items: List<ReturnItemInput>, refundAmount: Long, refundMethod: PaymentMethod, note: String) -> Unit
+) {
+    val tx = result.transaction
+
+    var rows by remember(tx.id) {
+        mutableStateOf(
+            result.items.map { item ->
+                ReturnRowState(
+                    transactionItemId = item.id,
+                    productId = item.productId,
+                    productName = item.productName,
+                    unitPrice = item.unitPrice,
+                    maxQuantity = item.quantity
+                )
+            }
+        )
+    }
+
+    // Sugesti nominal = Σ (harga asli × qty diretur), TANPA prorata diskon/pajak
+    // (keputusan arsitektur final). Dihitung ulang tiap recomposition — murah
+    // karena jumlah baris kecil, menghindari jebakan `remember`/`derivedStateOf`
+    // tanpa key yang bisa "nyangkut" ke closure transaksi sebelumnya.
+    val suggestedRefund = rows.filter { it.included }.sumOf { it.unitPrice * it.quantity.toLong() }
+
+    var refundAmountEdited by remember(tx.id) { mutableStateOf(false) }
+    var refundAmountText by remember(tx.id) { mutableStateOf("") }
+
+    // "Suggest-until-override": nominal ikut sugesti otomatis SELAMA pengguna
+    // belum pernah mengetik manual di field-nya sendiri.
+    LaunchedEffect(suggestedRefund) {
+        if (!refundAmountEdited) {
+            refundAmountText = if (suggestedRefund <= 0L) "" else suggestedRefund.toString()
+        }
+    }
+
+    // Default metode refund ikut metode transaksi asal; fallback ke Tunai
+    // untuk TRANSFER/OTHER (edge-case data lama) karena dropdown cuma 2 opsi.
+    var refundMethod by remember(tx.id) {
+        mutableStateOf(
+            if (tx.paymentMethod == PaymentMethod.QRIS.name) PaymentMethod.QRIS else PaymentMethod.CASH
+        )
+    }
+    var note by remember(tx.id) { mutableStateOf("") }
+
+    val includedCount = rows.count { it.included }
+
+    AlertDialog(
+        onDismissRequest = { if (!submitting) onDismiss() },
+        title = { Text("Retur Item") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                message?.let { msg ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (msg.isError) MaterialTheme.colorScheme.errorContainer
+                        else MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            msg.text,
+                            modifier = Modifier.padding(10.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (msg.isError) MaterialTheme.colorScheme.onErrorContainer
+                            else MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
+
+                Text(
+                    "Transaksi ${tx.id}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Spacer(Modifier.height(6.dp))
+
+                Text(
+                    "Pilih item yang dikembalikan pelanggan:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                Spacer(Modifier.height(4.dp))
+
+                rows.forEachIndexed { index, row ->
+                    ReturnItemRow(
+                        row = row,
+                        onToggleIncluded = { checked ->
+                            rows = rows.toMutableList().also {
+                                it[index] = row.copy(included = checked, quantity = row.maxQuantity)
+                            }
+                        },
+                        onQuantityChange = { qty ->
+                            rows = rows.toMutableList().also {
+                                it[index] = row.copy(quantity = qty.coerceIn(1, row.maxQuantity))
+                            }
+                        },
+                        onRestockedChange = { checked ->
+                            rows = rows.toMutableList().also {
+                                it[index] = row.copy(restocked = checked)
+                            }
+                        }
+                    )
+                    HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                }
+
+                Spacer(Modifier.height(8.dp))
+                Text("Metode Pengembalian", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                RefundMethodToggle(selected = refundMethod, onSelect = { refundMethod = it })
+
+                Spacer(Modifier.height(10.dp))
+                Text("Nominal Pengembalian", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                RefundAmountField(
+                    value = refundAmountText,
+                    onValueChange = { digits ->
+                        refundAmountEdited = true
+                        refundAmountText = digits
+                    }
+                )
+                if (includedCount > 0) {
+                    Text(
+                        "Sugesti: ${suggestedRefund.toRupiah()} (tanpa prorata diskon/pajak)",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                    )
+                }
+
+                Spacer(Modifier.height(10.dp))
+                Text("Catatan (opsional)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Mis. barang cacat produksi") },
+                    minLines = 2,
+                    textStyle = MaterialTheme.typography.bodySmall
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !submitting && includedCount > 0,
+                onClick = {
+                    val items = rows.filter { it.included }.map { row ->
+                        ReturnItemInput(
+                            transactionItemId = row.transactionItemId,
+                            productId = row.productId,
+                            productName = row.productName,
+                            unitPrice = row.unitPrice,
+                            quantityReturned = row.quantity,
+                            restocked = row.restocked && row.productId != null
+                        )
+                    }
+                    onSubmit(items, refundAmountText.toLongOrNull() ?: 0L, refundMethod, note.trim())
+                }
+            ) {
+                if (submitting) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Proses Retur")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(enabled = !submitting, onClick = onDismiss) { Text("Batal") }
+        }
+    )
+}
+
+@Composable
+private fun ReturnItemRow(
+    row: ReturnRowState,
+    onToggleIncluded: (Boolean) -> Unit,
+    onQuantityChange: (Int) -> Unit,
+    onRestockedChange: (Boolean) -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = row.included, onCheckedChange = onToggleIncluded)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    row.productName,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "${row.unitPrice.toRupiah()} · maks ${row.maxQuantity}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+        }
+        if (row.included) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 40.dp, top = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                MiniStepper(
+                    qty = row.quantity,
+                    canDecrease = row.quantity > 1,
+                    canIncrease = row.quantity < row.maxQuantity,
+                    onDecrease = { onQuantityChange(row.quantity - 1) },
+                    onIncrease = { onQuantityChange(row.quantity + 1) }
+                )
+                Spacer(Modifier.width(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = if (row.productId != null) {
+                        Modifier.clickable { onRestockedChange(!row.restocked) }
+                    } else {
+                        Modifier
+                    }
+                ) {
+                    Checkbox(
+                        checked = row.restocked && row.productId != null,
+                        onCheckedChange = if (row.productId != null) onRestockedChange else null,
+                        enabled = row.productId != null
+                    )
+                    Text(
+                        "Kembalikan ke stok?",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(
+                            alpha = if (row.productId != null) 0.8f else 0.4f
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniStepper(
+    qty: Int,
+    canDecrease: Boolean,
+    canIncrease: Boolean,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (canDecrease) 1f else 0.4f))
+                .then(if (canDecrease) Modifier.clickable(onClick = onDecrease) else Modifier),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Rounded.Remove, contentDescription = "Kurangi jumlah", modifier = Modifier.size(14.dp))
+        }
+        Text(
+            "$qty",
+            modifier = Modifier.width(28.dp),
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold
+        )
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (canIncrease) 1f else 0.4f))
+                .then(if (canIncrease) Modifier.clickable(onClick = onIncrease) else Modifier),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Rounded.Add, contentDescription = "Tambah jumlah", modifier = Modifier.size(14.dp))
+        }
+    }
+}
+
+@Composable
+private fun RefundMethodToggle(selected: PaymentMethod, onSelect: (PaymentMethod) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        listOf(PaymentMethod.CASH to "Tunai", PaymentMethod.QRIS to "QRIS").forEach { (method, label) ->
+            val isSelected = selected == method
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                    .clickable { onSelect(method) }
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RefundAmountField(
+    value: String,
+    onValueChange: (String) -> Unit
+) {
+    BasicTextField(
+        value = value,
+        onValueChange = { input -> onValueChange(input.filter { it.isDigit() }) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        singleLine = true,
+        visualTransformation = ThousandsSeparatorTransformation,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold
+        ),
+        modifier = Modifier.fillMaxWidth().height(44.dp),
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Rp ",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) {
+                        Text(
+                            "0",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        }
+    )
+}
+
+// ============================ RIWAYAT TUTUP SHIFT (BATCH G) ============================
+
+@Composable
+private fun ClosedShiftRow(shift: ShiftEntity, onClick: () -> Unit) {
+    val diff = shift.cashDifference
+    val diffColor = when {
+        diff == null -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+        diff < 0L -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.primary
+    }
+    val diffLabel = when {
+        diff == null -> "-"
+        diff == 0L -> "Pas"
+        diff < 0L -> "-${(-diff).toRupiah()}"
+        else -> "+${diff.toRupiah()}"
+    }
+
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 12.dp,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+        onClick = onClick
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                shift.endedAt?.let { ReportViewModel.timeFmt.format(Instant.ofEpochMilli(it)) } ?: "-",
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    shift.cashierName,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "Kas awal ${shift.startingCash.toRupiah()}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    diffLabel,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                    fontWeight = FontWeight.Bold,
+                    color = diffColor
+                )
+                Text(
+                    "Selisih",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+            }
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                Icons.Rounded.ChevronRight,
+                contentDescription = "Lihat detail shift",
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+            )
+        }
+    }
+}
+
+/**
+ * Dialog detail shift historis — READ-ONLY. Layout ini MENIRU persis
+ * struktur `EndShiftDialog` di PosScreen (judul blok, urutan baris, logika
+ * warna Selisih) — tidak bisa reuse composable-nya secara literal karena
+ * `private` di file berbeda, jadi ditulis ulang sebagai composable baru
+ * dengan gaya identik, TANPA input (mengambil nilai yang SUDAH TERSIMPAN
+ * dari saat shift itu ditutup dulu).
+ */
+@Composable
+private fun ClosedShiftDetailDialog(
+    detail: ClosedShiftDetail,
+    onDismiss: () -> Unit
+) {
+    val shift = detail.shift
+    val summary = detail.summary
+    val expected = shift.endingCashExpected ?: summary.expectedCashInDrawer
+    val actual = shift.endingCashActual ?: 0L
+    val difference = shift.cashDifference ?: (actual - expected)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Detail Tutup Shift") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(shift.cashierName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "Mulai: ${ReportViewModel.dateTimeFmt.format(Instant.ofEpochMilli(shift.startedAt))}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                shift.endedAt?.let {
+                    Text(
+                        "Ditutup: ${ReportViewModel.dateTimeFmt.format(Instant.ofEpochMilli(it))}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+
+                Spacer(Modifier.height(10.dp))
+                Text("📋 Ringkasan Shift", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                SummaryLine("Penjualan Tunai", summary.cashRevenue.toRupiah())
+                SummaryLine("Penjualan QRIS", summary.qrisRevenue.toRupiah())
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                SummaryLine("Total Pendapatan", summary.totalRevenue.toRupiah(), emphasize = true)
+                SummaryLine("Laba Kotor", summary.grossProfit.toRupiah(), color = MaterialTheme.colorScheme.primary)
+
+                Spacer(Modifier.height(14.dp))
+                Text("💵 Rekonsiliasi Laci", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                SummaryLine("Kas Awal (Modal)", summary.startingCash.toRupiah())
+                SummaryLine("Penjualan Tunai", summary.cashRevenue.toRupiah())
+                if (summary.cashRefunds > 0L) {
+                    SummaryLine(
+                        "Refund Tunai",
+                        "- ${summary.cashRefunds.toRupiah()}",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                SummaryLine("Estimasi di Laci", expected.toRupiah(), emphasize = true)
+                SummaryLine("Kas Fisik (Aktual)", actual.toRupiah())
+
+                Spacer(Modifier.height(6.dp))
+                val diffAbs = kotlin.math.abs(difference)
+                val diffColor = if (difference < 0L) MaterialTheme.colorScheme.error
+                                 else MaterialTheme.colorScheme.primary
+                val diffLabel = when {
+                    difference == 0L -> "Pas ✓"
+                    difference < 0L -> "-${diffAbs.toRupiah()} (Uang Kurang)"
+                    else -> "+${diffAbs.toRupiah()} (Uang Lebih)"
+                }
+                SummaryLine("Selisih", diffLabel, emphasize = true, color = diffColor)
+
+                if (shift.note.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text("Catatan", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        shift.note,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Tutup") }
+        }
+    )
+}
+
+@Composable
+private fun EmptyClosedShifts() {
+    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                Icons.Rounded.History,
+                contentDescription = null,
+                modifier = Modifier.size(40.dp),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Belum ada shift yang ditutup pada hari ini",
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        }
+    }
 }
 
 @Composable

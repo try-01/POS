@@ -8,6 +8,7 @@ import com.pos.offline.data.local.PosDatabase
 import com.pos.offline.data.repository.CartRepository
 import com.pos.offline.data.repository.CashierRepository
 import com.pos.offline.data.repository.ProductRepository
+import com.pos.offline.data.repository.ReturnRepository
 import com.pos.offline.data.repository.ShiftRepository
 import com.pos.offline.data.repository.TransactionRepository
 import com.pos.offline.ui.inventory.InventoryViewModel
@@ -39,19 +40,19 @@ object ServiceLocator {
     private val shiftRepository: ShiftRepository by lazy {
         ShiftRepository(db.shiftDao())
     }
-
-    // BATCH D: TransactionRepository kini butuh ShiftRepository untuk
-    // memvalidasi status shift (terbuka/tertutup) sebelum mengizinkan Void.
     private val transactionRepository: TransactionRepository by lazy {
         TransactionRepository(db, db.transactionDao(), db.cartDao(), db.productDao(), shiftRepository)
+    }
+
+    // Belum di-wire ke ViewModel manapun — akan dipakai di Batch E3 saat dialog
+    // Retur (di PosScreen/ReportScreen) benar-benar butuh dependency ini.
+    private val returnRepository: ReturnRepository by lazy {
+        ReturnRepository(db, db.returnDao(), db.transactionDao(), db.productDao())
     }
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
     }
-
-    // === BATCH 3C: PosViewModel kini butuh CashierRepository & ShiftRepository
-    // untuk fitur Shift. Call-site di MainActivity TIDAK berubah. ===
     fun posViewModelFactory(): ViewModelProvider.Factory = PosViewModelFactory(
         productRepository,
         cartRepository,
@@ -62,16 +63,8 @@ object ServiceLocator {
 
     fun inventoryViewModelFactory(): ViewModelProvider.Factory =
         InventoryViewModelFactory(productRepository)
-
-    // === BATCH G: ReportViewModel kini butuh ShiftRepository untuk
-    // "Riwayat Tutup Shift" (Fitur 2). Call-site di MainActivity TIDAK
-    // berubah (masih 0 argumen ke factory). ===
     fun reportViewModelFactory(): ViewModelProvider.Factory =
         ReportViewModelFactory(transactionRepository, shiftRepository)
-
-    // === BATCH B: SettingsViewModel kini butuh ShiftRepository untuk
-    // validasi "kasir masih punya shift berjalan?" sebelum dinonaktifkan.
-    // Call-site di MainActivity TIDAK berubah (masih 0 argumen). ===
     fun settingsViewModelFactory(): ViewModelProvider.Factory =
         SettingsViewModelFactory(cashierRepository, shiftRepository)
 
@@ -79,6 +72,7 @@ object ServiceLocator {
     fun productRepository(): ProductRepository = productRepository
     fun cashierRepository(): CashierRepository = cashierRepository
     fun shiftRepository(): ShiftRepository = shiftRepository
+    fun returnRepository(): ReturnRepository = returnRepository
 }
 
 class PosViewModelFactory(

@@ -3,14 +3,20 @@ package com.pos.offline.ui.report
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pos.offline.data.local.entity.PaymentMethod
+import com.pos.offline.data.local.entity.ReturnEntity
 import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.isVoid
 import com.pos.offline.data.repository.CheckoutResult
+import com.pos.offline.data.repository.ReturnDetail
+import com.pos.offline.data.repository.ReturnItemInput
+import com.pos.offline.data.repository.ReturnOutcome
+import com.pos.offline.data.repository.ReturnRepository
 import com.pos.offline.data.repository.ShiftRepository
 import com.pos.offline.data.repository.ShiftSummary
 import com.pos.offline.data.repository.TransactionRepository
 import com.pos.offline.data.repository.VoidOutcome
+import com.pos.offline.util.toRupiah
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,7 +84,7 @@ data class DailyReport(
 }
 
 /**
- * Pesan hasil aksi (mis. Void) untuk ditampilkan ke pengguna.
+ * Pesan hasil aksi (mis. Void, Retur) untuk ditampilkan ke pengguna.
  *
  * BATCH D (fix): dulunya [String] polos dikirim lewat SharedFlow lalu
  * SELALU ditampilkan via Snackbar Scaffold — tapi ternyata Snackbar itu
@@ -86,6 +92,12 @@ data class DailyReport(
  * TERPISAH, render di atas segalanya, termasuk Snackbar di window utama).
  * Sekarang [isError] disertakan supaya UI (baik banner inline di dalam
  * dialog, maupun Snackbar biasa) bisa memberi warna yang sesuai.
+ *
+ * BATCH E3: dipakai ulang untuk pesan SUKSES Retur (lewat [messages], sama
+ * seperti Void) — TAPI pesan ERROR Retur (validasi gagal saat dialog Retur
+ * masih terbuka) sengaja PISAH lewat [returnMessage], bukan [messages],
+ * supaya tidak "tertelan" oleh dialog Retur yang menutupi TransactionDetailDialog
+ * (masalah window-di-atas-window yang sama seperti kasus Void di atas).
  */
 data class ReportMessage(val text: String, val isError: Boolean = false)
 
@@ -106,6 +118,23 @@ enum class ReportTab { TRANSACTIONS, SHIFTS }
  * konsisten dengan kondisi saat shift ditutup dulu.
  */
 data class ClosedShiftDetail(val shift: ShiftEntity, val summary: ShiftSummary)
+
+/**
+ * BATCH E4: agregasi retur untuk rentang tanggal terpilih — [returns] SEMUA
+ * baris retur yang `returnedAt`-nya jatuh pada tanggal itu (sumber daftar
+ * "Retur Hari Ini"), [cashRefundTotal]/[qrisRefundTotal] diturunkan di
+ * memori dari [returns] — TIDAK butuh query DB baru, sama seperti pola
+ * cashRevenue/qrisRevenue di [DailyReport].
+ */
+data class ReturnSummary(
+    val returns: List<ReturnEntity>,
+    val cashRefundTotal: Long,
+    val qrisRefundTotal: Long
+) {
+    companion object {
+        fun empty() = ReturnSummary(emptyList(), 0L, 0L)
+    }
+}
 
 /**
  * ViewModel Laporan Harian.
@@ -131,11 +160,28 @@ data class ClosedShiftDetail(val shift: ShiftEntity, val summary: ShiftSummary)
  * BATCH G (Fitur 2): tambah [ShiftRepository] sebagai dependency baru untuk
  * "Riwayat Tutup Shift" — [closedShifts] mengikuti filter tanggal yang sama
  * dengan [report] (BUKAN rentang independen), sesuai keputusan final.
+ *
+ * BATCH E3: tambah [ReturnRepository] sebagai dependency baru untuk Retur
+ * Produk. [showReturnDialog]/[returnMessage]/[returnSubmitting] mengatur
+ * lingkaran hidup dialog Retur — SENGAJA di-owned ViewModel (bukan local
+ * Composable state seperti [pendingVoidConfirm] gaya lama) karena keputusan
+ * "tutup dialog otomatis HANYA jika sukses, tetap terbuka jika validasi
+ * gagal" butuh tahu hasil operasi asinkron dulu sebelum UI diputuskan.
+ * Retur dikaitkan ke shift AKTIF SAAT DIKONFIRMASI (bukan shift transaksi
+ * asal) — diambil via [ShiftRepository.getOpenShift] tepat sebelum memanggil
+ * [ReturnRepository.processReturn], konsisten dengan keputusan arsitektur.
+ *
+ * BATCH E4: tambah [returnSummary] (reaktif, mengikuti filter tanggal yang
+ * sama dengan [report]/[closedShifts]) untuk section "Retur Hari Ini" di tab
+ * Shift, dan [selectedReturnDetail] untuk dialog detail read-only satu retur
+ * (dimuat sekali-jalan via [ReturnRepository.getDetail], sama seperti pola
+ * [selectedTransaction]).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReportViewModel(
     private val transactionRepository: TransactionRepository,
-    private val shiftRepository: ShiftRepository
+    private val shiftRepository: ShiftRepository,
+    private val returnRepository: ReturnRepository
 ) : ViewModel() {
 
     private val zone: ZoneId = ZoneId.systemDefault()
@@ -196,13 +242,46 @@ class ReportViewModel(
         _selectedShiftDetail.value = null
     }
 
+    // ---------- BATCH E4: "Retur Hari Ini" ----------
+
+    /**
+     * Retur yang `returnedAt`-nya jatuh pada tanggal terpilih — ikut filter
+     * tanggal yang sama dengan [report]/[closedShifts] (BUKAN rentang bebas
+     * terpisah, konsisten dengan pola Batch G). REAKTIF (bukan one-shot):
+     * kalau ada retur baru diproses (mis. dari dialog Retur di tab
+     * Transaksi) SAAT layar tab Shift sedang terbuka, daftar & kartu
+     * ringkasan di sini otomatis ter-refresh via Room invalidation tracking
+     * — tidak perlu pengguna keluar-masuk layar.
+     */
+    val returnSummary: StateFlow<ReturnSummary> = _selectedDate
+        .flatMapLatest { date ->
+            val (start, end) = dayBounds(date)
+            returnRepository.returnsBetween(start, end).map { aggregateReturns(it) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ReturnSummary.empty())
+
+    private val _selectedReturnDetail = MutableStateFlow<ReturnDetail?>(null)
+    /** Detail satu retur yang sedang dilihat (null = dialog tertutup). */
+    val selectedReturnDetail: StateFlow<ReturnDetail?> = _selectedReturnDetail.asStateFlow()
+
+    /** Buka dialog detail read-only untuk satu retur — dimuat sekali-jalan (snapshot), sama pola [openTransactionDetail]. */
+    fun openReturnDetail(returnId: Long) {
+        viewModelScope.launch {
+            _selectedReturnDetail.value = returnRepository.getDetail(returnId)
+        }
+    }
+
+    fun closeReturnDetail() {
+        _selectedReturnDetail.value = null
+    }
+
     // ---------- BATCH C: Detail Transaksi (read-only) ----------
 
     private val _selectedTransaction = MutableStateFlow<CheckoutResult?>(null)
     /** Transaksi yang sedang dilihat detailnya (null = dialog tertutup). */
     val selectedTransaction: StateFlow<CheckoutResult?> = _selectedTransaction.asStateFlow()
 
-    // ---------- BATCH D: pesan satu-kali untuk hasil aksi Void ----------
+    // ---------- BATCH D: pesan satu-kali untuk hasil aksi Void / sukses Retur ----------
 
     private val _messages = MutableSharedFlow<ReportMessage>(extraBufferCapacity = 1)
     val messages: SharedFlow<ReportMessage> = _messages.asSharedFlow()
@@ -211,7 +290,7 @@ class ReportViewModel(
      * Buka dialog detail untuk satu transaksi. Memuat ULANG dari DB via
      * [TransactionRepository.loadReceipt] (bukan mengambil dari [report]
      * yang sudah ada di memori) — supaya header & item selalu konsisten
-     * satu paket, dan siap dipakai ulang setelah Void (status ter-refresh).
+     * satu paket, dan siap dipakai ulang setelah Void/Retur (status ter-refresh).
      */
     fun openTransactionDetail(invoiceId: String) {
         viewModelScope.launch {
@@ -221,6 +300,10 @@ class ReportViewModel(
 
     fun closeTransactionDetail() {
         _selectedTransaction.value = null
+        // BATCH E3: pastikan dialog Retur ikut tertutup & bersih kalau
+        // pengguna menutup detail transaksi induknya.
+        _showReturnDialog.value = false
+        _returnMessage.value = null
     }
 
     /**
@@ -260,12 +343,115 @@ class ReportViewModel(
         }
     }
 
+    // ---------- BATCH E3: Retur Item ----------
+
+    private val _showReturnDialog = MutableStateFlow(false)
+    /** true = dialog "Retur Item" sedang terbuka (mengambil alih tampilan dari TransactionDetailDialog). */
+    val showReturnDialog: StateFlow<Boolean> = _showReturnDialog.asStateFlow()
+
+    private val _returnMessage = MutableStateFlow<ReportMessage?>(null)
+    /** Pesan error validasi Retur — tampil sebagai banner DI DALAM dialog Retur (lihat catatan [ReportMessage]). */
+    val returnMessage: StateFlow<ReportMessage?> = _returnMessage.asStateFlow()
+
+    private val _returnSubmitting = MutableStateFlow(false)
+    /** true selagi [submitReturn] sedang berjalan — dipakai UI untuk spinner & menonaktifkan tombol. */
+    val returnSubmitting: StateFlow<Boolean> = _returnSubmitting.asStateFlow()
+
+    /** Buka dialog Retur untuk transaksi yang sedang dibuka di [selectedTransaction]. */
+    fun openReturnDialog() {
+        _returnMessage.value = null
+        _showReturnDialog.value = true
+    }
+
+    fun closeReturnDialog() {
+        _showReturnDialog.value = false
+        _returnMessage.value = null
+    }
+
+    /**
+     * Proses retur untuk transaksi yang sedang dibuka di [selectedTransaction].
+     * Shift aktif diambil SAAT INI (bukan shift transaksi asal) — sesuai
+     * keputusan arsitektur retur boleh lintas shift/hari. Jika tidak ada
+     * shift aktif, `shiftId`/`cashierId` dikirim null (retur tetap diproses,
+     * konsisten dengan filosofi "Shift OPSIONAL").
+     *
+     * Hasil:
+     *  - [ReturnOutcome.Success]: [selectedTransaction] di-refresh (badge
+     *    "Sudah Diretur" langsung tampil), dialog Retur ditutup, pesan
+     *    sukses dikirim lewat [messages] (akan muncul sebagai banner di
+     *    TransactionDetailDialog yang kembali tampil).
+     *  - Selain itu: dialog Retur TETAP TERBUKA, pesan error tampil lewat
+     *    [returnMessage] supaya pengguna bisa memperbaiki input.
+     */
+    fun submitReturn(
+        items: List<ReturnItemInput>,
+        refundAmount: Long,
+        refundMethod: PaymentMethod,
+        note: String
+    ) {
+        val invoiceId = _selectedTransaction.value?.transaction?.id
+        if (invoiceId == null) {
+            _returnMessage.value = ReportMessage("Transaksi tidak ditemukan.", isError = true)
+            return
+        }
+        if (items.isEmpty()) {
+            _returnMessage.value = ReportMessage("Pilih minimal satu item untuk diretur.", isError = true)
+            return
+        }
+
+        viewModelScope.launch {
+            _returnSubmitting.value = true
+            val activeShift = shiftRepository.getOpenShift()
+            val outcome = returnRepository.processReturn(
+                transactionId = invoiceId,
+                itemInputs = items,
+                refundAmount = refundAmount,
+                refundMethod = refundMethod,
+                shiftId = activeShift?.id,
+                cashierId = activeShift?.cashierId,
+                cashierName = activeShift?.cashierName ?: "",
+                note = note
+            )
+            _returnSubmitting.value = false
+
+            when (outcome) {
+                is ReturnOutcome.Success -> {
+                    _selectedTransaction.value = transactionRepository.loadReceipt(invoiceId)
+                    _showReturnDialog.value = false
+                    _returnMessage.value = null
+                    val totalQty = items.sumOf { it.quantityReturned }
+                    val methodLabel = if (refundMethod == PaymentMethod.QRIS) "QRIS" else "Tunai"
+                    _messages.emit(
+                        ReportMessage(
+                            "Retur berhasil diproses. $totalQty item · ${refundAmount.toRupiah()} " +
+                                "dikembalikan via $methodLabel.",
+                            isError = false
+                        )
+                    )
+                }
+                ReturnOutcome.TransactionNotFound ->
+                    _returnMessage.value = ReportMessage("Transaksi tidak ditemukan.", isError = true)
+                ReturnOutcome.TransactionVoided ->
+                    _returnMessage.value = ReportMessage("Transaksi ini sudah dibatalkan, tidak dapat diretur.", isError = true)
+                ReturnOutcome.AlreadyReturned ->
+                    _returnMessage.value = ReportMessage("Transaksi ini sudah pernah diretur sebelumnya.", isError = true)
+                ReturnOutcome.NoItemsSelected ->
+                    _returnMessage.value = ReportMessage("Pilih minimal satu item untuk diretur.", isError = true)
+                is ReturnOutcome.InvalidQuantity ->
+                    _returnMessage.value = ReportMessage(
+                        "Jumlah retur untuk \"${outcome.productName}\" tidak valid.",
+                        isError = true
+                    )
+            }
+        }
+    }
+
     // ---------- Kalkulasi murni (terpisah → mudah diuji) ----------
 
     /**
      * Batas hari dalam epoch millis. `end` = awal hari berikutnya (eksklusif),
      * cocok dengan query `createdAt >= start AND createdAt < end` /
-     * `endedAt >= start AND endedAt < end`.
+     * `endedAt >= start AND endedAt < end` / `returnedAt >= start AND < end`.
      */
     private fun dayBounds(date: LocalDate): Pair<Long, Long> {
         val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
@@ -326,6 +512,23 @@ class ReportViewModel(
             cashRevenue = cashRevenue,
             qrisRevenue = qrisRevenue
         )
+    }
+
+    /**
+     * BATCH E4: agregasi total refund Tunai/QRIS dari daftar retur pada
+     * rentang tanggal terpilih. Sengaja filter berdasarkan `refundMethod`
+     * (String di [ReturnEntity]) dibandingkan dengan `PaymentMethod.CASH.name`/
+     * `PaymentMethod.QRIS.name` — pola identik dengan breakdown pendapatan
+     * di [aggregate], untuk konsistensi gaya kode.
+     */
+    private fun aggregateReturns(returns: List<ReturnEntity>): ReturnSummary {
+        val cashRefundTotal = returns
+            .filter { it.refundMethod == PaymentMethod.CASH.name }
+            .sumOf { it.refundAmount }
+        val qrisRefundTotal = returns
+            .filter { it.refundMethod == PaymentMethod.QRIS.name }
+            .sumOf { it.refundAmount }
+        return ReturnSummary(returns, cashRefundTotal, qrisRefundTotal)
     }
 
     // ---------- Aksi UI ----------
