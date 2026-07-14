@@ -3,6 +3,7 @@ package com.pos.offline.ui.report
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pos.offline.data.local.entity.TransactionEntity
+import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.TransactionRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -56,6 +58,11 @@ data class DailyReport(
  *    lewat [map] → hemat round-trip DB.
  *  - `flatMapLatest` membatalkan query tanggal lama saat pengguna pindah hari.
  *  - `WhileSubscribed(5000)` → Flow berhenti saat layar tak terlihat (hemat baterai).
+ *
+ * BATCH C: [selectedTransaction] menampung detail transaksi (header + item)
+ * yang sedang dibuka pengguna dari daftar riwayat — dimuat sekali-jalan via
+ * [TransactionRepository.loadReceipt] (BUKAN reaktif/Flow) karena ini murni
+ * tampilan read-only snapshot, tidak perlu ikut berubah live.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReportViewModel(
@@ -80,6 +87,29 @@ class ReportViewModel(
             transactionRepository.dailyTransactions(start, end).map { aggregate(date, it) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DailyReport.empty(LocalDate.now()))
+
+    // ---------- BATCH C: Detail Transaksi (read-only) ----------
+
+    private val _selectedTransaction = MutableStateFlow<CheckoutResult?>(null)
+    /** Transaksi yang sedang dilihat detailnya (null = dialog tertutup). */
+    val selectedTransaction: StateFlow<CheckoutResult?> = _selectedTransaction.asStateFlow()
+
+    /**
+     * Buka dialog detail untuk satu transaksi. Memuat ULANG dari DB via
+     * [TransactionRepository.loadReceipt] (bukan mengambil dari [report]
+     * yang sudah ada di memori) — supaya header & item selalu konsisten
+     * satu paket, dan siap dipakai ulang nanti untuk skenario setelah
+     * Void/Retur (Batch D/E) tanpa perlu logika tambahan.
+     */
+    fun openTransactionDetail(invoiceId: String) {
+        viewModelScope.launch {
+            _selectedTransaction.value = transactionRepository.loadReceipt(invoiceId)
+        }
+    }
+
+    fun closeTransactionDetail() {
+        _selectedTransaction.value = null
+    }
 
     // ---------- Kalkulasi murni (terpisah → mudah diuji) ----------
 
@@ -152,5 +182,15 @@ class ReportViewModel(
         /** Format jam singkat, mis. "14.05". */
         val timeFmt: DateTimeFormatter =
             DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
+
+        /**
+         * BATCH C: format tanggal+jam LENGKAP (dengan detik) untuk Detail
+         * Transaksi — mis. "Senin, 5 Mei 2025 · 14:05:32". Detik disengaja
+         * disertakan (berbeda dari [timeFmt] yang dipakai daftar ringkas)
+         * karena konteks audit/detail butuh presisi lebih tinggi.
+         */
+        val dateTimeFmt: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy · HH:mm:ss", Locale.forLanguageTag("id-ID"))
+                .withZone(ZoneId.systemDefault())
     }
 }

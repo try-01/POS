@@ -26,8 +26,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.ReceiptLong
-import androidx.compose.material.icons.rounded.ShowChart
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
+import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -88,7 +88,7 @@ fun ReportScreen(viewModel: ReportViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    Icons.Rounded.ReceiptLong,
+                    Icons.AutoMirrored.Rounded.ReceiptLong,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.primary
@@ -316,13 +316,13 @@ private fun SummarySection(report: DailyReport) {
                 modifier = Modifier.weight(1f),
                 label = "Jumlah Transaksi",
                 value = report.transactionCount.toString(),
-                icon = Icons.Rounded.ReceiptLong
+                icon = Icons.AutoMirrored.Rounded.ReceiptLong
             )
             StatCard(
                 modifier = Modifier.weight(1f),
                 label = "Rata-rata / Transaksi",
                 value = report.averagePerTransaction.toRupiah(),
-                icon = Icons.Rounded.ShowChart
+                icon = Icons.AutoMirrored.Rounded.ShowChart
             )
         }
     }
@@ -441,7 +441,7 @@ private fun RevenueTrendChart(
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    Icons.Rounded.ShowChart,
+                    Icons.AutoMirrored.Rounded.ShowChart,
                     contentDescription = null,
                     tint = primary,
                     modifier = Modifier.size(16.dp)
@@ -609,7 +609,7 @@ private fun EmptyReport() {
     Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
-                Icons.Rounded.ReceiptLong,
+                Icons.AutoMirrored.Rounded.ReceiptLong,
                 contentDescription = null,
                 modifier = Modifier.size(40.dp),
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)

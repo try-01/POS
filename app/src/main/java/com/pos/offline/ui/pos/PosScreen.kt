@@ -103,10 +103,12 @@ import com.pos.offline.data.local.entity.DiscountType
 import com.pos.offline.data.local.entity.PaymentMethod
 import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.data.local.entity.ShiftEntity
-import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.ShiftSummary
 import com.pos.offline.ui.components.GlassCard
+import com.pos.offline.ui.components.discountInlineLabel
+import com.pos.offline.ui.components.formatPercentTrim
+import com.pos.offline.ui.components.paymentMethodLabel
 import com.pos.offline.util.toRupiah
 import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 
@@ -1152,7 +1154,7 @@ private fun TotalsSummary(
 
         if (totals.discount > 0) {
             val label = if (discountType == DiscountType.PERCENT) {
-                "Diskon (${formatTrim(discountValue)}%)"
+                "Diskon (${formatPercentTrim(discountValue)}%)"
             } else {
                 "Diskon"
             }
@@ -1330,7 +1332,7 @@ private fun DiscountField(
             when {
                 rawValue <= 0.0 -> ""
                 type == DiscountType.NOMINAL -> rawValue.toLong().toString()
-                else -> formatTrim(rawValue)
+                else -> formatPercentTrim(rawValue)
             }
         )
     }
@@ -1429,7 +1431,7 @@ private fun DecimalField(
     modifier: Modifier = Modifier
 ) {
     var text by remember(value) {
-        mutableStateOf(if (value <= 0.0) "" else formatTrim(value))
+        mutableStateOf(if (value <= 0.0) "" else formatPercentTrim(value))
     }
 
     BasicTextField(
@@ -1482,11 +1484,6 @@ private fun DecimalField(
             }
         }
     )
-}
-
-private fun formatTrim(d: Double): String {
-    val i = d.toLong()
-    return if (d == i.toDouble()) i.toString() else d.toString()
 }
 
 // ============================ DIALOG SUKSES ============================
@@ -1594,30 +1591,6 @@ private fun QuantityEditDialog(
     )
 }
 
-private fun paymentMethodLabel(raw: String): String = when (raw) {
-    PaymentMethod.CASH.name -> "Tunai"
-    PaymentMethod.QRIS.name -> "QRIS"
-    PaymentMethod.TRANSFER.name -> "Transfer"
-    PaymentMethod.OTHER.name -> "Lainnya"
-    else -> raw
-}
-
-/**
- * Label diskon untuk ditampilkan di [SuccessDialog], mis. "Diskon: 10% (Rp
- * 5.000)" untuk mode persen, atau "Diskon: Rp 5.000" untuk mode nominal.
- * Membaca [TransactionEntity.discountType]/[discountValue] — snapshot audit
- * "apa yang diketik kasir" — TIDAK mempengaruhi [TransactionEntity.discount]
- * (nominal final) yang sudah ditampilkan di baris Total.
- */
-private fun discountLabel(tx: TransactionEntity): String? {
-    if (tx.discount <= 0L) return null
-    return if (tx.discountType == DiscountType.PERCENT.name) {
-        "Diskon: ${formatTrim(tx.discountValue)}% (${tx.discount.toRupiah()})"
-    } else {
-        "Diskon: ${tx.discount.toRupiah()}"
-    }
-}
-
 @Composable
 private fun SuccessDialog(
     result: CheckoutResult,
@@ -1641,7 +1614,7 @@ private fun SuccessDialog(
                         "Metode Bayar: ${paymentMethodLabel(result.transaction.paymentMethod)}",
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
-                    discountLabel(result.transaction)?.let { label ->
+                    result.transaction.discountInlineLabel()?.let { label ->
                         Text(label, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                     }
                     Text("Total: ${result.transaction.total.toRupiah()}", fontWeight = FontWeight.SemiBold)

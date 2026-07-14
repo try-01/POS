@@ -20,8 +20,10 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ChevronLeft
@@ -29,16 +31,20 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.rounded.Today
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
@@ -57,7 +63,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.local.entity.TransactionEntity
+import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.ui.components.GlassCard
+import com.pos.offline.ui.components.discountRowLabel
+import com.pos.offline.ui.components.paymentMethodLabel
 import com.pos.offline.util.toRupiah
 import java.time.Instant
 
@@ -70,6 +79,11 @@ import java.time.Instant
  *  - Grafik memakai [Canvas] langsung (1 pass draw, tanpa library chart) → ringan.
  *  - Daftar transaksi `LazyColumn` dengan `key` + `contentType`.
  *  - State dikoleksi sadar-siklus.
+ *
+ * BATCH C: setiap baris transaksi kini bisa diketuk untuk membuka
+ * [TransactionDetailDialog] — rincian lengkap read-only (item, diskon,
+ * pajak, metode bayar, kasir, shift). Fondasi untuk Void (Batch D) &
+ * Retur (Batch E) nanti — tombol aksi akan ditambahkan di dialog ini.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,6 +91,7 @@ fun ReportScreen(viewModel: ReportViewModel) {
     val report by viewModel.report.collectAsStateWithLifecycle()
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     val isToday by viewModel.isToday.collectAsStateWithLifecycle()
+    val selectedTransaction by viewModel.selectedTransaction.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -151,10 +166,20 @@ if (report.transactionCount > 0) {
                     key = { it.id },
                     contentType = { "transaction" }
                 ) { tx ->
-                    TransactionRow(tx)
+                    TransactionRow(
+                        tx = tx,
+                        onClick = { viewModel.openTransactionDetail(tx.id) }
+                    )
                 }
             }
         }
+    }
+
+    selectedTransaction?.let { result ->
+        TransactionDetailDialog(
+            result = result,
+            onDismiss = viewModel::closeTransactionDetail
+        )
     }
 }
 
@@ -567,11 +592,12 @@ private fun RevenueTrendChart(
 // ============================ BARIS TRANSAKSI ============================
 
 @Composable
-private fun TransactionRow(tx: TransactionEntity) {
+private fun TransactionRow(tx: TransactionEntity, onClick: () -> Unit) {
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 12.dp,
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+        onClick = onClick
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Waktu transaksi (HH:mm).
@@ -590,7 +616,7 @@ private fun TransactionRow(tx: TransactionEntity) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    "Dibayar ${tx.paidAmount.toRupiah()}",
+                    "Dibayar ${tx.paidAmount.toRupiah()} · ${paymentMethodLabel(tx.paymentMethod)}",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                 )
@@ -600,7 +626,138 @@ private fun TransactionRow(tx: TransactionEntity) {
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                 fontWeight = FontWeight.Bold
             )
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                Icons.Rounded.ChevronRight,
+                contentDescription = "Lihat detail transaksi",
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+            )
         }
+    }
+}
+
+// ============================ DETAIL TRANSAKSI (BATCH C) ============================
+
+/**
+ * Dialog rincian transaksi — read-only. Menampilkan SELENGKAP mungkin:
+ * nomor struk, tanggal+jam presisi detik, daftar item, subtotal, diskon
+ * (dengan label persen/nominal sesuai yang diketik kasir), pajak, total,
+ * bayar, kembalian, metode bayar, kasir, dan nomor shift (kalau ada).
+ *
+ * Fondasi untuk Batch D (Void) — tombol aksi akan ditambahkan di
+ * `confirmButton`/`dismissButton` slot ini nanti, tanpa perlu merombak
+ * struktur dialog.
+ */
+@Composable
+private fun TransactionDetailDialog(
+    result: CheckoutResult,
+    onDismiss: () -> Unit
+) {
+    val tx = result.transaction
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Detail Transaksi") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    tx.id,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    ReportViewModel.dateTimeFmt.format(Instant.ofEpochMilli(tx.createdAt)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+
+                Spacer(Modifier.height(8.dp))
+                Text("Item", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+
+                result.items.forEach { item ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp)
+                        ) {
+                            Text(
+                                item.productName,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
+                            )
+                            Text(
+                                "${item.quantity} x ${item.unitPrice.toRupiah()}",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                        Text(
+                            item.lineTotal.toRupiah(),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+
+                SummaryLine("Subtotal", tx.subtotal.toRupiah())
+                tx.discountRowLabel()?.let { label ->
+                    SummaryLine(label, "- ${tx.discount.toRupiah()}")
+                }
+                if (tx.tax > 0) SummaryLine("Pajak", tx.tax.toRupiah())
+
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                SummaryLine("Total", tx.total.toRupiah(), emphasize = true)
+                SummaryLine("Bayar", tx.paidAmount.toRupiah())
+                SummaryLine("Kembali", tx.change.toRupiah(), color = MaterialTheme.colorScheme.primary)
+
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+
+                SummaryLine("Metode Bayar", paymentMethodLabel(tx.paymentMethod))
+                SummaryLine("Kasir", tx.cashierName.ifBlank { "Tanpa kasir" })
+                tx.shiftId?.let { id ->
+                    SummaryLine("Shift", "#$id")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Tutup") }
+        }
+    )
+}
+
+@Composable
+private fun SummaryLine(
+    label: String,
+    value: String,
+    emphasize: Boolean = false,
+    color: Color = Color.Unspecified
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(
+            label,
+            style = if (emphasize) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
+            color = color
+        )
+        Text(
+            value,
+            style = if (emphasize) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
+            fontWeight = if (emphasize) FontWeight.Bold else FontWeight.Normal,
+            color = color
+        )
     }
 }
 

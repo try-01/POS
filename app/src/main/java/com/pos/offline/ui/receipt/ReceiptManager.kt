@@ -9,8 +9,8 @@ import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
-import com.pos.offline.data.local.entity.DiscountType
 import com.pos.offline.data.repository.CheckoutResult
+import com.pos.offline.ui.components.discountRowLabel
 import com.pos.offline.util.toRupiah
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -52,12 +52,6 @@ object ReceiptManager {
     private const val STORE_NAME = "TOKO KASIR OFFLINE"
     private val dateFmt = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("id-ID"))
 
-    /** Format angka persen tanpa desimal berlebih (10.0 -> "10", 7.5 -> "7.5"). */
-    private fun formatPercent(value: Double): String {
-        val i = value.toLong()
-        return if (value == i.toDouble()) i.toString() else value.toString()
-    }
-
     // ---------- Sumber konten tunggal ----------
     fun buildLines(result: CheckoutResult): List<ReceiptLine> {
         val tx = result.transaction
@@ -72,14 +66,9 @@ object ReceiptManager {
         }
         lines += divider()
         lines += ReceiptLine(left = "Subtotal", right = tx.subtotal.toRupiah())
-        if (tx.discount > 0) {
-            // Snapshot audit discountType/discountValue MURNI untuk label —
-            // nominal yang dicetak (tx.discount) tetap sumber kebenaran final.
-            val label = if (tx.discountType == DiscountType.PERCENT.name) {
-                "Diskon (${formatPercent(tx.discountValue)}%)"
-            } else {
-                "Diskon"
-            }
+        // Label & format diskon MURNI dari fungsi bersama (ui.components) —
+        // sinkron dengan tampilan SuccessDialog & Detail Transaksi.
+        tx.discountRowLabel()?.let { label ->
             lines += ReceiptLine(left = label, right = "- ${tx.discount.toRupiah()}")
         }
         if (tx.tax > 0) lines += ReceiptLine(left = "Pajak", right = tx.tax.toRupiah())
