@@ -175,7 +175,31 @@ private fun ScreenContent(
             }
         )
         Dest.INVENTORY -> InventoryScreen(viewModel = inventoryViewModel)
-        Dest.REPORT -> ReportScreen(viewModel = reportViewModel)
+        // BATCH BARU: cetak-ulang/ekspor/bagikan dari Detail Transaksi di
+        // Laporan — reuse ReceiptManager PERSIS pola PosScreen di atas
+        // (feedback via Toast, bukan Snackbar/state ViewModel).
+        Dest.REPORT -> ReportScreen(
+            viewModel = reportViewModel,
+            onPrintBluetooth = { result ->
+                scope.launch {
+                    val ok = ReceiptManager.printToFirstBonded(context, result)
+                    Toast.makeText(
+                        context,
+                        if (ok) "Mengirim ke printer…"
+                        else "Gagal: pasang & izinkan printer Bluetooth",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            },
+            onExportPdf = { result ->
+                val file = ReceiptManager.exportToPdf(context, result)
+                Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
+            },
+            onShare = { result ->
+                val intent = ReceiptManager.buildShareIntent(context, result)
+                context.startActivity(intent)
+            }
+        )
         Dest.SETTINGS -> SettingsScreen(viewModel = settingsViewModel)
     }
 }

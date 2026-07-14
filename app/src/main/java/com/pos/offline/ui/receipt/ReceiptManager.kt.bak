@@ -59,6 +59,11 @@ object ReceiptManager {
         lines += ReceiptLine(left = STORE_NAME, align = ReceiptAlign.CENTER, bold = true, large = true)
         lines += ReceiptLine(left = dateFmt.format(Date(tx.createdAt)), align = ReceiptAlign.CENTER)
         lines += ReceiptLine(left = "No: ${tx.id}", align = ReceiptAlign.CENTER)
+        // Nama kasir SAJA (tanpa info shift) — hemat kertas printer thermal.
+        // Struk/PDF akan didesain ulang lebih efisien pada batch terpisah nanti.
+        if (tx.cashierName.isNotBlank()) {
+            lines += ReceiptLine(left = "Kasir: ${tx.cashierName}", align = ReceiptAlign.CENTER)
+        }
         lines += divider()
         for (item in result.items) {
             lines += ReceiptLine(left = item.productName, right = item.lineTotal.toRupiah(), bold = true)

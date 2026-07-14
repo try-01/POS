@@ -65,6 +65,18 @@ data class DailyReport(
 }
 
 /**
+ * Pesan hasil aksi (mis. Void) untuk ditampilkan ke pengguna.
+ *
+ * BATCH D (fix): dulunya [String] polos dikirim lewat SharedFlow lalu
+ * SELALU ditampilkan via Snackbar Scaffold — tapi ternyata Snackbar itu
+ * tertutup [AlertDialog] yang sedang terbuka (AlertDialog = window Android
+ * TERPISAH, render di atas segalanya, termasuk Snackbar di window utama).
+ * Sekarang [isError] disertakan supaya UI (baik banner inline di dalam
+ * dialog, maupun Snackbar biasa) bisa memberi warna yang sesuai.
+ */
+data class ReportMessage(val text: String, val isError: Boolean = false)
+
+/**
  * ViewModel Laporan Harian.
  *
  * Prinsip performa:
@@ -80,8 +92,10 @@ data class DailyReport(
  * tampilan read-only snapshot, tidak perlu ikut berubah live.
  *
  * BATCH D: tambah [voidSelectedTransaction] + [messages] (SharedFlow untuk
- * Snackbar) — hasil Void (sukses/gagal validasi) dilaporkan sebagai pesan
- * satu-kali, bukan state permanen.
+ * feedback aksi) — hasil Void (sukses/gagal validasi) dilaporkan sebagai
+ * pesan satu-kali. UI ([ReportScreen]) yang memutuskan cara menampilkannya
+ * (banner inline dalam dialog vs Snackbar) tergantung apakah dialog detail
+ * sedang terbuka — lihat catatan di [ReportMessage].
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReportViewModel(
@@ -113,10 +127,10 @@ class ReportViewModel(
     /** Transaksi yang sedang dilihat detailnya (null = dialog tertutup). */
     val selectedTransaction: StateFlow<CheckoutResult?> = _selectedTransaction.asStateFlow()
 
-    // ---------- BATCH D: pesan satu-kali (Snackbar) untuk hasil aksi Void ----------
+    // ---------- BATCH D: pesan satu-kali untuk hasil aksi Void ----------
 
-    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 1)
-    val messages: SharedFlow<String> = _messages.asSharedFlow()
+    private val _messages = MutableSharedFlow<ReportMessage>(extraBufferCapacity = 1)
+    val messages: SharedFlow<ReportMessage> = _messages.asSharedFlow()
 
     /**
      * Buka dialog detail untuk satu transaksi. Memuat ULANG dari DB via
@@ -138,7 +152,8 @@ class ReportViewModel(
      * BATCH D: batalkan transaksi yang sedang dibuka di dialog detail.
      * Setelah selesai (berhasil/gagal), [selectedTransaction] di-refresh
      * (supaya dialog langsung menampilkan status VOID terbaru jika sukses)
-     * dan hasilnya dilaporkan lewat [messages] untuk ditampilkan Snackbar.
+     * dan hasilnya dilaporkan lewat [messages] untuk ditampilkan sebagai
+     * banner (dialog masih terbuka) atau Snackbar (kalau tertutup).
      *
      * [report] TIDAK perlu di-refresh manual — Room Flow otomatis emit ulang
      * begitu tabel `transactions` berubah (invalidation tracking bawaan).
@@ -150,19 +165,22 @@ class ReportViewModel(
                 is VoidOutcome.Success -> {
                     _selectedTransaction.value = transactionRepository.loadReceipt(invoiceId)
                     _messages.emit(
-                        if (outcome.skippedStockCount > 0)
-                            "Transaksi dibatalkan. ${outcome.restoredStockCount} item stok dikembalikan, " +
-                                "${outcome.skippedStockCount} item dilewati (data transaksi lama)."
-                        else
-                            "Transaksi dibatalkan. Stok ${outcome.restoredStockCount} item dikembalikan."
+                        ReportMessage(
+                            text = if (outcome.skippedStockCount > 0)
+                                "Transaksi dibatalkan. ${outcome.restoredStockCount} item stok dikembalikan, " +
+                                    "${outcome.skippedStockCount} item dilewati (data transaksi lama)."
+                            else
+                                "Transaksi dibatalkan. Stok ${outcome.restoredStockCount} item dikembalikan.",
+                            isError = false
+                        )
                     )
                 }
                 VoidOutcome.AlreadyVoided ->
-                    _messages.emit("Transaksi ini sudah dibatalkan sebelumnya.")
+                    _messages.emit(ReportMessage("Transaksi ini sudah dibatalkan sebelumnya.", isError = true))
                 VoidOutcome.ShiftClosed ->
-                    _messages.emit("Tidak dapat membatalkan — shift transaksi ini sudah ditutup.")
+                    _messages.emit(ReportMessage("Tidak dapat membatalkan — shift transaksi ini sudah ditutup.", isError = true))
                 VoidOutcome.NotFound ->
-                    _messages.emit("Transaksi tidak ditemukan.")
+                    _messages.emit(ReportMessage("Transaksi tidak ditemukan.", isError = true))
             }
         }
     }

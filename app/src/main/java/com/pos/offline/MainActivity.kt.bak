@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Assessment
 import androidx.compose.material.icons.rounded.Inventory2
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -61,11 +62,13 @@ import com.pos.offline.ui.pos.PosViewModel
 import com.pos.offline.ui.receipt.ReceiptManager
 import com.pos.offline.ui.report.ReportScreen
 import com.pos.offline.ui.report.ReportViewModel
+import com.pos.offline.ui.settings.SettingsScreen
+import com.pos.offline.ui.settings.SettingsViewModel
 import com.pos.offline.ui.theme.PosTheme
 import kotlinx.coroutines.launch
 
 private enum class Dest(val label: String) {
-    POS("Kasir"), INVENTORY("Inventaris"), REPORT("Laporan")
+    POS("Kasir"), INVENTORY("Inventaris"), REPORT("Laporan"), SETTINGS("Pengaturan")
 }
 
 class MainActivity : ComponentActivity() {
@@ -87,6 +90,8 @@ private fun AppRoot() {
         viewModel(factory = ServiceLocator.inventoryViewModelFactory())
     val reportViewModel: ReportViewModel =
         viewModel(factory = ServiceLocator.reportViewModelFactory())
+    val settingsViewModel: SettingsViewModel =
+        viewModel(factory = ServiceLocator.settingsViewModelFactory())
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var dest by remember { mutableStateOf(Dest.POS) }
@@ -107,7 +112,7 @@ if (isLandscape) {
                 .fillMaxHeight()
                 .imePadding()
         ) {
-            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, context, scope, isLandscape = true) // <-- tambah argumen
+            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel, context, scope, isLandscape = true)
         }
         SideNavRail(selected = dest, onSelect = { dest = it })
     }
@@ -123,7 +128,7 @@ if (isLandscape) {
                 .fillMaxWidth()
                 .imePadding()
         ) {
-            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, context, scope, isLandscape = false) // <-- tambah argumen
+            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel, context, scope, isLandscape = false)
         }
 
         AnimatedVisibility(
@@ -137,21 +142,22 @@ if (isLandscape) {
 }
 }
 
-/** Konten layar aktif (Kasir/Inventaris/Laporan) — dipisah agar tidak duplikat antara mode potret & landscape. */
+/** Konten layar aktif (Kasir/Inventaris/Laporan/Pengaturan) — dipisah agar tidak duplikat antara mode potret & landscape. */
 @Composable
 private fun ScreenContent(
     dest: Dest,
     posViewModel: PosViewModel,
     inventoryViewModel: InventoryViewModel,
     reportViewModel: ReportViewModel,
+    settingsViewModel: SettingsViewModel,
     context: android.content.Context,
     scope: kotlinx.coroutines.CoroutineScope,
-    isLandscape: Boolean // <-- TAMBAHKAN parameter ini
+    isLandscape: Boolean
 ) {
     when (dest) {
         Dest.POS -> PosScreen(
             viewModel = posViewModel,
-            forceWideLayout = isLandscape, // <-- TERUSKAN ke sini
+            forceWideLayout = isLandscape,
             onPrintBluetooth = { result ->
                 scope.launch {
                     val ok = ReceiptManager.printToFirstBonded(context, result)
@@ -170,6 +176,7 @@ private fun ScreenContent(
         )
         Dest.INVENTORY -> InventoryScreen(viewModel = inventoryViewModel)
         Dest.REPORT -> ReportScreen(viewModel = reportViewModel)
+        Dest.SETTINGS -> SettingsScreen(viewModel = settingsViewModel)
     }
 }
 
@@ -274,4 +281,5 @@ private fun Dest.icon() = when (this) {
     Dest.POS -> Icons.Rounded.ShoppingCart
     Dest.INVENTORY -> Icons.Rounded.Inventory2
     Dest.REPORT -> Icons.Rounded.Assessment
+    Dest.SETTINGS -> Icons.Rounded.Settings
 }

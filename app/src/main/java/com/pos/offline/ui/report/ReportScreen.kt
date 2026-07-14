@@ -28,6 +28,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.PictureAsPdf
+import androidx.compose.material.icons.rounded.Print
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.rounded.Today
@@ -74,6 +77,7 @@ import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.discountRowLabel
 import com.pos.offline.ui.components.paymentMethodLabel
 import com.pos.offline.util.toRupiah
+import kotlinx.coroutines.delay
 import java.time.Instant
 
 /**
@@ -81,32 +85,60 @@ import java.time.Instant
  * InventoryScreen (font kecil, padding ringkas) agar lebih banyak informasi
  * muat di layar ponsel tanpa scroll berlebihan.
  *
- * Performa:
- *  - Grafik memakai [Canvas] langsung (1 pass draw, tanpa library chart) → ringan.
- *  - Daftar transaksi `LazyColumn` dengan `key` + `contentType`.
- *  - State dikoleksi sadar-siklus.
- *
  * BATCH C: setiap baris transaksi bisa diketuk untuk membuka
  * [TransactionDetailDialog] — rincian lengkap read-only.
  *
  * BATCH D: transaksi berstatus VOID ditampilkan dengan badge "DIBATALKAN"
- * (redup, strikethrough visual) di daftar & detail; dialog detail
- * menyediakan tombol "Batalkan Transaksi" (hanya untuk yang masih
- * COMPLETED) + dialog konfirmasi 2-langkah sebelum eksekusi. Hasil aksi
- * dilaporkan lewat Snackbar ([ReportViewModel.messages]).
+ * di daftar & detail; dialog detail menyediakan tombol "Batalkan Transaksi"
+ * (hanya untuk yang masih COMPLETED) + dialog konfirmasi 2-langkah.
+ * Hasil Void ditampilkan sebagai BANNER INLINE di dalam dialog (bukan
+ * Snackbar) — `AlertDialog` adalah window Android terpisah yang menutupi
+ * `SnackbarHost` milik `Scaffold` (window utama).
+ *
+ * BATCH BARU: dialog detail kini juga punya 3 aksi cetak-ulang (Cetak
+ * Bluetooth / Ekspor PDF / Bagikan) — reuse [onPrintBluetooth]/[onExportPdf]/
+ * [onShare] yang di-inject dari [com.pos.offline.MainActivity], PERSIS pola
+ * yang sudah terbukti di `PosScreen.SuccessDialog` (feedback via Toast,
+ * BUKAN Snackbar — Toast adalah window sistem terpisah yang tampil di atas
+ * AlertDialog, terbukti sudah jalan normal di alur checkout). Diizinkan
+ * untuk transaksi VOID sekalipun (keputusan final: berguna untuk bukti
+ * pembatalan/dokumentasi internal).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReportScreen(viewModel: ReportViewModel) {
+fun ReportScreen(
+    viewModel: ReportViewModel,
+    onPrintBluetooth: (CheckoutResult) -> Unit,
+    onExportPdf: (CheckoutResult) -> Unit,
+    onShare: (CheckoutResult) -> Unit
+) {
     val report by viewModel.report.collectAsStateWithLifecycle()
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     val isToday by viewModel.isToday.collectAsStateWithLifecycle()
     val selectedTransaction by viewModel.selectedTransaction.collectAsStateWithLifecycle()
     var pendingVoidConfirm by remember { mutableStateOf(false) }
+    var voidBanner by remember { mutableStateOf<ReportMessage?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Routing pesan Void: kalau dialog detail SEDANG TERBUKA saat pesan tiba,
+    // tampilkan sebagai banner di dalam dialog (window-nya sendiri). Kalau
+    // dialog sudah tertutup, pakai Snackbar biasa di window utama.
     LaunchedEffect(Unit) {
-        viewModel.messages.collect { msg -> snackbarHostState.showSnackbar(msg) }
+        viewModel.messages.collect { msg ->
+            if (selectedTransaction != null) {
+                voidBanner = msg
+            } else {
+                snackbarHostState.showSnackbar(msg.text)
+            }
+        }
+    }
+
+    // Banner otomatis hilang setelah 3 detik.
+    LaunchedEffect(voidBanner) {
+        if (voidBanner != null) {
+            delay(3000)
+            voidBanner = null
+        }
     }
 
     Scaffold(
@@ -198,11 +230,17 @@ fun ReportScreen(viewModel: ReportViewModel) {
     }
 
     if (selectedTransaction != null && !pendingVoidConfirm) {
+        val current = selectedTransaction!!
         TransactionDetailDialog(
-            result = selectedTransaction!!,
+            result = current,
+            banner = voidBanner,
             onVoidClick = { pendingVoidConfirm = true },
+            onPrint = { onPrintBluetooth(current) },
+            onExport = { onExportPdf(current) },
+            onShare = { onShare(current) },
             onDismiss = {
                 pendingVoidConfirm = false
+                voidBanner = null
                 viewModel.closeTransactionDetail()
             }
         )
@@ -452,13 +490,6 @@ private fun Long.toCompactRupiah(): String {
  * grafik bursa saham/kripto. Garis naik bertahap (step) setiap ada transaksi,
  * lalu datar hingga transaksi berikutnya.
  *
- * Kunci perbaikan bug alignment sebelumnya: label sumbu X & Y, garis bantu
- * grid, dan garis data SEMUA dihitung dari fungsi koordinat [xFor]/[yFor]
- * yang sama persis — sehingga posisinya dijamin sinkron, tidak mungkin
- * "nyasar" seperti pada implementasi bar chart sebelumnya (yang memakai
- * dua sistem koordinat berbeda: Row.SpaceBetween untuk label vs rumus
- * manual untuk bar).
- *
  * BATCH D: [transactions] yang diterima WAJIB sudah difilter COMPLETED
  * oleh pemanggil (lihat [ReportScreen]) — komponen ini tidak melakukan
  * filter sendiri, murni penggambaran.
@@ -707,6 +738,77 @@ private fun VoidBadge() {
     }
 }
 
+// ============================ AKSI CETAK ULANG (BARU) ============================
+
+/**
+ * Row 3 ikon kecil sejajar: Cetak Bluetooth / Ekspor PDF / Bagikan.
+ * Diizinkan untuk transaksi VOID sekalipun (keputusan final — berguna
+ * sebagai bukti pembatalan/dokumentasi internal). Hasil aksi (sukses/gagal)
+ * dilaporkan via Toast oleh pemanggil di MainActivity — pola identik dengan
+ * `PosScreen.SuccessDialog`, TIDAK memakai banner/Snackbar (Toast adalah
+ * window sistem yang tampil aman di atas dialog ini).
+ */
+@Composable
+private fun ReceiptActionsRow(
+    onPrint: () -> Unit,
+    onExport: () -> Unit,
+    onShare: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        ReceiptActionButton(
+            icon = Icons.Rounded.Print,
+            label = "Cetak",
+            onClick = onPrint,
+            modifier = Modifier.weight(1f)
+        )
+        ReceiptActionButton(
+            icon = Icons.Rounded.PictureAsPdf,
+            label = "PDF",
+            onClick = onExport,
+            modifier = Modifier.weight(1f)
+        )
+        ReceiptActionButton(
+            icon = Icons.Rounded.Share,
+            label = "Bagikan",
+            onClick = onShare,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun ReceiptActionButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            icon,
+            contentDescription = label,
+            modifier = Modifier.size(17.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
 // ============================ DETAIL TRANSAKSI ============================
 
 /**
@@ -716,12 +818,19 @@ private fun VoidBadge() {
  *
  * BATCH D: menampilkan badge & jejak waktu VOID jika transaksi sudah
  * dibatalkan; tombol "Batalkan Transaksi" (dismissButton slot) hanya
- * muncul untuk transaksi yang masih COMPLETED.
+ * muncul untuk transaksi yang masih COMPLETED. [banner] = pesan hasil Void.
+ *
+ * BATCH BARU: [onPrint]/[onExport]/[onShare] — 3 aksi cetak-ulang, SELALU
+ * tersedia terlepas status VOID/COMPLETED.
  */
 @Composable
 private fun TransactionDetailDialog(
     result: CheckoutResult,
+    banner: ReportMessage?,
     onVoidClick: () -> Unit,
+    onPrint: () -> Unit,
+    onExport: () -> Unit,
+    onShare: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val tx = result.transaction
@@ -737,6 +846,24 @@ private fun TransactionDetailDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                banner?.let { msg ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (msg.isError) MaterialTheme.colorScheme.errorContainer
+                        else MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            msg.text,
+                            modifier = Modifier.padding(10.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (msg.isError) MaterialTheme.colorScheme.onErrorContainer
+                            else MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         tx.id,
@@ -762,6 +889,9 @@ private fun TransactionDetailDialog(
                 }
 
                 Spacer(Modifier.height(8.dp))
+                ReceiptActionsRow(onPrint = onPrint, onExport = onExport, onShare = onShare)
+
+                Spacer(Modifier.height(10.dp))
                 Text("Item", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
 
