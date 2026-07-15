@@ -9,6 +9,11 @@ import com.pos.offline.data.repository.PrinterRepository
 import com.pos.offline.util.BluetoothDeviceInfo
 import com.pos.offline.util.BluetoothPrinterHelper
 import com.pos.offline.util.BondResult
+import com.pos.offline.util.PrinterConnectionFactory
+import com.pos.offline.util.TestPrintResult
+import com.pos.offline.util.UsbDeviceInfo
+import com.pos.offline.util.UsbPermissionResult
+import com.pos.offline.util.UsbPrinterHelper
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -21,7 +26,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** Data form tambah/edit printer. USB masih ditunda ke H3c. */
+/** Data form tambah/edit printer. */
 data class PrinterFormState(
     val id: Long? = null, // null = printer baru
     val label: String = "",
@@ -30,14 +35,22 @@ data class PrinterFormState(
     val charPerLine: String = PaperWidth.MM_80.defaultCharPerLine().toString(),
     val wifiIpAddress: String = "",
     val wifiPort: String = "9100", // default umum port raw ESC/POS jaringan
-    val bluetoothMacAddress: String = ""
+    val bluetoothMacAddress: String = "",
+    val usbVendorId: Int? = null,
+    val usbProductId: Int? = null,
+    val supportsStatusQuery: Boolean = false
 )
 
 data class PrinterUiState(
     val showFormDialog: Boolean = false,
     val formState: PrinterFormState = PrinterFormState(),
     val isSaving: Boolean = false,
-    val pendingDeleteId: Long? = null
+    val pendingDeleteId: Long? = null,
+    /** Guard anti-dobel-klik Test Print PER PRINTER (Batch H3d) -- pakai
+     *  Set<Long>, BUKAN flag boolean global, supaya user tetap bisa test
+     *  print printer B selagi printer A masih diproses, tapi tetap dicegah
+     *  klik ganda pada printer YANG SAMA. */
+    val testingPrinterIds: Set<Long> = emptySet()
 )
 
 /** State picker Bluetooth -- terpisah dari [PrinterUiState] karena siklus
@@ -50,9 +63,19 @@ data class BluetoothUiState(
     val isPairing: Boolean = false
 )
 
+/** State picker USB (Batch H3c) -- terpisah karena model permission &
+ *  siklus hidupnya beda total dari Bluetooth (tanpa discovery aktif, tanpa
+ *  PIN, cukup listen attach/detach + request permission sekali klik). */
+data class UsbUiState(
+    val devices: List<UsbDeviceInfo> = emptyList(),
+    val isRequestingPermission: Boolean = false
+)
+
 class PrinterViewModel(
     private val printerRepository: PrinterRepository,
-    private val bluetoothHelper: BluetoothPrinterHelper
+    private val bluetoothHelper: BluetoothPrinterHelper,
+    private val usbHelper: UsbPrinterHelper,
+    private val connectionFactory: PrinterConnectionFactory
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PrinterUiState())
@@ -60,6 +83,9 @@ class PrinterViewModel(
 
     private val _bluetoothUiState = MutableStateFlow(BluetoothUiState())
     val bluetoothUiState: StateFlow<BluetoothUiState> = _bluetoothUiState.asStateFlow()
+
+    private val _usbUiState = MutableStateFlow(UsbUiState())
+    val usbUiState: StateFlow<UsbUiState> = _usbUiState.asStateFlow()
 
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
@@ -70,10 +96,16 @@ class PrinterViewModel(
     private val _pairingSuccess = MutableSharedFlow<BluetoothDeviceInfo>(extraBufferCapacity = 1)
     val pairingSuccess: SharedFlow<BluetoothDeviceInfo> = _pairingSuccess.asSharedFlow()
 
+    /** Event one-shot serupa [pairingSuccess], untuk penutupan otomatis
+     *  dialog picker USB setelah izin akses diberikan. */
+    private val _usbSelectionSuccess = MutableSharedFlow<UsbDeviceInfo>(extraBufferCapacity = 1)
+    val usbSelectionSuccess: SharedFlow<UsbDeviceInfo> = _usbSelectionSuccess.asSharedFlow()
+
     val printers: StateFlow<List<PrinterEntity>> = printerRepository.allPrinters
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private var discoveryJob: Job? = null
+    private var usbAttachmentJob: Job? = null
 
     // ---- Dialog form ----
 
@@ -95,7 +127,10 @@ class PrinterViewModel(
                 charPerLine = printer.charPerLine.toString(),
                 wifiIpAddress = printer.wifiIpAddress ?: "",
                 wifiPort = printer.wifiPort?.toString() ?: "9100",
-                bluetoothMacAddress = printer.bluetoothMacAddress ?: ""
+                bluetoothMacAddress = printer.bluetoothMacAddress ?: "",
+                usbVendorId = printer.usbVendorId,
+                usbProductId = printer.usbProductId,
+                supportsStatusQuery = printer.supportsStatusQuery
             )
         )
     }
@@ -120,17 +155,15 @@ class PrinterViewModel(
     fun updateFormWifiPort(value: String) =
         updateForm { it.copy(wifiPort = value.filter { c -> c.isDigit() }) }
 
+    fun updateFormSupportsStatusQuery(value: Boolean) =
+        updateForm { it.copy(supportsStatusQuery = value) }
+
     private inline fun updateForm(block: (PrinterFormState) -> PrinterFormState) {
         _uiState.value = _uiState.value.copy(formState = block(_uiState.value.formState))
     }
 
     fun saveForm() {
         val form = _uiState.value.formState
-
-        if (form.connectionType == PrinterConnectionType.USB) {
-            emitMessage("Jenis koneksi ini belum tersedia pada pembaruan ini.")
-            return
-        }
 
         val label = form.label.trim()
         if (label.isEmpty()) {
@@ -141,6 +174,8 @@ class PrinterViewModel(
         var wifiIp: String? = null
         var wifiPort: Int? = null
         var btAddress: String? = null
+        var usbVendorId: Int? = null
+        var usbProductId: Int? = null
 
         when (form.connectionType) {
             PrinterConnectionType.WIFI -> {
@@ -164,7 +199,16 @@ class PrinterViewModel(
                 }
                 btAddress = form.bluetoothMacAddress
             }
-            PrinterConnectionType.USB -> return // sudah ditangani di atas, tidak terjangkau
+            PrinterConnectionType.USB -> {
+                val vendorId = form.usbVendorId
+                val productId = form.usbProductId
+                if (vendorId == null || productId == null) {
+                    emitMessage("Pilih perangkat USB terlebih dahulu.")
+                    return
+                }
+                usbVendorId = vendorId
+                usbProductId = productId
+            }
         }
 
         val charPerLine = form.charPerLine.toIntOrNull()
@@ -187,9 +231,12 @@ class PrinterViewModel(
                     priority = nextPriority,
                     charPerLine = charPerLine,
                     paperWidth = form.paperWidth,
+                    supportsStatusQuery = form.supportsStatusQuery,
                     wifiIpAddress = wifiIp,
                     wifiPort = wifiPort,
-                    bluetoothMacAddress = btAddress
+                    bluetoothMacAddress = btAddress,
+                    usbVendorId = usbVendorId,
+                    usbProductId = usbProductId
                 )
                 printerRepository.add(entity)
                 emitMessage("Printer \"$label\" ditambahkan.")
@@ -203,9 +250,12 @@ class PrinterViewModel(
                         connectionType = form.connectionType,
                         paperWidth = form.paperWidth,
                         charPerLine = charPerLine,
+                        supportsStatusQuery = form.supportsStatusQuery,
                         wifiIpAddress = wifiIp,
                         wifiPort = wifiPort,
-                        bluetoothMacAddress = btAddress
+                        bluetoothMacAddress = btAddress,
+                        usbVendorId = usbVendorId,
+                        usbProductId = usbProductId
                     )
                     printerRepository.update(updated)
                     emitMessage("Printer \"$label\" diperbarui.")
@@ -267,6 +317,26 @@ class PrinterViewModel(
                 }
             }
             _uiState.value = _uiState.value.copy(pendingDeleteId = null)
+        }
+    }
+
+    // ---- Test Print (Batch H3d) ----
+
+    fun testPrint(printer: PrinterEntity) {
+        if (_uiState.value.testingPrinterIds.contains(printer.id)) return // guard anti-dobel-klik
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                testingPrinterIds = _uiState.value.testingPrinterIds + printer.id
+            )
+            when (val result = connectionFactory.testPrint(printer)) {
+                is TestPrintResult.Success ->
+                    emitMessage("Test print ke \"${printer.label}\" berhasil.")
+                is TestPrintResult.Failure ->
+                    emitMessage(result.message)
+            }
+            _uiState.value = _uiState.value.copy(
+                testingPrinterIds = _uiState.value.testingPrinterIds - printer.id
+            )
         }
     }
 
@@ -357,9 +427,70 @@ class PrinterViewModel(
         }
     }
 
+    // ---- USB (Batch H3c) ----
+
+    fun refreshUsbDevices() {
+        _usbUiState.value = _usbUiState.value.copy(devices = usbHelper.getDeviceList())
+    }
+
+    fun startObservingUsbAttachment() {
+        if (usbAttachmentJob?.isActive == true) return
+        usbAttachmentJob = viewModelScope.launch {
+            usbHelper.observeAttachDetach().collect {
+                refreshUsbDevices()
+            }
+        }
+    }
+
+    fun stopObservingUsbAttachment() {
+        usbAttachmentJob?.cancel()
+        usbAttachmentJob = null
+    }
+
+    /** Pilih device USB -- langsung minta izin akses (sekali klik), TIDAK
+     *  ada langkah PIN seperti Bluetooth karena model permission USB murni
+     *  soal izin akses OS, bukan pairing perangkat. */
+    fun selectUsbDevice(device: UsbDeviceInfo) {
+        viewModelScope.launch {
+            _usbUiState.value = _usbUiState.value.copy(isRequestingPermission = true)
+
+            val rawDevice = usbHelper.findDeviceByName(device.deviceName)
+            if (rawDevice == null) {
+                emitMessage("Perangkat USB tidak ditemukan (mungkin sudah dicabut).")
+                _usbUiState.value = _usbUiState.value.copy(isRequestingPermission = false)
+                return@launch
+            }
+
+            when (usbHelper.requestPermission(rawDevice)) {
+                UsbPermissionResult.Granted -> {
+                    updateForm {
+                        it.copy(
+                            usbVendorId = device.vendorId,
+                            usbProductId = device.productId,
+                            label = it.label.ifBlank { device.label }
+                        )
+                    }
+                    emitMessage("Izin akses USB \"${device.label}\" diberikan.")
+                    _usbUiState.value = UsbUiState()
+                    _usbSelectionSuccess.emit(device)
+                }
+                UsbPermissionResult.Denied -> {
+                    emitMessage("Izin akses USB ditolak. Tidak bisa menggunakan perangkat ini.")
+                    _usbUiState.value = _usbUiState.value.copy(isRequestingPermission = false)
+                }
+            }
+        }
+    }
+
+    fun resetUsbPicker() {
+        stopObservingUsbAttachment()
+        _usbUiState.value = UsbUiState()
+    }
+
     override fun onCleared() {
         super.onCleared()
         bluetoothHelper.cancelDiscovery()
+        usbAttachmentJob?.cancel()
     }
 
     private fun emitMessage(message: String) {

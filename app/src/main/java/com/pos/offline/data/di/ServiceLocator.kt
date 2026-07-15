@@ -19,6 +19,8 @@ import com.pos.offline.ui.report.ReportViewModel
 import com.pos.offline.ui.settings.PrinterViewModel
 import com.pos.offline.ui.settings.SettingsViewModel
 import com.pos.offline.util.BluetoothPrinterHelper
+import com.pos.offline.util.PrinterConnectionFactory
+import com.pos.offline.util.UsbPrinterHelper
 
 class PosApplication : Application() {
     override fun onCreate() {
@@ -59,6 +61,12 @@ object ServiceLocator {
     private val bluetoothPrinterHelper: BluetoothPrinterHelper by lazy {
         BluetoothPrinterHelper(appContext)
     }
+    private val usbPrinterHelper: UsbPrinterHelper by lazy {
+        UsbPrinterHelper(appContext)
+    }
+    private val printerConnectionFactory: PrinterConnectionFactory by lazy {
+        PrinterConnectionFactory(bluetoothPrinterHelper, usbPrinterHelper)
+    }
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
@@ -78,7 +86,7 @@ object ServiceLocator {
     fun settingsViewModelFactory(): ViewModelProvider.Factory =
         SettingsViewModelFactory(cashierRepository, shiftRepository)
     fun printerViewModelFactory(): ViewModelProvider.Factory =
-        PrinterViewModelFactory(printerRepository, bluetoothPrinterHelper)
+        PrinterViewModelFactory(printerRepository, bluetoothPrinterHelper, usbPrinterHelper, printerConnectionFactory)
 
     fun transactionRepository(): TransactionRepository = transactionRepository
     fun productRepository(): ProductRepository = productRepository
@@ -136,9 +144,11 @@ class SettingsViewModelFactory(
 
 class PrinterViewModelFactory(
     private val printerRepository: PrinterRepository,
-    private val bluetoothPrinterHelper: BluetoothPrinterHelper
+    private val bluetoothPrinterHelper: BluetoothPrinterHelper,
+    private val usbPrinterHelper: UsbPrinterHelper,
+    private val printerConnectionFactory: PrinterConnectionFactory
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        PrinterViewModel(printerRepository, bluetoothPrinterHelper) as T
+        PrinterViewModel(printerRepository, bluetoothPrinterHelper, usbPrinterHelper, printerConnectionFactory) as T
 }

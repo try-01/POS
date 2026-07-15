@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Usb
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.AlertDialog
@@ -37,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -100,22 +102,25 @@ fun PrinterManagementDialog(
                 ) {
                     if (printers.isEmpty()) {
                         Text(
-                            "Belum ada printer ditambahkan. Tambahkan printer WiFi/LAN " +
-                                "atau Bluetooth (dukungan USB menyusul).",
+                            "Belum ada printer ditambahkan. Tambahkan printer WiFi/LAN, " +
+                                "Bluetooth, atau USB.",
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
                         printers.forEachIndexed { index, printer ->
+                            val isTesting = uiState.testingPrinterIds.contains(printer.id)
                             PrinterRow(
                                 printer = printer,
                                 isFirst = index == 0,
                                 isLast = index == printers.lastIndex,
+                                isTesting = isTesting,
                                 onEdit = { viewModel.openEditDialog(printer) },
                                 onDelete = { viewModel.requestDelete(printer.id) },
                                 onSetDefault = { viewModel.setAsDefault(printer) },
                                 onMoveUp = { viewModel.movePriorityUp(printer) },
-                                onMoveDown = { viewModel.movePriorityDown(printer) }
+                                onMoveDown = { viewModel.movePriorityDown(printer) },
+                                onTestPrint = { viewModel.testPrint(printer) }
                             )
                         }
                     }
@@ -154,11 +159,13 @@ private fun PrinterRow(
     printer: PrinterEntity,
     isFirst: Boolean,
     isLast: Boolean,
+    isTesting: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onSetDefault: () -> Unit,
     onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit
+    onMoveDown: () -> Unit,
+    onTestPrint: () -> Unit
 ) {
     GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(12.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -193,10 +200,10 @@ private fun PrinterRow(
                     }
                 }
                 Row {
-                    IconButton(onClick = onMoveUp, enabled = !isFirst, modifier = Modifier.size(28.dp)) {
+                    IconButton(onClick = onMoveUp, enabled = !isFirst && !isTesting, modifier = Modifier.size(28.dp)) {
                         Icon(Icons.Rounded.ArrowUpward, contentDescription = "Naikkan prioritas", modifier = Modifier.size(14.dp))
                     }
-                    IconButton(onClick = onMoveDown, enabled = !isLast, modifier = Modifier.size(28.dp)) {
+                    IconButton(onClick = onMoveDown, enabled = !isLast && !isTesting, modifier = Modifier.size(28.dp)) {
                         Icon(Icons.Rounded.ArrowDownward, contentDescription = "Turunkan prioritas", modifier = Modifier.size(14.dp))
                     }
                 }
@@ -210,15 +217,27 @@ private fun PrinterRow(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (!printer.isDefault) {
-                    TextButton(onClick = onSetDefault) {
+                    TextButton(onClick = onSetDefault, enabled = !isTesting) {
                         Text("Jadikan Utama", fontSize = 11.sp)
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
+                IconButton(onClick = onTestPrint, enabled = !isTesting, modifier = Modifier.size(28.dp)) {
+                    if (isTesting) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            Icons.Rounded.Print,
+                            contentDescription = "Test Print",
+                            modifier = Modifier.size(15.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                IconButton(onClick = onEdit, enabled = !isTesting, modifier = Modifier.size(28.dp)) {
                     Icon(Icons.Rounded.Edit, contentDescription = "Edit", modifier = Modifier.size(15.dp))
                 }
-                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                IconButton(onClick = onDelete, enabled = !isTesting, modifier = Modifier.size(28.dp)) {
                     Icon(
                         Icons.Rounded.Delete,
                         contentDescription = "Hapus",
@@ -238,6 +257,7 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
     val form = uiState.formState
     val isEdit = form.id != null
     var showBluetoothPicker by remember { mutableStateOf(false) }
+    var showUsbPicker by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = { viewModel.closeFormDialog() },
@@ -271,16 +291,10 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
                     )
                     FilterChip(
                         selected = form.connectionType == PrinterConnectionType.USB,
-                        onClick = {},
-                        enabled = false,
+                        onClick = { viewModel.updateFormConnectionType(PrinterConnectionType.USB) },
                         label = { Text("USB", fontSize = 11.sp) }
                     )
                 }
-                Text(
-                    "USB akan tersedia pada pembaruan berikutnya.",
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
 
                 if (form.connectionType == PrinterConnectionType.WIFI) {
                     OutlinedTextField(
@@ -316,6 +330,23 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
                     }
                 }
 
+                if (form.connectionType == PrinterConnectionType.USB) {
+                    OutlinedButton(
+                        onClick = { showUsbPicker = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Rounded.Usb, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        val vid = form.usbVendorId
+                        val pid = form.usbProductId
+                        Text(
+                            if (vid == null || pid == null) "Pilih Perangkat USB"
+                            else "Ganti Perangkat (${String.format("%04x:%04x", vid, pid)})",
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
                 Text("Lebar Kertas", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
@@ -345,6 +376,28 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                Text("Deteksi Status Kertas", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Printer mendukung deteksi kertas habis", fontSize = 12.sp)
+                        Text(
+                            "Aktifkan HANYA jika Anda yakin printer ini mendukung status-query. " +
+                                "Kebanyakan printer thermal umum (termasuk RPP02N) TIDAK mendukung " +
+                                "-- deteksi otomatis belum tersedia, atur manual di sini.",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = form.supportsStatusQuery,
+                        onCheckedChange = viewModel::updateFormSupportsStatusQuery
+                    )
+                }
             }
         },
         confirmButton = {
@@ -371,6 +424,13 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
         BluetoothPickerDialog(
             viewModel = viewModel,
             onDismiss = { showBluetoothPicker = false }
+        )
+    }
+
+    if (showUsbPicker) {
+        UsbPickerDialog(
+            viewModel = viewModel,
+            onDismiss = { showUsbPicker = false }
         )
     }
 }
@@ -412,8 +472,12 @@ private fun printerSubtitle(printer: PrinterEntity): String = when (printer.conn
         "${printer.wifiIpAddress}:${printer.wifiPort} • ${printer.charPerLine} kar/baris (${printer.paperWidth.label()})"
     PrinterConnectionType.BLUETOOTH ->
         "${printer.bluetoothMacAddress ?: "-"} • ${printer.charPerLine} kar/baris"
-    PrinterConnectionType.USB ->
-        "USB ${printer.usbVendorId ?: "-"}:${printer.usbProductId ?: "-"} • ${printer.charPerLine} kar/baris"
+    PrinterConnectionType.USB -> {
+        val vid = printer.usbVendorId
+        val pid = printer.usbProductId
+        val idLabel = if (vid != null && pid != null) String.format("%04x:%04x", vid, pid) else "-"
+        "USB $idLabel • ${printer.charPerLine} kar/baris"
+    }
 }
 
 private fun PaperWidth.label(): String = when (this) {

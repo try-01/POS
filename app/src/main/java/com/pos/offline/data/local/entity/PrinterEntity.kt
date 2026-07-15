@@ -3,20 +3,26 @@ package com.pos.offline.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-/** Jenis koneksi ke printer thermal fisik. Prioritas fallback disepakati:
- *  Bluetooth -> WiFi/LAN -> USB (lihat PrintCoordinator, Batch H6). */
 enum class PrinterConnectionType { BLUETOOTH, WIFI, USB }
 
-/** Metadata asal-usul lebar kertas -- HANYA dipakai untuk menentukan nilai
- *  default [PrinterEntity.charPerLine] saat printer baru dibuat. Nilai
- *  charPerLine sesungguhnya disimpan independen supaya bisa di-override
- *  manual tanpa perlu migrasi skema baru. */
 enum class PaperWidth {
     MM_58, MM_80;
 
     fun defaultCharPerLine(): Int = when (this) {
         MM_58 -> 32
         MM_80 -> 48
+    }
+
+    /** Lebar AREA CETAK RIIL dalam mm (BUKAN lebar kertas nominal) --
+     *  dipakai sebagai parameter printerWidthMM saat membangun EscPosPrinter
+     *  DantSu, supaya perhitungan lebar pixel (gambar/QR code, di H5 nanti)
+     *  akurat. Lebar kertas 58mm/80mm SELALU lebih besar dari area cetak
+     *  riil karena margin mekanis printhead. Nilai disepakati bersama user
+     *  (bukan hasil pengukuran spesifik RPP02N) -- bisa disesuaikan lagi
+     *  nanti kalau ditemukan printer dengan area cetak signifikan berbeda. */
+    fun printableWidthMM(): Float = when (this) {
+        MM_58 -> 48f
+        MM_80 -> 72f
     }
 }
 
@@ -25,22 +31,14 @@ data class PrinterEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val label: String,
     val connectionType: PrinterConnectionType,
-    /** Printer utama. Hanya boleh ada 1 baris dengan nilai true -- ditegakkan
-     *  di PrinterRepository (clearDefaultExcept / clearAllDefault). */
     val isDefault: Boolean = false,
-    /** Urutan fallback ke printer cadangan. 0 = paling diutamakan. */
     val priority: Int = 0,
     val charPerLine: Int,
     val paperWidth: PaperWidth,
-    /** Auto-detect saat Test Print (Batch H3) via perintah mentah DLE EOT 4
-     *  (bypass API tinggi DantSu yang write-only), timeout ~1 detik.
-     *  Ada toggle override manual di UI edit kalau auto-detect keliru. */
     val supportsStatusQuery: Boolean = false,
     val bluetoothMacAddress: String? = null,
     val wifiIpAddress: String? = null,
     val wifiPort: Int? = null,
-    /** Identifier printer USB pakai kombinasi vendorId:productId (bukan
-     *  device path yang bisa berubah antar colok-ulang). */
     val usbVendorId: Int? = null,
     val usbProductId: Int? = null,
     val createdAt: Long = System.currentTimeMillis()
