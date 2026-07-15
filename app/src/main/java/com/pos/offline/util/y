@@ -23,25 +23,6 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
-/**
- * Implementasi DeviceConnection Bluetooth KUSTOM (BUKAN memakai
- * com.dantsu...connection.bluetooth.BluetoothConnection bawaan library) --
- * alasan teknis: BluetoothSocket di kelas bawaan bersifat PRIVATE tanpa
- * getter apa pun, sehingga TIDAK MUNGKIN dibatalkan paksa dari luar saat
- * connect() macet. BluetoothSocket.connect() juga tidak punya parameter
- * timeout bawaan & bisa blocking lama (device mati mendadak, sinyal lemah,
- * dll) -- kalau cuma "berhenti menunggu" di level coroutine tanpa menutup
- * socket-nya, thread di baliknya tetap jalan diam-diam sampai OS-level
- * timeout Android (bisa >10 detik), tidak sesuai target "timeout ~5 detik"
- * dan boros resource thread.
- *
- * Karena field outputStream/data di DeviceConnection (abstract base) BERSIFAT
- * PROTECTED, kita bisa extend langsung & simpan referensi BluetoothSocket
- * sendiri -- forceCloseIfStuck() dipanggil watchdog eksternal saat timeout,
- * menutup socket dari thread lain membuat connect() yang sedang blocking
- * langsung melempar IOException (perilaku resmi terdokumentasi Android),
- * sehingga thread benar-benar berhenti alih-alih menggantung tanpa batas.
- */
 class CancellableBluetoothConnection(private val device: BluetoothDevice) : DeviceConnection() {
 
     @Volatile private var socket: BluetoothSocket? = null
@@ -50,7 +31,7 @@ class CancellableBluetoothConnection(private val device: BluetoothDevice) : Devi
         socket?.isConnected == true && super.isConnected()
 
     @SuppressLint("MissingPermission") // dijaga pemanggil: cek hasPermissions() di resolveBluetooth()
-    @Suppress("DEPRECATION")
+    @Suppress("DEPRECATION") // Menghilangkan warning BluetoothAdapter.getDefaultAdapter()
     override fun connect(): DeviceConnection {
         if (isConnected()) return this
         val uuid = resolveServiceUuid()
@@ -76,9 +57,7 @@ class CancellableBluetoothConnection(private val device: BluetoothDevice) : Devi
         socket = null
         return this
     }
-
-    /** Dipanggil dari watchdog timeout eksternal untuk memaksa batalkan
-     *  koneksi yang macet -- lihat penjelasan lengkap di dokumentasi kelas. */
+    
     fun forceCloseIfStuck() {
         socket?.let { runCatching { it.close() } }
     }
@@ -108,17 +87,6 @@ private sealed class ConnectionResolution {
     data class Error(val message: String) : ConnectionResolution()
 }
 
-/**
- * Factory + orkestrasi Test Print (Batch H3d). Cakupan sengaja MINIMAL --
- * satu printer, satu percobaan cetak per pemanggilan, TANPA cascade ke
- * printer cadangan (itu baru masuk scope PrintCoordinator di H6).
- *
- * Auto-detect supportsStatusQuery DITUNDA (keputusan disepakati bersama
- * user) -- DeviceConnection DantSu TIDAK menyediakan akses baca respons
- * (InputStream) lewat API publik/protected apa pun, library ini murni
- * satu-arah (write-only). Field supportsStatusQuery untuk saat ini murni
- * toggle manual di form edit printer.
- */
 class PrinterConnectionFactory(
     private val bluetoothHelper: BluetoothPrinterHelper,
     private val usbHelper: UsbPrinterHelper
@@ -187,7 +155,7 @@ class PrinterConnectionFactory(
         )
     }
 
-    @Suppress("DEPRECATION")
+    @Suppress("DEPRECATION") // Menghilangkan warning BluetoothAdapter.getDefaultAdapter()
     private fun resolveBluetooth(printer: PrinterEntity): ConnectionResolution {
         val address = printer.bluetoothMacAddress
         if (address.isNullOrBlank()) {
@@ -228,14 +196,7 @@ class PrinterConnectionFactory(
 
         return ConnectionResolution.Ready(UsbConnection(usbManager, device), printer.label)
     }
-
-    /**
-     * Membuka koneksi dengan batas waktu ~5 detik yang BENAR-BENAR bisa
-     * membatalkan panggilan blocking di baliknya (bukan sekadar berhenti
-     * menunggu di sisi coroutine) -- lihat dokumentasi [CancellableBluetoothConnection].
-     * Untuk WiFi & USB, ini juga berfungsi sebagai jaring pengaman tambahan
-     * meski keduanya sudah punya mekanisme kegagalan cepat sendiri.
-     */
+    
     private suspend fun connectWithTimeout(connection: DeviceConnection): Boolean = coroutineScope {
         val connectJob = async(Dispatchers.IO) { connection.connect() }
         val watchdog = launch {
@@ -268,6 +229,7 @@ class PrinterConnectionFactory(
         }
 
     private fun buildTestPrintMarkup(printer: PrinterEntity): String {
+        // Mengubah Locale("id", "ID") menjadi Locale.forLanguageTag("id-ID")
         val timestamp = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.forLanguageTag("id-ID")).format(Date())
         return buildString {
             append("[C]<b>TEST PRINT KASIR OFFLINE</b>\n")
