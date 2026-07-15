@@ -6,11 +6,6 @@ import com.pos.offline.data.local.entity.PaperWidth
 import com.pos.offline.data.local.entity.PrinterConnectionType
 import com.pos.offline.data.local.entity.PrinterEntity
 import com.pos.offline.data.repository.PrinterRepository
-import com.pos.offline.util.BluetoothDeviceInfo
-import com.pos.offline.util.BluetoothPrinterHelper
-import com.pos.offline.util.BondResult
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -21,7 +16,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** Data form tambah/edit printer. USB masih ditunda ke H3c. */
+/** Data form tambah/edit printer. Batch H3a hanya mendukung WIFI secara
+ *  fungsional -- BLUETOOTH/USB ditunda ke H3b/H3c (lihat validasi di saveForm). */
 data class PrinterFormState(
     val id: Long? = null, // null = printer baru
     val label: String = "",
@@ -29,8 +25,7 @@ data class PrinterFormState(
     val paperWidth: PaperWidth = PaperWidth.MM_80,
     val charPerLine: String = PaperWidth.MM_80.defaultCharPerLine().toString(),
     val wifiIpAddress: String = "",
-    val wifiPort: String = "9100", // default umum port raw ESC/POS jaringan
-    val bluetoothMacAddress: String = ""
+    val wifiPort: String = "9100" // default umum port raw ESC/POS jaringan
 )
 
 data class PrinterUiState(
@@ -40,40 +35,18 @@ data class PrinterUiState(
     val pendingDeleteId: Long? = null
 )
 
-/** State picker Bluetooth -- terpisah dari [PrinterUiState] karena siklus
- *  hidupnya beda (aktif hanya selagi dialog pemilihan perangkat terbuka). */
-data class BluetoothUiState(
-    val bondedDevices: List<BluetoothDeviceInfo> = emptyList(),
-    val discoveredDevices: List<BluetoothDeviceInfo> = emptyList(),
-    val isScanning: Boolean = false,
-    val pairingTarget: BluetoothDeviceInfo? = null,
-    val isPairing: Boolean = false
-)
-
 class PrinterViewModel(
-    private val printerRepository: PrinterRepository,
-    private val bluetoothHelper: BluetoothPrinterHelper
+    private val printerRepository: PrinterRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PrinterUiState())
     val uiState: StateFlow<PrinterUiState> = _uiState.asStateFlow()
 
-    private val _bluetoothUiState = MutableStateFlow(BluetoothUiState())
-    val bluetoothUiState: StateFlow<BluetoothUiState> = _bluetoothUiState.asStateFlow()
-
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
-    /** Event one-shot: emit sekali saat pairing+pemilihan perangkat sukses,
-     *  dipakai UI utk menutup dialog picker otomatis (pola sama seperti
-     *  [messages], supaya tidak ke-collect ulang saat rekomposisi/rotasi). */
-    private val _pairingSuccess = MutableSharedFlow<BluetoothDeviceInfo>(extraBufferCapacity = 1)
-    val pairingSuccess: SharedFlow<BluetoothDeviceInfo> = _pairingSuccess.asSharedFlow()
-
     val printers: StateFlow<List<PrinterEntity>> = printerRepository.allPrinters
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    private var discoveryJob: Job? = null
 
     // ---- Dialog form ----
 
@@ -94,8 +67,7 @@ class PrinterViewModel(
                 paperWidth = printer.paperWidth,
                 charPerLine = printer.charPerLine.toString(),
                 wifiIpAddress = printer.wifiIpAddress ?: "",
-                wifiPort = printer.wifiPort?.toString() ?: "9100",
-                bluetoothMacAddress = printer.bluetoothMacAddress ?: ""
+                wifiPort = printer.wifiPort?.toString() ?: "9100"
             )
         )
     }
@@ -109,6 +81,8 @@ class PrinterViewModel(
     fun updateFormConnectionType(type: PrinterConnectionType) =
         updateForm { it.copy(connectionType = type) }
 
+    /** Ganti lebar kertas otomatis mengganti nilai default charPerLine --
+     *  user tetap bisa override manual sesudahnya lewat updateFormCharPerLine. */
     fun updateFormPaperWidth(width: PaperWidth) =
         updateForm { it.copy(paperWidth = width, charPerLine = width.defaultCharPerLine().toString()) }
 
@@ -127,46 +101,25 @@ class PrinterViewModel(
     fun saveForm() {
         val form = _uiState.value.formState
 
-        if (form.connectionType == PrinterConnectionType.USB) {
+        if (form.connectionType != PrinterConnectionType.WIFI) {
             emitMessage("Jenis koneksi ini belum tersedia pada pembaruan ini.")
             return
         }
-
         val label = form.label.trim()
         if (label.isEmpty()) {
             emitMessage("Nama printer tidak boleh kosong.")
             return
         }
-
-        var wifiIp: String? = null
-        var wifiPort: Int? = null
-        var btAddress: String? = null
-
-        when (form.connectionType) {
-            PrinterConnectionType.WIFI -> {
-                val ip = form.wifiIpAddress.trim()
-                if (ip.isEmpty() || !isValidIpv4(ip)) {
-                    emitMessage("Alamat IP tidak valid. Contoh format: 192.168.1.50")
-                    return
-                }
-                val port = form.wifiPort.toIntOrNull()
-                if (port == null || port !in 1..65535) {
-                    emitMessage("Port tidak valid (harus angka 1-65535).")
-                    return
-                }
-                wifiIp = ip
-                wifiPort = port
-            }
-            PrinterConnectionType.BLUETOOTH -> {
-                if (form.bluetoothMacAddress.isBlank()) {
-                    emitMessage("Pilih perangkat Bluetooth terlebih dahulu.")
-                    return
-                }
-                btAddress = form.bluetoothMacAddress
-            }
-            PrinterConnectionType.USB -> return // sudah ditangani di atas, tidak terjangkau
+        val ip = form.wifiIpAddress.trim()
+        if (ip.isEmpty() || !isValidIpv4(ip)) {
+            emitMessage("Alamat IP tidak valid. Contoh format: 192.168.1.50")
+            return
         }
-
+        val port = form.wifiPort.toIntOrNull()
+        if (port == null || port !in 1..65535) {
+            emitMessage("Port tidak valid (harus angka 1-65535).")
+            return
+        }
         val charPerLine = form.charPerLine.toIntOrNull()
         if (charPerLine == null || charPerLine <= 0) {
             emitMessage("Karakter per baris tidak valid.")
@@ -183,13 +136,12 @@ class PrinterViewModel(
                 val entity = PrinterEntity(
                     label = label,
                     connectionType = form.connectionType,
-                    isDefault = existing.isEmpty(),
+                    isDefault = existing.isEmpty(), // printer pertama otomatis jadi default
                     priority = nextPriority,
                     charPerLine = charPerLine,
                     paperWidth = form.paperWidth,
-                    wifiIpAddress = wifiIp,
-                    wifiPort = wifiPort,
-                    bluetoothMacAddress = btAddress
+                    wifiIpAddress = ip,
+                    wifiPort = port
                 )
                 printerRepository.add(entity)
                 emitMessage("Printer \"$label\" ditambahkan.")
@@ -200,12 +152,10 @@ class PrinterViewModel(
                 } else {
                     val updated = current.copy(
                         label = label,
-                        connectionType = form.connectionType,
                         paperWidth = form.paperWidth,
                         charPerLine = charPerLine,
-                        wifiIpAddress = wifiIp,
-                        wifiPort = wifiPort,
-                        bluetoothMacAddress = btAddress
+                        wifiIpAddress = ip,
+                        wifiPort = port
                     )
                     printerRepository.update(updated)
                     emitMessage("Printer \"$label\" diperbarui.")
@@ -261,6 +211,9 @@ class PrinterViewModel(
                 printerRepository.delete(printer)
                 emitMessage("Printer \"${printer.label}\" dihapus.")
 
+                // Jaga invarian: kalau yang dihapus adalah default dan masih
+                // ada printer lain tersisa, promosikan otomatis printer dgn
+                // priority terkecil sebagai default baru.
                 if (printer.isDefault) {
                     val remaining = printerRepository.getAllOrderedByPriority()
                     remaining.firstOrNull()?.let { printerRepository.setAsDefault(it) }
@@ -268,98 +221,6 @@ class PrinterViewModel(
             }
             _uiState.value = _uiState.value.copy(pendingDeleteId = null)
         }
-    }
-
-    // ---- Bluetooth: pairing & discovery (Batch H3b) ----
-
-    fun hasBluetoothPermissions(): Boolean = bluetoothHelper.hasPermissions()
-
-    fun isBluetoothEnabled(): Boolean = bluetoothHelper.isAdapterEnabled()
-
-    fun refreshBondedDevices() {
-        _bluetoothUiState.value = _bluetoothUiState.value.copy(
-            bondedDevices = bluetoothHelper.getBondedDevices()
-        )
-    }
-
-    fun startDiscovery() {
-        if (discoveryJob?.isActive == true) return
-        _bluetoothUiState.value = _bluetoothUiState.value.copy(isScanning = true, discoveredDevices = emptyList())
-        discoveryJob = viewModelScope.launch {
-            bluetoothHelper.discoverDevices().collect { found ->
-                val current = _bluetoothUiState.value.discoveredDevices
-                if (current.none { it.address == found.address }) {
-                    _bluetoothUiState.value = _bluetoothUiState.value.copy(discoveredDevices = current + found)
-                }
-            }
-        }
-        // Discovery Bluetooth Classic bawaan Android otomatis berhenti
-        // ~12 detik -- selaraskan indikator "isScanning" dengan batas itu.
-        viewModelScope.launch {
-            delay(13_000)
-            if (discoveryJob?.isActive == true) stopDiscovery()
-        }
-    }
-
-    fun stopDiscovery() {
-        discoveryJob?.cancel()
-        discoveryJob = null
-        bluetoothHelper.cancelDiscovery()
-        _bluetoothUiState.value = _bluetoothUiState.value.copy(isScanning = false)
-    }
-
-    fun requestPairing(device: BluetoothDeviceInfo) {
-        _bluetoothUiState.value = _bluetoothUiState.value.copy(pairingTarget = device)
-    }
-
-    fun cancelPairing() {
-        _bluetoothUiState.value = _bluetoothUiState.value.copy(pairingTarget = null)
-    }
-
-    fun confirmPairing(pin: String) {
-        val target = _bluetoothUiState.value.pairingTarget ?: return
-        viewModelScope.launch {
-            _bluetoothUiState.value = _bluetoothUiState.value.copy(isPairing = true)
-            when (bluetoothHelper.pairDevice(target.address, pin)) {
-                BondResult.Success, BondResult.AlreadyBonded -> {
-                    selectBluetoothDevice(target)
-                    emitMessage("Berhasil memasangkan \"${target.name}\".")
-                    _bluetoothUiState.value = BluetoothUiState()
-                    _pairingSuccess.emit(target)
-                }
-                BondResult.Failed -> {
-                    emitMessage(
-                        "Gagal memasangkan perangkat. Periksa PIN & coba lagi, " +
-                            "atau ikuti dialog pairing sistem bila muncul."
-                    )
-                    _bluetoothUiState.value = _bluetoothUiState.value.copy(isPairing = false, pairingTarget = null)
-                }
-            }
-        }
-    }
-
-    /** Pilih perangkat yang SUDAH ter-pairing (tanpa perlu PIN lagi). */
-    fun selectBondedDevice(device: BluetoothDeviceInfo) {
-        selectBluetoothDevice(device)
-    }
-
-    fun resetBluetoothPicker() {
-        stopDiscovery()
-        _bluetoothUiState.value = BluetoothUiState()
-    }
-
-    private fun selectBluetoothDevice(device: BluetoothDeviceInfo) {
-        updateForm {
-            it.copy(
-                bluetoothMacAddress = device.address,
-                label = it.label.ifBlank { device.name }
-            )
-        }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        bluetoothHelper.cancelDiscovery()
     }
 
     private fun emitMessage(message: String) {

@@ -18,6 +18,7 @@ import com.pos.offline.ui.pos.PosViewModel
 import com.pos.offline.ui.report.ReportViewModel
 import com.pos.offline.ui.settings.PrinterViewModel
 import com.pos.offline.ui.settings.SettingsViewModel
+import com.pos.offline.util.BluetoothPrinterHelper
 
 class PosApplication : Application() {
     override fun onCreate() {
@@ -55,6 +56,9 @@ object ServiceLocator {
     private val storeProfileRepository: StoreProfileRepository by lazy {
         StoreProfileRepository(db.storeProfileDao())
     }
+    private val bluetoothPrinterHelper: BluetoothPrinterHelper by lazy {
+        BluetoothPrinterHelper(appContext)
+    }
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
@@ -74,7 +78,7 @@ object ServiceLocator {
     fun settingsViewModelFactory(): ViewModelProvider.Factory =
         SettingsViewModelFactory(cashierRepository, shiftRepository)
     fun printerViewModelFactory(): ViewModelProvider.Factory =
-        PrinterViewModelFactory(printerRepository)
+        PrinterViewModelFactory(printerRepository, bluetoothPrinterHelper)
 
     fun transactionRepository(): TransactionRepository = transactionRepository
     fun productRepository(): ProductRepository = productRepository
@@ -131,9 +135,10 @@ class SettingsViewModelFactory(
 }
 
 class PrinterViewModelFactory(
-    private val printerRepository: PrinterRepository
+    private val printerRepository: PrinterRepository,
+    private val bluetoothPrinterHelper: BluetoothPrinterHelper
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        PrinterViewModel(printerRepository) as T
+        PrinterViewModel(printerRepository, bluetoothPrinterHelper) as T
 }

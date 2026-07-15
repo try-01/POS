@@ -16,6 +16,7 @@ import com.pos.offline.data.repository.TransactionRepository
 import com.pos.offline.ui.inventory.InventoryViewModel
 import com.pos.offline.ui.pos.PosViewModel
 import com.pos.offline.ui.report.ReportViewModel
+import com.pos.offline.ui.settings.PrinterViewModel
 import com.pos.offline.ui.settings.SettingsViewModel
 
 class PosApplication : Application() {
@@ -48,7 +49,6 @@ object ServiceLocator {
     private val returnRepository: ReturnRepository by lazy {
         ReturnRepository(db, db.returnDao(), db.transactionDao(), db.productDao())
     }
-    // Batch H1 -- belum dipakai ViewModel manapun, baru diwire di H3/H4.
     private val printerRepository: PrinterRepository by lazy {
         PrinterRepository(db.printerDao())
     }
@@ -73,6 +73,8 @@ object ServiceLocator {
         ReportViewModelFactory(transactionRepository, shiftRepository, returnRepository)
     fun settingsViewModelFactory(): ViewModelProvider.Factory =
         SettingsViewModelFactory(cashierRepository, shiftRepository)
+    fun printerViewModelFactory(): ViewModelProvider.Factory =
+        PrinterViewModelFactory(printerRepository)
 
     fun transactionRepository(): TransactionRepository = transactionRepository
     fun productRepository(): ProductRepository = productRepository
@@ -126,4 +128,12 @@ class SettingsViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
         SettingsViewModel(cashierRepository, shiftRepository) as T
+}
+
+class PrinterViewModelFactory(
+    private val printerRepository: PrinterRepository
+) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T =
+        PrinterViewModel(printerRepository) as T
 }
