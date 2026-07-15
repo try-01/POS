@@ -43,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -94,7 +95,16 @@ private fun AppRoot() {
         viewModel(factory = ServiceLocator.settingsViewModelFactory())
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var dest by remember { mutableStateOf(Dest.POS) }
+
+    // FIX: rotasi layar (potrait<->landscape) menghancurkan & membuat ulang
+    // MainActivity (tidak ada android:configChanges di Manifest — dan
+    // sengaja dibiarkan begitu, ini pendekatan standar Compose). `remember`
+    // biasa hilang total saat itu terjadi, sehingga tab yang sedang dibuka
+    // selalu ter-reset ke Dest.POS. `rememberSaveable` menyimpan nilai ke
+    // Bundle instance-state Activity (lintas recreation & bahkan proses
+    // di-kill sistem saat di-background) — `Dest` aman dipakai langsung
+    // karena enum Kotlin otomatis Serializable.
+    var dest by rememberSaveable { mutableStateOf(Dest.POS) }
 
     val density = LocalDensity.current
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
@@ -175,7 +185,31 @@ private fun ScreenContent(
             }
         )
         Dest.INVENTORY -> InventoryScreen(viewModel = inventoryViewModel)
-        Dest.REPORT -> ReportScreen(viewModel = reportViewModel)
+        // BATCH BARU: cetak-ulang/ekspor/bagikan dari Detail Transaksi di
+        // Laporan — reuse ReceiptManager PERSIS pola PosScreen di atas
+        // (feedback via Toast, bukan Snackbar/state ViewModel).
+        Dest.REPORT -> ReportScreen(
+            viewModel = reportViewModel,
+            onPrintBluetooth = { result ->
+                scope.launch {
+                    val ok = ReceiptManager.printToFirstBonded(context, result)
+                    Toast.makeText(
+                        context,
+                        if (ok) "Mengirim ke printer…"
+                        else "Gagal: pasang & izinkan printer Bluetooth",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            },
+            onExportPdf = { result ->
+                val file = ReceiptManager.exportToPdf(context, result)
+                Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
+            },
+            onShare = { result ->
+                val intent = ReceiptManager.buildShareIntent(context, result)
+                context.startActivity(intent)
+            }
+        )
         Dest.SETTINGS -> SettingsScreen(viewModel = settingsViewModel)
     }
 }

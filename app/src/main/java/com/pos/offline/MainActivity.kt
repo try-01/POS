@@ -43,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -94,7 +95,20 @@ private fun AppRoot() {
         viewModel(factory = ServiceLocator.settingsViewModelFactory())
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var dest by remember { mutableStateOf(Dest.POS) }
+
+    // FIX: rotasi layar (potrait<->landscape) menghancurkan & membuat ulang
+    // MainActivity (tidak ada android:configChanges di Manifest — dan
+    // sengaja dibiarkan begitu, ini pendekatan standar Compose). `remember`
+    // biasa hilang total saat itu terjadi, sehingga tab yang sedang dibuka
+    // selalu ter-reset ke Dest.POS. `rememberSaveable` menyimpan nilai ke
+    // Bundle instance-state Activity (lintas recreation & bahkan proses
+    // di-kill sistem saat di-background) — `Dest` aman dipakai langsung
+    // karena enum Kotlin otomatis Serializable.
+    var dest by rememberSaveable { mutableStateOf(Dest.POS) }
+
+    BackHandler(enabled = dest != Dest.POS) {
+    dest = Dest.POS
+    }
 
     val density = LocalDensity.current
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
