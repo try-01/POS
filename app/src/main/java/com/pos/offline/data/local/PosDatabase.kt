@@ -7,16 +7,20 @@ import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.pos.offline.data.local.dao.CartDao
 import com.pos.offline.data.local.dao.CashierDao
+import com.pos.offline.data.local.dao.PrinterDao
 import com.pos.offline.data.local.dao.ProductDao
 import com.pos.offline.data.local.dao.ReturnDao
 import com.pos.offline.data.local.dao.ShiftDao
+import com.pos.offline.data.local.dao.StoreProfileDao
 import com.pos.offline.data.local.dao.TransactionDao
 import com.pos.offline.data.local.entity.CartItemEntity
 import com.pos.offline.data.local.entity.CashierEntity
+import com.pos.offline.data.local.entity.PrinterEntity
 import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.data.local.entity.ReturnEntity
 import com.pos.offline.data.local.entity.ReturnItemEntity
 import com.pos.offline.data.local.entity.ShiftEntity
+import com.pos.offline.data.local.entity.StoreProfileEntity
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.TransactionItemEntity
 
@@ -32,9 +36,11 @@ private data class SeedProduct(
         CashierEntity::class,
         ShiftEntity::class,
         ReturnEntity::class,
-        ReturnItemEntity::class
+        ReturnItemEntity::class,
+        PrinterEntity::class,
+        StoreProfileEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class PosDatabase : RoomDatabase() {
@@ -44,6 +50,8 @@ abstract class PosDatabase : RoomDatabase() {
     abstract fun cashierDao(): CashierDao
     abstract fun shiftDao(): ShiftDao
     abstract fun returnDao(): ReturnDao
+    abstract fun printerDao(): PrinterDao
+    abstract fun storeProfileDao(): StoreProfileDao
 
     companion object {
         @Volatile
@@ -92,6 +100,15 @@ abstract class PosDatabase : RoomDatabase() {
                         arrayOf<Any>(s.name, s.sku, s.price, s.cost, 25, now, now)
                     )
                 }
+
+                // Batch H1: baris singleton profil toko dibuat sekali di sini
+                // untuk instalasi baru (untuk upgrade dari versi lama, baris
+                // yang sama dibuat lewat MIGRATION_7_8).
+                db.execSQL(
+                    "INSERT OR IGNORE INTO store_profile " +
+                        "(id, storeName, address, footerNote, logoBytes, autoPrintEnabled) " +
+                        "VALUES (1, '', '', '', NULL, 0)"
+                )
             }
         }
     }

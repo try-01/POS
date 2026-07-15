@@ -8,6 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.pos.offline.data.local.dao.CartDao
 import com.pos.offline.data.local.dao.CashierDao
 import com.pos.offline.data.local.dao.ProductDao
+import com.pos.offline.data.local.dao.ReturnDao
 import com.pos.offline.data.local.dao.ShiftDao
 import com.pos.offline.data.local.dao.TransactionDao
 import com.pos.offline.data.local.entity.CartItemEntity
@@ -42,8 +43,7 @@ abstract class PosDatabase : RoomDatabase() {
     abstract fun transactionDao(): TransactionDao
     abstract fun cashierDao(): CashierDao
     abstract fun shiftDao(): ShiftDao
-    // ReturnDao ditambahkan di Batch E2 — entity sudah terdaftar di sini (E1)
-    // supaya migrasi skema bisa di-build & diuji terpisah lebih dulu.
+    abstract fun returnDao(): ReturnDao
 
     companion object {
         @Volatile

@@ -93,17 +93,6 @@ object Migrations {
             )
         }
     }
-
-    /**
-     * Batch E — Retur Produk.
-     * - transactions.returnId (nullable): FK logis ke returns.id. Nullable, TANPA
-     *   default khusus (SQLite ALTER TABLE ADD COLUMN nullable otomatis NULL untuk
-     *   baris lama) — konsisten dengan pola voidedAt/voidReason di MIGRATION_5_6.
-     * - Tabel `returns`/`return_items` baru: CREATE TABLE langsung cocok dengan
-     *   definisi entity (tidak ada baris lama yang perlu diisi default), jadi
-     *   tidak butuh anotasi @ColumnInfo(defaultValue=...) di sisi Kotlin.
-     * - returns.note: TEXT NOT NULL DEFAULT '' — catatan bebas alasan retur.
-     */
     val MIGRATION_6_7 = object : Migration(6, 7) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL(
@@ -155,8 +144,65 @@ object Migrations {
         }
     }
 
+    /**
+     * Batch H1: skema printer thermal & profil toko.
+     * - `printers`: daftar printer (Bluetooth/WiFi/USB), tanpa FK ke tabel manapun,
+     *   hard-delete (beda dari Cashier yang soft-delete) karena tidak direferensikan
+     *   data transaksi historis apa pun.
+     * - `store_profile`: singleton (id tetap = 1) -- baris default langsung
+     *   diisi di sini supaya user yang upgrade dari versi lama langsung punya
+     *   profil toko kosong yang bisa diedit (untuk instalasi baru, baris yang
+     *   sama juga diisi lewat SEED_CALLBACK.onCreate di PosDatabase).
+     */
+    val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `printers` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `label` TEXT NOT NULL,
+                    `connectionType` TEXT NOT NULL,
+                    `isDefault` INTEGER NOT NULL,
+                    `priority` INTEGER NOT NULL,
+                    `charPerLine` INTEGER NOT NULL,
+                    `paperWidth` TEXT NOT NULL,
+                    `supportsStatusQuery` INTEGER NOT NULL,
+                    `bluetoothMacAddress` TEXT,
+                    `wifiIpAddress` TEXT,
+                    `wifiPort` INTEGER,
+                    `usbVendorId` INTEGER,
+                    `usbProductId` INTEGER,
+                    `createdAt` INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `store_profile` (
+                    `id` INTEGER PRIMARY KEY NOT NULL,
+                    `storeName` TEXT NOT NULL,
+                    `address` TEXT NOT NULL,
+                    `footerNote` TEXT NOT NULL,
+                    `logoBytes` BLOB,
+                    `autoPrintEnabled` INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+
+            db.execSQL(
+                """
+                INSERT OR IGNORE INTO `store_profile`
+                    (`id`, `storeName`, `address`, `footerNote`, `logoBytes`, `autoPrintEnabled`)
+                VALUES (1, '', '', '', NULL, 0)
+                """.trimIndent()
+            )
+        }
+    }
+
     /** Daftar semua migrasi yang terdaftar pada [androidx.room.RoomDatabase]. */
     val ALL: Array<Migration> = arrayOf(
-        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7
+        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
+        MIGRATION_7_8
     )
 }

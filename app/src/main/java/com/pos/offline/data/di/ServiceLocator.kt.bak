@@ -44,8 +44,8 @@ object ServiceLocator {
         TransactionRepository(db, db.transactionDao(), db.cartDao(), db.productDao(), shiftRepository)
     }
 
-    // Belum di-wire ke ViewModel manapun — akan dipakai di Batch E3 saat dialog
-    // Retur (di PosScreen/ReportScreen) benar-benar butuh dependency ini.
+    // BATCH E3: kini di-wire ke ReportViewModel (dipakai dialog "Retur Item"
+    // di TransactionDetailDialog & fondasi section "Retur Hari Ini" di E4).
     private val returnRepository: ReturnRepository by lazy {
         ReturnRepository(db, db.returnDao(), db.transactionDao(), db.productDao())
     }
@@ -64,7 +64,7 @@ object ServiceLocator {
     fun inventoryViewModelFactory(): ViewModelProvider.Factory =
         InventoryViewModelFactory(productRepository)
     fun reportViewModelFactory(): ViewModelProvider.Factory =
-        ReportViewModelFactory(transactionRepository, shiftRepository)
+        ReportViewModelFactory(transactionRepository, shiftRepository, returnRepository)
     fun settingsViewModelFactory(): ViewModelProvider.Factory =
         SettingsViewModelFactory(cashierRepository, shiftRepository)
 
@@ -103,11 +103,12 @@ class InventoryViewModelFactory(
 
 class ReportViewModelFactory(
     private val transactionRepository: TransactionRepository,
-    private val shiftRepository: ShiftRepository
+    private val shiftRepository: ShiftRepository,
+    private val returnRepository: ReturnRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        ReportViewModel(transactionRepository, shiftRepository) as T
+        ReportViewModel(transactionRepository, shiftRepository, returnRepository) as T
 }
 
 class SettingsViewModelFactory(

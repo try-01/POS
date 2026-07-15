@@ -7,9 +7,11 @@ import androidx.lifecycle.ViewModelProvider
 import com.pos.offline.data.local.PosDatabase
 import com.pos.offline.data.repository.CartRepository
 import com.pos.offline.data.repository.CashierRepository
+import com.pos.offline.data.repository.PrinterRepository
 import com.pos.offline.data.repository.ProductRepository
 import com.pos.offline.data.repository.ReturnRepository
 import com.pos.offline.data.repository.ShiftRepository
+import com.pos.offline.data.repository.StoreProfileRepository
 import com.pos.offline.data.repository.TransactionRepository
 import com.pos.offline.ui.inventory.InventoryViewModel
 import com.pos.offline.ui.pos.PosViewModel
@@ -43,11 +45,15 @@ object ServiceLocator {
     private val transactionRepository: TransactionRepository by lazy {
         TransactionRepository(db, db.transactionDao(), db.cartDao(), db.productDao(), shiftRepository)
     }
-
-    // BATCH E3: kini di-wire ke ReportViewModel (dipakai dialog "Retur Item"
-    // di TransactionDetailDialog & fondasi section "Retur Hari Ini" di E4).
     private val returnRepository: ReturnRepository by lazy {
         ReturnRepository(db, db.returnDao(), db.transactionDao(), db.productDao())
+    }
+    // Batch H1 -- belum dipakai ViewModel manapun, baru diwire di H3/H4.
+    private val printerRepository: PrinterRepository by lazy {
+        PrinterRepository(db.printerDao())
+    }
+    private val storeProfileRepository: StoreProfileRepository by lazy {
+        StoreProfileRepository(db.storeProfileDao())
     }
 
     fun initialize(context: Context) {
@@ -73,6 +79,8 @@ object ServiceLocator {
     fun cashierRepository(): CashierRepository = cashierRepository
     fun shiftRepository(): ShiftRepository = shiftRepository
     fun returnRepository(): ReturnRepository = returnRepository
+    fun printerRepository(): PrinterRepository = printerRepository
+    fun storeProfileRepository(): StoreProfileRepository = storeProfileRepository
 }
 
 class PosViewModelFactory(
