@@ -106,6 +106,10 @@ private fun AppRoot() {
     // karena enum Kotlin otomatis Serializable.
     var dest by rememberSaveable { mutableStateOf(Dest.POS) }
 
+    BackHandler(enabled = dest != Dest.POS) {
+    dest = Dest.POS
+    }
+
     val density = LocalDensity.current
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
