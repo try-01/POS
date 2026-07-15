@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PersonAdd
+import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -57,10 +58,15 @@ import com.pos.offline.ui.components.GlassCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel) {
+fun SettingsScreen(
+    viewModel: SettingsViewModel,
+    printerViewModel: PrinterViewModel
+) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val cashiers by viewModel.cashiers.collectAsState()
+    val printers by printerViewModel.printers.collectAsState()
+    var showPrinterDialog by remember { mutableStateOf(false) }
 
     // --- SAF launchers ---
     val exportLauncher = rememberLauncherForActivityResult(
@@ -73,6 +79,12 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg ->
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        printerViewModel.messages.collect { msg ->
             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
         }
     }
@@ -92,6 +104,13 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
         AddCashierDialog(
             onDismiss = { viewModel.closeAddCashierDialog() },
             onConfirm = { name -> viewModel.addCashier(name) }
+        )
+    }
+
+    if (showPrinterDialog) {
+        PrinterManagementDialog(
+            viewModel = printerViewModel,
+            onDismiss = { showPrinterDialog = false }
         )
     }
 
@@ -231,6 +250,45 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                         Icon(Icons.Rounded.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Tambah Kasir", fontSize = 13.sp)
+                    }
+                }
+            }
+
+            SectionLabel("Printer Struk")
+
+            GlassCard(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(14.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (printers.isEmpty()) {
+                        Text(
+                            "Belum ada printer thermal ditambahkan. Struk tetap bisa " +
+                                "dicetak/dibagikan sebagai PDF tanpa printer fisik.",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        val defaultPrinter = printers.find { it.isDefault }
+                        Text(
+                            "Printer utama: ${defaultPrinter?.label ?: "-"}",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            "${printers.size} printer tersimpan",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = { showPrinterDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Rounded.Print, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Kelola Printer", fontSize = 13.sp)
                     }
                 }
             }

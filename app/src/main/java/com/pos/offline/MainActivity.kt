@@ -64,6 +64,7 @@ import com.pos.offline.ui.pos.PosViewModel
 import com.pos.offline.ui.receipt.ReceiptManager
 import com.pos.offline.ui.report.ReportScreen
 import com.pos.offline.ui.report.ReportViewModel
+import com.pos.offline.ui.settings.PrinterViewModel
 import com.pos.offline.ui.settings.SettingsScreen
 import com.pos.offline.ui.settings.SettingsViewModel
 import com.pos.offline.ui.theme.PosTheme
@@ -94,17 +95,10 @@ private fun AppRoot() {
         viewModel(factory = ServiceLocator.reportViewModelFactory())
     val settingsViewModel: SettingsViewModel =
         viewModel(factory = ServiceLocator.settingsViewModelFactory())
+    val printerViewModel: PrinterViewModel =
+        viewModel(factory = ServiceLocator.printerViewModelFactory())
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
-    // FIX: rotasi layar (potrait<->landscape) menghancurkan & membuat ulang
-    // MainActivity (tidak ada android:configChanges di Manifest — dan
-    // sengaja dibiarkan begitu, ini pendekatan standar Compose). `remember`
-    // biasa hilang total saat itu terjadi, sehingga tab yang sedang dibuka
-    // selalu ter-reset ke Dest.POS. `rememberSaveable` menyimpan nilai ke
-    // Bundle instance-state Activity (lintas recreation & bahkan proses
-    // di-kill sistem saat di-background) — `Dest` aman dipakai langsung
-    // karena enum Kotlin otomatis Serializable.
     var dest by rememberSaveable { mutableStateOf(Dest.POS) }
 
     BackHandler(enabled = dest != Dest.POS) {
@@ -127,7 +121,7 @@ if (isLandscape) {
                 .fillMaxHeight()
                 .imePadding()
         ) {
-            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel, context, scope, isLandscape = true)
+            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel, printerViewModel, context, scope, isLandscape = true)
         }
         SideNavRail(selected = dest, onSelect = { dest = it })
     }
@@ -143,7 +137,7 @@ if (isLandscape) {
                 .fillMaxWidth()
                 .imePadding()
         ) {
-            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel, context, scope, isLandscape = false)
+            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel, printerViewModel, context, scope, isLandscape = false)
         }
 
         AnimatedVisibility(
@@ -156,8 +150,6 @@ if (isLandscape) {
     }
 }
 }
-
-/** Konten layar aktif (Kasir/Inventaris/Laporan/Pengaturan) — dipisah agar tidak duplikat antara mode potret & landscape. */
 @Composable
 private fun ScreenContent(
     dest: Dest,
@@ -165,6 +157,7 @@ private fun ScreenContent(
     inventoryViewModel: InventoryViewModel,
     reportViewModel: ReportViewModel,
     settingsViewModel: SettingsViewModel,
+    printerViewModel: PrinterViewModel,
     context: android.content.Context,
     scope: kotlinx.coroutines.CoroutineScope,
     isLandscape: Boolean
@@ -190,9 +183,6 @@ private fun ScreenContent(
             }
         )
         Dest.INVENTORY -> InventoryScreen(viewModel = inventoryViewModel)
-        // BATCH BARU: cetak-ulang/ekspor/bagikan dari Detail Transaksi di
-        // Laporan — reuse ReceiptManager PERSIS pola PosScreen di atas
-        // (feedback via Toast, bukan Snackbar/state ViewModel).
         Dest.REPORT -> ReportScreen(
             viewModel = reportViewModel,
             onPrintBluetooth = { result ->
@@ -215,11 +205,9 @@ private fun ScreenContent(
                 context.startActivity(intent)
             }
         )
-        Dest.SETTINGS -> SettingsScreen(viewModel = settingsViewModel)
+        Dest.SETTINGS -> SettingsScreen(viewModel = settingsViewModel, printerViewModel = printerViewModel)
     }
 }
-
-/** Bottom Nav — dipakai di mode potret. */
 @Composable
 private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
     Surface(
@@ -262,12 +250,6 @@ private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
         }
     }
 }
-
-/**
- * Rail navigasi vertikal tipis untuk mode landscape. Selalu terlihat di sisi
- * kanan layar, tidak memakan ruang horizontal signifikan (lebar tetap ~64dp),
- * dan tidak perlu di-expand — konsisten dengan prinsip "1 tap ke mana saja".
- */
 @Composable
 private fun SideNavRail(selected: Dest, onSelect: (Dest) -> Unit) {
     Surface(
