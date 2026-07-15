@@ -230,19 +230,44 @@ class PrinterConnectionFactory(
     }
 
     /**
-     * Membuka koneksi dengan batas waktu ~5 detik yang BENAR-BENAR bisa
-     * membatalkan panggilan blocking di baliknya (bukan sekadar berhenti
-     * menunggu di sisi coroutine) -- lihat dokumentasi [CancellableBluetoothConnection].
-     * Untuk WiFi & USB, ini juga berfungsi sebagai jaring pengaman tambahan
-     * meski keduanya sudah punya mekanisme kegagalan cepat sendiri.
+     * Membuka koneksi dengan batas waktu ~5 detik.
+     *
+     * 🐛 BUGFIX PENTING (ditemukan saat pengujian H3d, menyebabkan APP FORCE
+     * CLOSE ~5 detik setelah Test Print saat printer Bluetooth mati/tidak
+     * terjangkau): watchdog di bawah ini SENGAJA TIDAK memanggil
+     * `connectJob.cancel()` setelah forceCloseIfStuck(). Kombinasi keduanya
+     * (menutup paksa socket YANG MENYEBABKAN coroutine menyelesaikan diri
+     * dengan EscPosConnectionException miliknya sendiri, DIBARENGI dengan
+     * cancel() eksplisit pada job yang sama) adalah race condition fatal di
+     * kotlinx.coroutines: sebuah `async` Job yang SUDAH diminta cancel()
+     * tetapi kemudian menyelesaikan diri dengan exception LAIN (bukan
+     * CancellationException) dianggap "exception tak tertangani" oleh
+     * coroutine machinery -- dilempar ke Thread.UncaughtExceptionHandler
+     * (menyebabkan force close), BUKAN diteruskan ke try/catch normal kita
+     * di connectJob.await() di bawah.
+     *
+     * Perbaikannya: HANYA memaksa socket menutup diri lewat
+     * forceCloseIfStuck(). Ini sudah cukup memicu IOException ASLI dari
+     * dalam connect() itu sendiri (perilaku resmi Android: menutup socket
+     * yang sedang di tengah connect() akan membuat connect() melempar
+     * IOException) -- job lalu menyelesaikan diri SECARA ALAMI (bukan
+     * dibatalkan paksa), sehingga exception-nya tertangkap normal lewat
+     * connectJob.await() di bawah seperti seharusnya.
+     *
+     * Ini aman untuk ketiga jenis koneksi: WiFi (TcpConnection) sudah punya
+     * timeout native sendiri lewat parameter constructor yang dihormati JVM,
+     * USB (UsbConnection.connect()) pada dasarnya cepat (buka device handle,
+     * bukan network call) sehingga nyaris mustahil sampai menyentuh watchdog
+     * ini sama sekali.
      */
     private suspend fun connectWithTimeout(connection: DeviceConnection): Boolean = coroutineScope {
         val connectJob = async(Dispatchers.IO) { connection.connect() }
-        val watchdog = launch {
+        val watchdog = launch(Dispatchers.IO) {
             delay(CONNECT_TIMEOUT_MS)
             if (connectJob.isActive) {
                 (connection as? CancellableBluetoothConnection)?.forceCloseIfStuck()
-                connectJob.cancel()
+                // TIDAK ADA connectJob.cancel() DI SINI -- lihat penjelasan
+                // panjang di atas. Biarkan job menyelesaikan diri alami.
             }
         }
         try {
