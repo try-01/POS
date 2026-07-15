@@ -2,6 +2,8 @@ package com.pos.offline.ui.settings
 
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -37,49 +39,79 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.pos.offline.util.BluetoothDeviceInfo
 import com.pos.offline.util.PermissionUtils
 
-/**
- * Dialog pemilihan printer Bluetooth: gerbang permission -> gerbang
- * Bluetooth-on -> daftar perangkat ter-pairing -> pencarian perangkat baru
- * -> PIN dialog hybrid. Menutup diri sendiri otomatis saat pairing sukses
- * (lewat [PrinterViewModel.pairingSuccess]) atau saat memilih perangkat
- * yang sudah ter-pairing.
- */
 @Composable
 fun BluetoothPickerDialog(
     viewModel: PrinterViewModel,
     onDismiss: () -> Unit
 ) {
     val state by viewModel.bluetoothUiState.collectAsState()
-    var hasPermission by remember { mutableStateOf(viewModel.hasBluetoothPermissions()) }
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    var permissionState by remember {
+        mutableStateOf(PermissionUtils.currentBluetoothPermissionState(context))
+    }
     var btEnabled by remember { mutableStateOf(viewModel.isBluetoothEnabled()) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        hasPermission = results.values.all { it }
-        if (hasPermission) viewModel.refreshBondedDevices()
+    ) {
+        // Ditandai SUDAH PERNAH minta, apa pun hasilnya -- dipakai untuk
+        // membedakan "belum pernah ditanya" vs "ditolak permanen" pada
+        // pengecekan berikutnya (lihat PermissionUtils.currentBluetoothPermissionState).
+        PermissionUtils.markBluetoothPermissionRequested(context)
+        permissionState = PermissionUtils.currentBluetoothPermissionState(context)
+        if (permissionState == PermissionUtils.BluetoothPermissionState.Granted) {
+            viewModel.refreshBondedDevices()
+        }
     }
 
     val enableBtLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
         btEnabled = viewModel.isBluetoothEnabled()
-        if (hasPermission && btEnabled) viewModel.refreshBondedDevices()
+        if (permissionState == PermissionUtils.BluetoothPermissionState.Granted && btEnabled) {
+            viewModel.refreshBondedDevices()
+        }
     }
 
     LaunchedEffect(Unit) {
-        if (hasPermission) viewModel.refreshBondedDevices()
+        if (permissionState == PermissionUtils.BluetoothPermissionState.Granted) {
+            viewModel.refreshBondedDevices()
+        }
     }
 
     LaunchedEffect(Unit) {
         viewModel.pairingSuccess.collect { onDismiss() }
+    }
+
+    // BUGFIX (H3b): status permission bisa berubah di LUAR siklus hidup
+    // dialog ini -- misalnya user membuka Pengaturan Sistem > App Info untuk
+    // mengizinkan/mencabut izin Bluetooth secara manual, lalu kembali ke app
+    // TANPA menutup dialog (dialog tetap ter-compose selagi Activity di-pause).
+    // Tanpa re-check di ON_RESUME, `permissionState` basi dan UI tidak sinkron.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                permissionState = PermissionUtils.currentBluetoothPermissionState(context)
+                btEnabled = viewModel.isBluetoothEnabled()
+                if (permissionState == PermissionUtils.BluetoothPermissionState.Granted && btEnabled) {
+                    viewModel.refreshBondedDevices()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     DisposableEffect(Unit) {
@@ -96,8 +128,29 @@ fun BluetoothPickerDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                when {
-                    !hasPermission -> {
+                when (permissionState) {
+                    PermissionUtils.BluetoothPermissionState.PermanentlyDenied -> {
+                        Text(
+                            "Izin Bluetooth ditolak dan tidak bisa diminta lagi lewat " +
+                                "dialog ini. Aktifkan secara manual lewat Pengaturan " +
+                                "Aplikasi > Izin > Perangkat di Sekitar/Bluetooth.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(
+                            onClick = {
+                                val intent = Intent(
+                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.fromParts("package", context.packageName, null)
+                                )
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Buka Pengaturan Aplikasi", fontSize = 13.sp)
+                        }
+                    }
+                    PermissionUtils.BluetoothPermissionState.CanRequest -> {
                         Text(
                             "Aplikasi memerlukan izin Bluetooth untuk mencari & " +
                                 "memasangkan printer.",
@@ -111,64 +164,65 @@ fun BluetoothPickerDialog(
                             Text("Izinkan Akses Bluetooth", fontSize = 13.sp)
                         }
                     }
-                    !btEnabled -> {
-                        Text(
-                            "Bluetooth perangkat sedang nonaktif. Aktifkan terlebih dahulu.",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Button(
-                            onClick = { enableBtLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Aktifkan Bluetooth", fontSize = 13.sp)
-                        }
-                    }
-                    else -> {
-                        Text("Perangkat Terpasang", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        if (state.bondedDevices.isEmpty()) {
+                    PermissionUtils.BluetoothPermissionState.Granted -> {
+                        if (!btEnabled) {
                             Text(
-                                "Belum ada printer ter-pairing di pengaturan Bluetooth HP ini.",
-                                fontSize = 11.sp,
+                                "Bluetooth perangkat sedang nonaktif. Aktifkan terlebih dahulu.",
+                                fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        } else {
-                            state.bondedDevices.forEach { device ->
-                                DeviceRow(device = device, trailing = null) {
-                                    viewModel.selectBondedDevice(device)
-                                    onDismiss()
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Perangkat Baru", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            TextButton(
-                                onClick = {
-                                    if (state.isScanning) viewModel.stopDiscovery() else viewModel.startDiscovery()
-                                }
+                            Button(
+                                onClick = { enableBtLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) },
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(if (state.isScanning) "Berhenti" else "Cari Perangkat", fontSize = 11.sp)
+                                Text("Aktifkan Bluetooth", fontSize = 13.sp)
                             }
-                        }
-                        if (state.isScanning) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Mencari perangkat di sekitar…", fontSize = 11.sp)
+                        } else {
+                            Text("Perangkat Terpasang", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            if (state.bondedDevices.isEmpty()) {
+                                Text(
+                                    "Belum ada printer ter-pairing di pengaturan Bluetooth HP ini.",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                state.bondedDevices.forEach { device ->
+                                    DeviceRow(device = device, trailing = null) {
+                                        viewModel.selectBondedDevice(device)
+                                        onDismiss()
+                                    }
+                                }
                             }
-                        }
-                        val newDevices = state.discoveredDevices.filterNot { found ->
-                            state.bondedDevices.any { it.address == found.address }
-                        }
-                        newDevices.forEach { device ->
-                            DeviceRow(device = device, trailing = "Pasang") {
-                                viewModel.requestPairing(device)
+
+                            Spacer(Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Perangkat Baru", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                TextButton(
+                                    onClick = {
+                                        if (state.isScanning) viewModel.stopDiscovery() else viewModel.startDiscovery()
+                                    }
+                                ) {
+                                    Text(if (state.isScanning) "Berhenti" else "Cari Perangkat", fontSize = 11.sp)
+                                }
+                            }
+                            if (state.isScanning) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Mencari perangkat di sekitar…", fontSize = 11.sp)
+                                }
+                            }
+                            val newDevices = state.discoveredDevices.filterNot { found ->
+                                state.bondedDevices.any { it.address == found.address }
+                            }
+                            newDevices.forEach { device ->
+                                DeviceRow(device = device, trailing = "Pasang") {
+                                    viewModel.requestPairing(device)
+                                }
                             }
                         }
                     }
