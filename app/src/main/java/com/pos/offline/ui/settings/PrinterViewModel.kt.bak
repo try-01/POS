@@ -9,6 +9,8 @@ import com.pos.offline.data.repository.PrinterRepository
 import com.pos.offline.util.BluetoothDeviceInfo
 import com.pos.offline.util.BluetoothPrinterHelper
 import com.pos.offline.util.BondResult
+import com.pos.offline.util.PrinterConnectionFactory
+import com.pos.offline.util.TestPrintResult
 import com.pos.offline.util.UsbDeviceInfo
 import com.pos.offline.util.UsbPermissionResult
 import com.pos.offline.util.UsbPrinterHelper
@@ -35,14 +37,20 @@ data class PrinterFormState(
     val wifiPort: String = "9100", // default umum port raw ESC/POS jaringan
     val bluetoothMacAddress: String = "",
     val usbVendorId: Int? = null,
-    val usbProductId: Int? = null
+    val usbProductId: Int? = null,
+    val supportsStatusQuery: Boolean = false
 )
 
 data class PrinterUiState(
     val showFormDialog: Boolean = false,
     val formState: PrinterFormState = PrinterFormState(),
     val isSaving: Boolean = false,
-    val pendingDeleteId: Long? = null
+    val pendingDeleteId: Long? = null,
+    /** Guard anti-dobel-klik Test Print PER PRINTER (Batch H3d) -- pakai
+     *  Set<Long>, BUKAN flag boolean global, supaya user tetap bisa test
+     *  print printer B selagi printer A masih diproses, tapi tetap dicegah
+     *  klik ganda pada printer YANG SAMA. */
+    val testingPrinterIds: Set<Long> = emptySet()
 )
 
 /** State picker Bluetooth -- terpisah dari [PrinterUiState] karena siklus
@@ -66,7 +74,8 @@ data class UsbUiState(
 class PrinterViewModel(
     private val printerRepository: PrinterRepository,
     private val bluetoothHelper: BluetoothPrinterHelper,
-    private val usbHelper: UsbPrinterHelper
+    private val usbHelper: UsbPrinterHelper,
+    private val connectionFactory: PrinterConnectionFactory
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PrinterUiState())
@@ -120,7 +129,8 @@ class PrinterViewModel(
                 wifiPort = printer.wifiPort?.toString() ?: "9100",
                 bluetoothMacAddress = printer.bluetoothMacAddress ?: "",
                 usbVendorId = printer.usbVendorId,
-                usbProductId = printer.usbProductId
+                usbProductId = printer.usbProductId,
+                supportsStatusQuery = printer.supportsStatusQuery
             )
         )
     }
@@ -144,6 +154,9 @@ class PrinterViewModel(
 
     fun updateFormWifiPort(value: String) =
         updateForm { it.copy(wifiPort = value.filter { c -> c.isDigit() }) }
+
+    fun updateFormSupportsStatusQuery(value: Boolean) =
+        updateForm { it.copy(supportsStatusQuery = value) }
 
     private inline fun updateForm(block: (PrinterFormState) -> PrinterFormState) {
         _uiState.value = _uiState.value.copy(formState = block(_uiState.value.formState))
@@ -218,6 +231,7 @@ class PrinterViewModel(
                     priority = nextPriority,
                     charPerLine = charPerLine,
                     paperWidth = form.paperWidth,
+                    supportsStatusQuery = form.supportsStatusQuery,
                     wifiIpAddress = wifiIp,
                     wifiPort = wifiPort,
                     bluetoothMacAddress = btAddress,
@@ -236,6 +250,7 @@ class PrinterViewModel(
                         connectionType = form.connectionType,
                         paperWidth = form.paperWidth,
                         charPerLine = charPerLine,
+                        supportsStatusQuery = form.supportsStatusQuery,
                         wifiIpAddress = wifiIp,
                         wifiPort = wifiPort,
                         bluetoothMacAddress = btAddress,
@@ -302,6 +317,26 @@ class PrinterViewModel(
                 }
             }
             _uiState.value = _uiState.value.copy(pendingDeleteId = null)
+        }
+    }
+
+    // ---- Test Print (Batch H3d) ----
+
+    fun testPrint(printer: PrinterEntity) {
+        if (_uiState.value.testingPrinterIds.contains(printer.id)) return // guard anti-dobel-klik
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                testingPrinterIds = _uiState.value.testingPrinterIds + printer.id
+            )
+            when (val result = connectionFactory.testPrint(printer)) {
+                is TestPrintResult.Success ->
+                    emitMessage("Test print ke \"${printer.label}\" berhasil.")
+                is TestPrintResult.Failure ->
+                    emitMessage(result.message)
+            }
+            _uiState.value = _uiState.value.copy(
+                testingPrinterIds = _uiState.value.testingPrinterIds - printer.id
+            )
         }
     }
 

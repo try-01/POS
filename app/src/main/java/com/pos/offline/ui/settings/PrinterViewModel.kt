@@ -328,12 +328,21 @@ class PrinterViewModel(
             _uiState.value = _uiState.value.copy(
                 testingPrinterIds = _uiState.value.testingPrinterIds + printer.id
             )
-            when (val result = connectionFactory.testPrint(printer)) {
-                is TestPrintResult.Success ->
-                    emitMessage("Test print ke \"${printer.label}\" berhasil.")
-                is TestPrintResult.Failure ->
-                    emitMessage(result.message)
+            // Jaring pengaman terakhir -- membungkus SELURUH pemanggilan
+            // dengan try/catch. Idealnya PrinterConnectionFactory sudah
+            // menangani semua exception secara internal, tapi ini disiapkan
+            // sebagai lapisan pertahanan terakhir supaya kesalahan tak
+            // terduga apa pun (dari library eksternal/hardware) berakhir
+            // sebagai pesan error, BUKAN membuat aplikasi force close.
+            val resultMessage = try {
+                when (val result = connectionFactory.testPrint(printer)) {
+                    is TestPrintResult.Success -> "Test print ke \"${printer.label}\" berhasil."
+                    is TestPrintResult.Failure -> result.message
+                }
+            } catch (e: Exception) {
+                "Test print gagal karena kesalahan tak terduga: ${e.message ?: "tidak diketahui"}"
             }
+            emitMessage(resultMessage)
             _uiState.value = _uiState.value.copy(
                 testingPrinterIds = _uiState.value.testingPrinterIds - printer.id
             )

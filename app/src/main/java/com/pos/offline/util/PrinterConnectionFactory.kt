@@ -13,11 +13,10 @@ import com.pos.offline.data.local.entity.PrinterConnectionType
 import com.pos.offline.data.local.entity.PrinterEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
-import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -50,18 +49,27 @@ class CancellableBluetoothConnection(private val device: BluetoothDevice) : Devi
         socket?.isConnected == true && super.isConnected()
 
     @SuppressLint("MissingPermission") // dijaga pemanggil: cek hasPermissions() di resolveBluetooth()
-    @Suppress("DEPRECATION")
     override fun connect(): DeviceConnection {
         if (isConnected()) return this
-        val uuid = resolveServiceUuid()
         try {
+            // 🐛 BUGFIX (skenario "Bluetooth ponsel mati" -> crash INSTAN):
+            // resolveServiceUuid() (memanggil device.uuids) SEBELUMNYA berada
+            // DI LUAR try-block ini. Beberapa API BluetoothDevice (termasuk
+            // getUuids()) diketahui melempar exception NON-IOException
+            // (mis. IllegalStateException "BT Adapter is not turned ON") saat
+            // adapter Bluetooth mati -- exception itu lolos mentah-mentah
+            // tanpa tertangkap sama sekali. Sekarang SEMUA pemanggilan API
+            // Bluetooth (termasuk resolveServiceUuid) ada DI DALAM try, dan
+            // catch diperluas dari IOException menjadi Exception umum untuk
+            // menangkap kemungkinan exception non-standar dari OEM tertentu.
+            val uuid = resolveServiceUuid()
             val newSocket = device.createRfcommSocketToServiceRecord(uuid)
             socket = newSocket
             BluetoothAdapter.getDefaultAdapter()?.cancelDiscovery()
             newSocket.connect()
             outputStream = newSocket.outputStream
             data = ByteArray(0)
-        } catch (e: IOException) {
+        } catch (e: Exception) {
             disconnect()
             throw EscPosConnectionException("Unable to connect to bluetooth device.")
         }
@@ -187,7 +195,6 @@ class PrinterConnectionFactory(
         )
     }
 
-    @Suppress("DEPRECATION")
     private fun resolveBluetooth(printer: PrinterEntity): ConnectionResolution {
         val address = printer.bluetoothMacAddress
         if (address.isNullOrBlank()) {
@@ -200,6 +207,18 @@ class PrinterConnectionFactory(
         }
         val adapter = BluetoothAdapter.getDefaultAdapter()
             ?: return ConnectionResolution.Error("Perangkat ini tidak mendukung Bluetooth.")
+
+        // 🐛 BUGFIX (skenario "Bluetooth ponsel mati" -> crash instan):
+        // validasi proaktif SEBELUM mencoba apa pun -- daripada menangkap
+        // exception setelah terlanjur memanggil API Bluetooth saat adapter
+        // mati (yang berisiko melempar exception non-standar di berbagai
+        // OEM), langsung tolak lebih awal dengan pesan ramah.
+        if (!adapter.isEnabled) {
+            return ConnectionResolution.Error(
+                "Bluetooth ponsel sedang mati. Nyalakan Bluetooth terlebih dahulu."
+            )
+        }
+
         val device = try {
             adapter.getRemoteDevice(address)
         } catch (e: IllegalArgumentException) {
@@ -232,52 +251,49 @@ class PrinterConnectionFactory(
     /**
      * Membuka koneksi dengan batas waktu ~5 detik.
      *
-     * 🐛 BUGFIX PENTING (ditemukan saat pengujian H3d, menyebabkan APP FORCE
-     * CLOSE ~5 detik setelah Test Print saat printer Bluetooth mati/tidak
-     * terjangkau): watchdog di bawah ini SENGAJA TIDAK memanggil
-     * `connectJob.cancel()` setelah forceCloseIfStuck(). Kombinasi keduanya
-     * (menutup paksa socket YANG MENYEBABKAN coroutine menyelesaikan diri
-     * dengan EscPosConnectionException miliknya sendiri, DIBARENGI dengan
-     * cancel() eksplisit pada job yang sama) adalah race condition fatal di
-     * kotlinx.coroutines: sebuah `async` Job yang SUDAH diminta cancel()
-     * tetapi kemudian menyelesaikan diri dengan exception LAIN (bukan
-     * CancellationException) dianggap "exception tak tertangani" oleh
-     * coroutine machinery -- dilempar ke Thread.UncaughtExceptionHandler
-     * (menyebabkan force close), BUKAN diteruskan ke try/catch normal kita
-     * di connectJob.await() di bawah.
+     * 🐛 BUGFIX RIWAYAT (ditemukan saat pengujian H3d, app force close ~5
+     * detik setelah Test Print saat printer Bluetooth mati/tidak terjangkau):
      *
-     * Perbaikannya: HANYA memaksa socket menutup diri lewat
-     * forceCloseIfStuck(). Ini sudah cukup memicu IOException ASLI dari
-     * dalam connect() itu sendiri (perilaku resmi Android: menutup socket
-     * yang sedang di tengah connect() akan membuat connect() melempar
-     * IOException) -- job lalu menyelesaikan diri SECARA ALAMI (bukan
-     * dibatalkan paksa), sehingga exception-nya tertangkap normal lewat
-     * connectJob.await() di bawah seperti seharusnya.
+     * Percobaan 1 (SUDAH diperbaiki sebelumnya): menghapus connectJob.cancel()
+     * eksplisit setelah forceCloseIfStuck() -- kombinasi keduanya adalah race
+     * condition fatal (Job yang sudah diminta cancel() TAPI menyelesaikan
+     * diri dengan exception LAIN dianggap "unhandled" oleh coroutine
+     * machinery). Perbaikan ini TERNYATA BELUM CUKUP (masih crash).
      *
-     * Ini aman untuk ketiga jenis koneksi: WiFi (TcpConnection) sudah punya
-     * timeout native sendiri lewat parameter constructor yang dihormati JVM,
-     * USB (UsbConnection.connect()) pada dasarnya cepat (buka device handle,
-     * bukan network call) sehingga nyaris mustahil sampai menyentuh watchdog
-     * ini sama sekali.
+     * Percobaan 2 (fix saat ini): ganti coroutineScope -> supervisorScope.
+     * coroutineScope OTOMATIS membatalkan SEMUA sibling coroutine (termasuk
+     * watchdog) begitu SATU child (connectJob) gagal -- perilaku ini terjadi
+     * independen dari kapan/apakah kita memanggil .await(), dan diduga jadi
+     * sumber race kedua. supervisorScope TIDAK melakukan auto-propagasi
+     * kegagalan antar-sibling seperti ini -- kegagalan connectJob hanya
+     * "terlihat" saat kita eksplisit .await()-nya, benar-benar terisolasi
+     * dari watchdog.
+     *
+     * CATATAN JUJUR: jika app MASIH force close setelah kedua perbaikan ini,
+     * kemungkinan penyebabnya adalah crash NATIVE (di luar JVM, tidak bisa
+     * ditangkap try/catch Kotlin apa pun) akibat BluetoothSocket.close()
+     * dipanggil dari thread berbeda saat connect() sedang berlangsung --
+     * perilaku ini dilaporkan bermasalah pada sebagian stack Bluetooth OEM.
+     * Kalau ini terjadi, WAJIB dapatkan stack trace Logcat asli untuk
+     * diagnosis lebih lanjut, karena tidak bisa dipastikan lewat membaca
+     * kode saja.
      */
-    private suspend fun connectWithTimeout(connection: DeviceConnection): Boolean = coroutineScope {
+    private suspend fun connectWithTimeout(connection: DeviceConnection): Boolean = supervisorScope {
         val connectJob = async(Dispatchers.IO) { connection.connect() }
         val watchdog = launch(Dispatchers.IO) {
             delay(CONNECT_TIMEOUT_MS)
             if (connectJob.isActive) {
                 (connection as? CancellableBluetoothConnection)?.forceCloseIfStuck()
-                // TIDAK ADA connectJob.cancel() DI SINI -- lihat penjelasan
-                // panjang di atas. Biarkan job menyelesaikan diri alami.
             }
         }
-        try {
+        val success = try {
             connectJob.await()
-            watchdog.cancel()
             true
         } catch (e: Exception) {
-            watchdog.cancel()
             false
         }
+        watchdog.cancel()
+        success
     }
 
     private fun connectionErrorMessage(printer: PrinterEntity, targetLabel: String): String =
@@ -293,7 +309,7 @@ class PrinterConnectionFactory(
         }
 
     private fun buildTestPrintMarkup(printer: PrinterEntity): String {
-        val timestamp = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.forLanguageTag("id-ID")).format(Date())
+        val timestamp = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("id", "ID")).format(Date())
         return buildString {
             append("[C]<b>TEST PRINT KASIR OFFLINE</b>\n")
             append("[C]${printer.label}\n")
