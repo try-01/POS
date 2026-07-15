@@ -8,17 +8,6 @@
         android:usesPermissionFlags="neverForLocation" />
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
-    <!-- Batch H2: printer WiFi/LAN pakai raw TCP socket (java.net.Socket) ke
-         alamat IP:port yang di-input manual user -- bukan HTTP, jadi tidak
-         perlu ubah Network Security Config / usesCleartextTraffic. -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
-    <!-- Batch H2: printer USB -- HP bertindak sebagai USB host (OTG).
-         required="false" supaya app tetap terpasang di device tanpa
-         dukungan USB host (mis. tanpa fitur OTG sama sekali). -->
-    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
-
     <application
         android:name="com.pos.offline.data.di.PosApplication"
         android:allowBackup="true"
