@@ -24,47 +24,10 @@ sealed class RestoreOutcome {
     data class InvalidFile(val reason: String) : RestoreOutcome()
     data class Error(val throwable: Throwable) : RestoreOutcome()
 }
-
-/**
- * Hasil operasi menyiapkan salinan database untuk dibagikan (share) — BARU.
- * Terpisah dari [BackupOutcome] karena butuh mengembalikan [File] hasil
- * salinan (dipakai [BackupManager.buildShareIntent]), bukan cuma status.
- */
 sealed class ShareOutcome {
     data class Success(val file: File) : ShareOutcome()
     data class Error(val throwable: Throwable) : ShareOutcome()
 }
-
-/**
- * Menangani ekspor & impor database lokal (`pos.db`) melalui Storage Access
- * Framework (SAF). Murni salin file mentah — TIDAK ada sinkronisasi cloud,
- * TIDAK butuh FileProvider/permission storage sama sekali, sesuai keputusan
- * arsitektur aplikasi ini (single-device, offline, "replace penuh").
- *
- * ALUR EKSPOR:
- *  1. Checkpoint WAL penuh — Room default memakai Write-Ahead Logging,
- *     artinya transaksi terbaru bisa saja masih berada di file `pos.db-wal`
- *     dan belum masuk ke `pos.db` itu sendiri. `PRAGMA wal_checkpoint(FULL)`
- *     memaksa semua frame WAL ditulis balik ke file utama sebelum disalin.
- *  2. Salin `pos.db` mentah ke Uri hasil ACTION_CREATE_DOCUMENT.
- *
- * ALUR IMPOR (restore):
- *  1. Salin file pilihan user ke cache dulu — TIDAK PERNAH langsung menimpa
- *     database aktif sebelum divalidasi.
- *  2. Validasi dua lapis (lihat [validateCandidate]).
- *  3. Kalau valid: tutup koneksi Room aktif, timpa `pos.db` (+ bersihkan sisa
- *     `-wal`/`-shm`/`-journal` lama), lalu caller WAJIB memanggil
- *     [restartApp] — arsitektur Service Locator (semua repo singleton
- *     `by lazy`) tidak aman "disegarkan" tanpa restart proses penuh.
- *  4. Kalau tidak valid: file sementara dibuang, database aktif tidak
- *     tersentuh sama sekali.
- *
- * ALUR BAGIKAN (share) — BARU:
- *  Fitur independen dari SAF export (Opsi A: tombol terpisah, tidak
- *  menunggu user pilih folder dulu). Checkpoint WAL yang sama dipakai
- *  ulang, lalu salinan ditaruh di cache app & dibagikan via [FileProvider]
- *  — pola identik dengan `ReceiptManager.buildShareIntent` untuk struk.
- */
 object BackupManager {
 
     private const val DB_NAME = "pos.db"
@@ -77,11 +40,6 @@ object BackupManager {
             .format(java.util.Date())
         return "kasir-offline-backup-$ts.db"
     }
-
-    // ---------------------------------------------------------------------
-    // EXPORT
-    // ---------------------------------------------------------------------
-
     suspend fun exportDatabase(context: Context, destinationUri: Uri): BackupOutcome =
         withContext(Dispatchers.IO) {
             try {
@@ -109,28 +67,10 @@ object BackupManager {
                 BackupOutcome.Error(t)
             }
         }
-
-    /**
-     * Memaksa semua isi `-wal` ditulis balik ke `pos.db`. WAJIB dijalankan
-     * sebelum menyalin file — tanpa ini backup bisa kehilangan transaksi
-     * yang baru saja terjadi.
-     */
     private fun checkpointWal(context: Context) {
         val writable = PosDatabase.getInstance(context).openHelper.writableDatabase
         writable.query("PRAGMA wal_checkpoint(FULL)").use { it.moveToFirst() }
     }
-
-    // ---------------------------------------------------------------------
-    // IMPORT / RESTORE
-    // ---------------------------------------------------------------------
-
-    /**
-     * Validasi file yang dipilih user & jika lolos, GANTIKAN database aktif.
-     *
-     * Setelah menerima [RestoreOutcome.Success], caller WAJIB segera memanggil
-     * [restartApp] dan TIDAK BOLEH lagi memakai ViewModel/Repository yang
-     * sedang berjalan — koneksi Room lama sudah ditutup paksa di sini.
-     */
     suspend fun validateAndRestore(context: Context, sourceUri: Uri): RestoreOutcome =
         withContext(Dispatchers.IO) {
             val tempFile = File(context.cacheDir, "restore_candidate.db")
@@ -165,6 +105,12 @@ object BackupManager {
                 }
                 tempFile.delete()
 
+                // Catatan: kalau file yang direstore berskema LEBIH LAMA dari
+                // versi aplikasi saat ini (mis. backup v7 dipulihkan ke app v8),
+                // proses migrasi (MIGRATION_x_y yang relevan) akan otomatis
+                // dijalankan Room begitu PosDatabase.getInstance() dipanggil
+                // ulang setelah restartApp() -- tidak perlu ditangani manual di sini.
+
                 RestoreOutcome.Success
             } catch (t: Throwable) {
                 tempFile.delete()
@@ -173,29 +119,29 @@ object BackupManager {
         }
 
     /**
-     * Mengembalikan `null` kalau file valid, atau pesan alasan penolakan.
+     * Validasi kandidat file backup.
      *
-     * Dua lapis pengecekan:
-     *  1. **Magic header** 16-byte pertama harus "SQLite format 3\u0000" —
-     *     penyaring termurah untuk file yang jelas bukan database SQLite
-     *     (mis. user salah pilih foto/PDF/dokumen lain).
-     *  2. **`identity_hash`** pada tabel internal Room `room_master_table`
-     *     dibandingkan antara file kandidat vs database aktif. Room
-     *     menghitung hash ini dari definisi skema (entity, kolom, indeks).
-     *     Kalau cocok persis, file tersebut nyaris pasti backup dari
-     *     aplikasi & versi skema yang sama — aman langsung dipakai
-     *     menggantikan file aktif tanpa migrasi tambahan.
-     *
-     * Catatan batasan (untuk didiskusikan lagi kalau relevan nanti): kalau
-     * suatu saat skema naik ke versi baru, backup lama (hash lama) akan
-     * otomatis ditolak oleh pengecekan ini. Itu memang perilaku aman untuk
-     * sekarang (mencegah data korup akibat restore lintas skema) — kalau
-     * nanti mau dukung "restore lalu migrasi otomatis", itu perlu batch
-     * terpisah.
+     * PENTING (bugfix): sebelumnya kompatibilitas dicek murni lewat
+     * kesamaan `identity_hash` antara kandidat vs db aktif. Itu keliru --
+     * `identity_hash` berubah SETIAP kali skema Room naik versi (mis. v7 ke
+     * v8 di Batch H1), padahal backup versi skema lebih lama tetap valid
+     * untuk direstore karena akan otomatis dimigrasikan Room lewat
+     * `Migrations.ALL` saat database dibuka kembali. Yang benar-benar perlu
+     * dicek adalah `PRAGMA user_version` (nomor versi skema):
+     * - kandidat > versi app aktif -> tolak (file dari app yang lebih baru).
+     * - kandidat < versi app aktif -> boleh, akan dimigrasikan otomatis.
+     * - kandidat == versi app aktif -> baru masuk akal bandingkan
+     *   `identity_hash` sbg jaminan ekstra strukturnya benar-benar identik.
      */
     private fun validateCandidate(context: Context, candidate: File): String? {
         if (!hasSqliteHeader(candidate)) {
             return "File yang dipilih bukan berkas database SQLite yang valid."
+        }
+
+        val candidateVersion = try {
+            readUserVersion(candidate.absolutePath)
+        } catch (t: Throwable) {
+            return "File tidak bisa dibuka sebagai database (rusak/korup)."
         }
 
         val candidateHash = try {
@@ -204,14 +150,32 @@ object BackupManager {
             return "File tidak bisa dibuka sebagai database (rusak/korup)."
         } ?: return "File database tidak memiliki tabel internal Room yang dikenali."
 
-        val activeHash = try {
-            readIdentityHash(context.getDatabasePath(DB_NAME).absolutePath)
+        val activeDbPath = context.getDatabasePath(DB_NAME).absolutePath
+        val activeVersion = try {
+            readUserVersion(activeDbPath)
         } catch (t: Throwable) {
-            null // db aktif belum ada/tidak terbaca -> lewati pengecekan kompatibilitas
+            null // db aktif belum ada/tidak terbaca -> lewati pengecekan kompatibilitas versi
         }
 
-        if (activeHash != null && candidateHash != activeHash) {
-            return "File backup ini berasal dari versi aplikasi yang berbeda (skema tidak cocok)."
+        if (activeVersion != null) {
+            if (candidateVersion > activeVersion) {
+                return "File backup ini dibuat dari versi aplikasi yang lebih baru. " +
+                    "Perbarui aplikasi terlebih dahulu sebelum memulihkan."
+            }
+            if (candidateVersion == activeVersion) {
+                val activeHash = try {
+                    readIdentityHash(activeDbPath)
+                } catch (t: Throwable) {
+                    null
+                }
+                if (activeHash != null && candidateHash != activeHash) {
+                    return "File backup ini berasal dari struktur database yang berbeda " +
+                        "(kemungkinan bukan dari aplikasi ini)."
+                }
+            }
+            // candidateVersion < activeVersion -> backup dari skema versi lebih lama,
+            // TETAP DIBOLEHKAN: migrasi otomatis akan menyesuaikan skemanya begitu
+            // Room membuka kembali database ini setelah restore.
         }
 
         return null
@@ -223,6 +187,13 @@ object BackupManager {
         FileInputStream(file).use { it.read(header) }
         val magic = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
         return header.contentEquals(magic)
+    }
+
+    /** Membaca `PRAGMA user_version` -- ini nomor versi skema Room
+     *  ([androidx.room.Database.version]) yang tersimpan di file itu sendiri. */
+    private fun readUserVersion(path: String): Int {
+        val db = SQLiteDatabase.openDatabase(path, null, SQLiteDatabase.OPEN_READONLY)
+        return db.use { it.version }
     }
 
     private fun readIdentityHash(path: String): String? {
@@ -241,31 +212,6 @@ object BackupManager {
             File(parent, name).takeIf { it.exists() }?.delete()
         }
     }
-
-    // ---------------------------------------------------------------------
-    // BAGIKAN (SHARE) — BARU
-    // ---------------------------------------------------------------------
-
-    /**
-     * Menyiapkan salinan database di `cacheDir/shared_backups/` untuk
-     * dibagikan lewat [buildShareIntent] — TIDAK menyentuh alur SAF export
-     * sama sekali (fitur independen/Opsi A: pemilik toko bisa langsung
-     * kirim cadangan via WhatsApp/Email tanpa harus memilih folder SAF
-     * dulu).
-     *
-     * Sama seperti [exportDatabase], WAJIB checkpoint WAL dulu — kalau
-     * tidak, salinan bisa kehilangan transaksi terbaru yang masih ada di
-     * `-wal` dan belum ditulis balik ke `pos.db`.
-     *
-     * Nama file memakai [suggestedBackupFileName] — pola sama persis dengan
-     * export SAF (ada timestamp), supaya file yang diterima penerima (mis.
-     * lewat WhatsApp) punya nama unik & informatif, bukan "pos.db" polos.
-     *
-     * Folder ini dibersihkan dulu sebelum menulis salinan baru — BERBEDA
-     * dari `shared_receipts/` milik ReceiptManager (dibiarkan menumpuk
-     * karena file struk kecil). File database bisa jauh lebih besar,
-     * sehingga tidak dibiarkan menumpuk tak terbatas di cache.
-     */
     suspend fun prepareShareableCopy(context: Context): ShareOutcome =
         withContext(Dispatchers.IO) {
             try {
@@ -291,19 +237,6 @@ object BackupManager {
                 ShareOutcome.Error(t)
             }
         }
-
-    /**
-     * Bangun [Intent] chooser untuk membagikan file cadangan ke aplikasi
-     * lain. Memakai [FileProvider] — pola identik dengan
-     * `ReceiptManager.buildShareIntent` (authority sama:
-     * `"${applicationId}.fileprovider"`, sudah terdaftar di manifest).
-     *
-     * Mime type `"application/octet-stream"` — sama seperti yang dipakai
-     * `ActivityResultContracts.CreateDocument` pada alur export SAF, supaya
-     * aplikasi penerima (mis. Google Drive/Files) memperlakukan file ini
-     * sebagai berkas biner mentah, bukan mencoba membukanya sebagai
-     * gambar/dokumen lain.
-     */
     fun buildShareIntent(context: Context, file: File): Intent {
         val authority = "${context.packageName}.fileprovider"
         val uri = FileProvider.getUriForFile(context, authority, file)
@@ -315,25 +248,6 @@ object BackupManager {
         }
         return Intent.createChooser(sendIntent, "Bagikan Cadangan Database")
     }
-
-    // ---------------------------------------------------------------------
-    // RESTART APLIKASI (WAJIB dipanggil setelah restore sukses)
-    // ---------------------------------------------------------------------
-
-    /**
-     * Merestart total proses aplikasi memakai `Intent.makeRestartActivityTask`
-     * (API publik Android, tersedia sejak API 11) — melempar user kembali ke
-     * launcher activity di task baru yang bersih, lalu mematikan proses lama.
-     *
-     * Kenapa restart total (bukan sekadar buka ulang koneksi Room diam-diam)?
-     * `ServiceLocator` menyimpan Repository/DAO sebagai singleton `by lazy`
-     * yang sudah dipegang oleh ViewModel yang sedang hidup, dan mungkin ada
-     * Flow yang sedang di-collect dari DAO lama. Membongkar semua itu dengan
-     * aman jauh lebih rumit & rawan bug ("database is closed" mid-collect)
-     * dibanding memulai ulang proses dari nol. Untuk aplikasi single-device
-     * seperti ini, "app sempat kedip restart" adalah trade-off yang jauh
-     * lebih murah.
-     */
     fun restartApp(context: Context) {
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
         val componentName = intent?.component
