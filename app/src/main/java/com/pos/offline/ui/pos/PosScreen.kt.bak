@@ -47,7 +47,6 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.MoreHoriz
-import androidx.compose.material.icons.rounded.PointOfSale
 import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
@@ -122,6 +121,19 @@ import java.text.SimpleDateFormat
 import java.io.File
 import java.util.Date
 import java.util.Locale
+
+/**
+ * Layar Kasir utama. Layout responsif: tablet/landscape → katalog + keranjang
+ * berdampingan; ponsel → tumpuk vertikal dengan keranjang yang bisa
+ * di-collapse/expand agar katalog dapat ruang maksimal saat tidak dibutuhkan.
+ *
+ * BATCH F (Fitur 1): [ShiftIndicatorBar] kini punya 2 jalur independen —
+ * tap utama tetap perilaku lama (mulai/tutup shift "yang ditunjuk aktif"),
+ * sedangkan ikon ⋯ baru membuka [ManageShiftsDialog] (daftar SEMUA shift
+ * terbuka + tombol "Mulai Shift Baru", terlepas status shift lain — mengisi
+ * celah yang ditemukan saat testing Batch B: sebelumnya tidak ada jalur UI
+ * untuk memulai shift baru selama ADA shift lain yang masih terbuka).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PosScreen(
@@ -141,7 +153,6 @@ fun PosScreen(
     val paid by viewModel.paid.collectAsStateWithLifecycle()
     val checkoutState by viewModel.checkoutState.collectAsStateWithLifecycle()
     val printUiState by viewModel.printUiState.collectAsStateWithLifecycle()
-    val isOpeningDrawer by viewModel.isOpeningDrawer.collectAsStateWithLifecycle()
 
     val paymentMethod by viewModel.paymentMethod.collectAsStateWithLifecycle()
 
@@ -195,14 +206,12 @@ fun PosScreen(
             ) {
                 ShiftIndicatorBar(
                     openShift = openShift,
-                    isOpeningDrawer = isOpeningDrawer,
                     onClick = {
                         val shift = openShift
                         if (shift == null) viewModel.openStartShiftDialog()
                         else viewModel.openEndShiftDialog(shift)
                     },
-                    onManageClick = viewModel::openShiftListDialog,
-                    onOpenDrawerClick = viewModel::openCashDrawerManually
+                    onManageClick = viewModel::openShiftListDialog
                 )
                 Spacer(Modifier.height(4.dp))
                 CompactSearchBar(
@@ -349,6 +358,11 @@ is CheckoutState.Success -> SuccessDialog(
             )
         }
     }
+
+    // BATCH F: layar "Kelola Shift" — daftar SEMUA shift terbuka + tombol
+    // mulai shift baru, terlepas status shift lain (Opsi B yang disepakati:
+    // fitur ini yang akhirnya menyediakan jalur "mulai shift baru walau ada
+    // shift lain terbuka", bukan ditempel terpisah di ShiftIndicatorBar).
     if (showShiftListDialog) {
         ManageShiftsDialog(
             shifts = openShifts,
@@ -371,10 +385,8 @@ is CheckoutState.Success -> SuccessDialog(
 @Composable
 private fun ShiftIndicatorBar(
     openShift: ShiftEntity?,
-    isOpeningDrawer: Boolean,
     onClick: () -> Unit,
-    onManageClick: () -> Unit,
-    onOpenDrawerClick: () -> Unit
+    onManageClick: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -406,34 +418,9 @@ private fun ShiftIndicatorBar(
                         else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
         }
-
-        // BATCH H8 (Q1 Opsi C): tombol manual "Buka Laci" -- SELALU ada, kapan saja, tidak
-        // terikat transaksi apa pun. Ikon Icons.Rounded.PointOfSale (Q9, butuh dependency
-        // material-icons-extended yang sudah ditambahkan user di build.gradle.kts).
-        Box(
-            modifier = Modifier
-                .size(26.dp)
-                .clip(CircleShape)
-                .clickable(enabled = !isOpeningDrawer, onClick = onOpenDrawerClick),
-            contentAlignment = Alignment.Center
-        ) {
-            if (isOpeningDrawer) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(14.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
-            } else {
-                Icon(
-                    Icons.Rounded.PointOfSale,
-                    contentDescription = "Buka laci kasir",
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
-            }
-        }
-        Spacer(Modifier.width(2.dp))
-
+        // BARU (Batch F): entry point terpisah untuk melihat/mengelola
+        // SEMUA shift terbuka & memulai shift baru kapan pun — tap utama
+        // di atas TETAP hanya mengurus shift "yang ditunjuk aktif".
         Box(
             modifier = Modifier
                 .size(26.dp)
@@ -452,6 +439,8 @@ private fun ShiftIndicatorBar(
 }
 
 private val shiftDateFmt = SimpleDateFormat("dd/MM HH:mm", Locale.forLanguageTag("id-ID"))
+
+/** "berjalan 2j 15m" / "berjalan 40m" — dihitung sekali saat dialog dibuka (tidak live-update). */
 private fun formatElapsedSince(startedAt: Long): String {
     val diffMs = (System.currentTimeMillis() - startedAt).coerceAtLeast(0L)
     val totalMinutes = diffMs / 60_000
@@ -459,6 +448,16 @@ private fun formatElapsedSince(startedAt: Long): String {
     val minutes = totalMinutes % 60
     return if (hours > 0) "berjalan ${hours}j ${minutes}m" else "berjalan ${minutes}m"
 }
+
+/**
+ * BATCH F: dialog "Kelola Shift" — daftar SEMUA shift terbuka (bisa lebih
+ * dari satu, sesuai keputusan arsitektur multi-shift-aktif dibolehkan) +
+ * tombol "Mulai Shift Baru" yang SELALU aktif terlepas status shift lain.
+ *
+ * Tap baris shift mana pun akan memicu [onSelectShift] — TIDAK ada
+ * pembatasan siapa boleh menutup shift siapa (Opsi A yang disepakati:
+ * sistem tanpa role/login sungguhan, "kasir" murni label atribusi).
+ */
 @Composable
 private fun ManageShiftsDialog(
     shifts: List<ShiftEntity>,
@@ -693,6 +692,11 @@ private fun EndShiftDialog(
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Kas Awal (Modal)", summary.startingCash.toRupiah())
                 SummaryLine("Penjualan Tunai", summary.cashRevenue.toRupiah())
+                // BATCH E4: baris "Refund Tunai" ditampilkan EKSPLISIT (bukan
+                // cuma tersembunyi di dalam kalkulasi expectedCashInDrawer)
+                // untuk transparansi ke kasir SEBELUM shift ditutup — konsisten
+                // dengan penambahan yang sama di ClosedShiftDetailDialog
+                // (ReportScreen.kt) untuk shift yang sudah ditutup.
                 if (summary.cashRefunds > 0L) {
                     SummaryLine(
                         "Refund Tunai",
@@ -865,6 +869,12 @@ private fun CartPane(
     var showClearConfirm by remember { mutableStateOf(false) }
     var qtyEditItem by remember { mutableStateOf<CartItemEntity?>(null) }
     val showFull = !collapsible || expanded
+
+    // ---- BARU: peringatan pembayaran kurang ----
+    // Muncul HANYA kalau kasir mengisi manual (paid > 0) tapi nominalnya
+    // masih di bawah total. Kalau paid == 0 (dikosongkan), itu berarti
+    // "uang pas" (lihat PosViewModel.checkout()) — TIDAK perlu diperingatkan
+    // karena memang bukan kesalahan kasir, itu perilaku yang disengaja.
     var showInsufficientPaymentDialog by remember { mutableStateOf(false) }
     fun attemptCheckout() {
         if (paid in 1 until totals.total) {
@@ -1127,6 +1137,12 @@ private fun CartPane(
         )
     }
 }
+
+/**
+ * Peringatan sebelum checkout kalau nominal "Bayar" yang diisi manual masih
+ * kurang dari total. TIDAK memblokir transaksi (mis. untuk kasus kasbon/utang
+ * pelanggan) — hanya memastikan kasir sadar & sengaja, bukan salah ketik.
+ */
 @Composable
 private fun InsufficientPaymentDialog(
     paid: Long,
@@ -1338,6 +1354,12 @@ private fun TotalsSummary(
                 modifier = Modifier.weight(1f).height(40.dp)
             )
         }
+
+        // Peringatan non-blocking: nilai diskon mentah melebihi subtotal
+        // sehingga otomatis dipangkas saat kalkulasi. Sengaja TEKS INLINE
+        // (bukan dialog) karena field ini di-edit live sambil kasir
+        // mengetik — dialog modal akan muncul-hilang mengganggu di setiap
+        // ketukan digit sebelum angka akhir selesai diketik.
         if (totals.discountCapped) {
             Text(
                 text = "⚠ Diskon melebihi subtotal, dibatasi menjadi ${totals.discount.toRupiah()}",
@@ -1502,6 +1524,17 @@ private fun MoneyField(
         }
     )
 }
+
+/**
+ * Field diskon dual-mode (Nominal/Persen).
+ *
+ * Sesuai desain yang disepakati: HANYA tipe yang sedang aktif yang tampil
+ * sebagai teks tappable di sisi kiri ("Rp ⟲" / "% ⟲") — bukan switch 2
+ * opsi berdampingan. Ini memberi target sentuh lebih besar (seluruh segmen
+ * kiri, bukan cuma ikon kecil) DAN menyisakan ruang lebih luas untuk digit
+ * angka. Menekan segmen ini membalik tipe (lihat [PosViewModel.toggleDiscountType],
+ * yang juga me-reset nilai ke 0 agar tidak salah tafsir angka lama).
+ */
 @Composable
 private fun DiscountField(
     type: DiscountType,
@@ -1844,6 +1877,12 @@ private fun SuccessDialog(
         }
     )
 }
+
+/**
+ * Banner hasil cetak (H7) — sengaja di KONTEN dialog, bukan Snackbar, karena Snackbar milik
+ * Scaffold tidak reliable terlihat/ter-tap selagi AlertDialog ini masih terbuka (window terpisah).
+ * Konsisten dengan konvensi lama proyek: aksi tambahan di dialog >2 tombol ditaruh di konten.
+ */
 @Composable
 private fun PrintResultBanner(
     printUiState: PrintUiState,

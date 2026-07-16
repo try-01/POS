@@ -5,7 +5,6 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
 import com.dantsu.escposprinter.EscPosPrinter
-import com.dantsu.escposprinter.EscPosPrinterCommands
 import com.dantsu.escposprinter.connection.DeviceConnection
 import com.dantsu.escposprinter.connection.tcp.TcpConnection
 import com.dantsu.escposprinter.connection.usb.UsbConnection
@@ -77,20 +76,20 @@ class CancellableBluetoothConnection(private val device: BluetoothDevice) : Devi
     }
 }
 
+/** Hasil operasi Test Print (H3d) — TIDAK diubah, dipakai persis seperti sebelumnya oleh PrinterViewModel. */
 sealed class TestPrintResult {
     object Success : TestPrintResult()
     data class Failure(val message: String) : TestPrintResult()
 }
+
+/**
+ * Hasil operasi cetak struk asli (H6) — sengaja dipisah dari [TestPrintResult] supaya
+ * pemanggil (PrintCoordinator) tidak rancu antara "test print ke satu printer" vs
+ * "cetak struk sungguhan yang mungkin perlu tahu printer mana yang dipakai/gagal".
+ */
 sealed class PrintResult {
     data class Success(val printer: PrinterEntity) : PrintResult()
     data class Failure(val printer: PrinterEntity, val message: String) : PrintResult()
-}
-
-// BATCH H8: sealed class TERPISAH dari TestPrintResult/PrintResult (sesuai keputusan arsitektur,
-// jangan disatukan meski strukturnya mirip -- konsisten filosofi "guard per-tujuan jangan dicampur").
-sealed class CashDrawerResult {
-    object Success : CashDrawerResult()
-    data class Failure(val message: String) : CashDrawerResult()
 }
 
 private sealed class ConnectionResolution {
@@ -98,6 +97,7 @@ private sealed class ConnectionResolution {
     data class Error(val message: String) : ConnectionResolution()
 }
 
+/** Hasil internal satu kali percobaan job (dipakai bersama oleh testPrint() & printReceipt()). */
 private sealed class JobOutcome {
     object Success : JobOutcome()
     data class Failure(val message: String) : JobOutcome()
@@ -107,6 +107,12 @@ class PrinterConnectionFactory(
     private val bluetoothHelper: BluetoothPrinterHelper,
     private val usbHelper: UsbPrinterHelper
 ) {
+
+    /**
+     * Test Print (H3d) — TIDAK BERUBAH secara perilaku/signature dari versi sebelumnya.
+     * Sudah teruji fisik di RPP02N via Bluetooth. Internal-nya sekarang delegasi ke
+     * [executePrintJob] yang juga dipakai [printReceipt] (H6), tapi hasil akhirnya sama persis.
+     */
     suspend fun testPrint(printer: PrinterEntity): TestPrintResult {
         val outcome = executePrintJob(printer) { buildTestPrintMarkup(printer) }
         return when (outcome) {
@@ -114,6 +120,15 @@ class PrinterConnectionFactory(
             is JobOutcome.Failure -> TestPrintResult.Failure(outcome.message)
         }
     }
+
+    /**
+     * Cetak struk asli (H6). [markupBuilder] menerima instance [EscPosPrinter] yang SUDAH
+     * terkonstruksi (dibutuhkan oleh EscPosReceiptFormatter untuk encode logo, karena
+     * PrinterTextParserImg.bitmapToHexadecimalString() butuh referensi printer untuk skala lebar).
+     *
+     * Tidak melakukan cascade ke printer lain — itu tanggung jawab PrintCoordinator (H6),
+     * fungsi ini murni "coba cetak ke SATU printer, dengan retry koneksi seperti testPrint()".
+     */
     suspend fun printReceipt(
         printer: PrinterEntity,
         markupBuilder: (EscPosPrinter) -> String
@@ -125,62 +140,10 @@ class PrinterConnectionFactory(
         }
     }
 
-    // BATCH H8: fungsi baru, TIDAK mengubah executePrintJob()/testPrint()/printReceipt() di atas.
-    // Sengaja TIDAK memakai executePrintJob() karena tujuannya beda: tidak butuh EscPosPrinter
-    // penuh (yang mensyaratkan DPI/paperWidth/charPerLine dan otomatis ikut cetak+potong kertas
-    // lewat printFormattedTextAndCut). Buka laci hanya perlu kirim 5 byte mentah
-    // (ESC p m t1 t2) via EscPosPrinterCommands langsung ke koneksi yang sudah tersambung.
-    //
-    // Reuse resolveConnection()+connectWithTimeout()+retry-loop supaya dapat manfaat timeout ~5
-    // detik & auto-retry 2x yang sama seperti test print/cetak struk (sesuai rencana teknis yang
-    // sudah didiskusikan).
-    //
-    // CATATAN ASUMSI (perlu diverifikasi via uji fisik H8a sebelum lanjut ke H8b/H8c):
-    // Saya mengasumsikan EscPosPrinterCommands di DantSu v3.4.0 punya method public connect()/
-    // disconnect() yang chainable (mengembalikan this), mengikuti pola openCashBox() yang sudah
-    // Anda konfirmasi sebelumnya. Karena connection yang sama (`ready.connection`) SUDAH
-    // disambungkan lebih dulu oleh connectWithTimeout() di bawah, pemanggilan commands.connect()
-    // di sini KEMUNGKINAN redundan/no-op (mengikuti pola isConnected()-check standar DeviceConnection
-    // seperti yang terlihat di CancellableBluetoothConnection.connect() kita sendiri) -- tapi saya
-    // TIDAK punya source TcpConnection/UsbConnection bawaan DantSu untuk memastikan 100% aman
-    // dipanggil dua kali. Risikonya rendah (dibungkus try/catch, gagal = CashDrawerResult.Failure,
-    // tidak crash), tapi INI WAJIB DIUJI FISIK dulu ke RPP02N sebelum kita wiring ke UI.
-    suspend fun openCashDrawer(printer: PrinterEntity): CashDrawerResult {
-        val resolution = resolveConnection(printer)
-        val ready = when (resolution) {
-            is ConnectionResolution.Error -> return CashDrawerResult.Failure(resolution.message)
-            is ConnectionResolution.Ready -> resolution
-        }
-
-        val genericErrorMessage = connectionErrorMessage(printer, ready.targetLabel)
-
-        repeat(RETRY_ATTEMPTS_TOTAL) { attempt ->
-            if (attempt > 0) delay(RETRY_DELAY_MS)
-
-            val connected = connectWithTimeout(ready.connection)
-            if (!connected) {
-                return@repeat
-            }
-
-            return try {
-                withContext(Dispatchers.IO) {
-                    val commands = EscPosPrinterCommands(ready.connection)
-                    commands.connect()
-                    commands.openCashBox()
-                    commands.disconnect()
-                }
-                CashDrawerResult.Success
-            } catch (e: Exception) {
-                runCatching { ready.connection.disconnect() }
-                CashDrawerResult.Failure(
-                    "Gagal membuka laci: ${e.message ?: "kesalahan tidak diketahui"}"
-                )
-            }
-        }
-
-        return CashDrawerResult.Failure(genericErrorMessage)
-    }
-
+    /**
+     * Inti logika koneksi + retry, diekstrak dari testPrint() versi H3d TANPA mengubah
+     * urutan/perilaku sama sekali — hanya markup builder-nya sekarang parameter, bukan hardcode.
+     */
     private suspend fun executePrintJob(
         printer: PrinterEntity,
         markupBuilder: (EscPosPrinter) -> String

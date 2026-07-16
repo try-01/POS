@@ -1,6 +1,5 @@
 package com.pos.offline.ui.pos
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pos.offline.data.local.entity.CartItemEntity
@@ -13,19 +12,15 @@ import com.pos.offline.data.repository.CartRepository
 import com.pos.offline.data.repository.CashierRepository
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.InsufficientStockException
-import com.pos.offline.data.repository.PrinterRepository
 import com.pos.offline.data.repository.ProductRepository
 import com.pos.offline.data.repository.ShiftRepository
 import com.pos.offline.data.repository.ShiftSummary
 import com.pos.offline.data.repository.StoreProfileRepository
 import com.pos.offline.data.repository.TransactionRepository
 import com.pos.offline.ui.receipt.PrintUiState
-import com.pos.offline.util.CashDrawerResult
 import com.pos.offline.util.PrintCoordinator
-import com.pos.offline.util.PrinterConnectionFactory
 import com.pos.offline.util.roundToRupiah
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -63,9 +58,7 @@ class PosViewModel(
     private val cashierRepository: CashierRepository,
     private val shiftRepository: ShiftRepository,
     private val printCoordinator: PrintCoordinator,
-    private val storeProfileRepository: StoreProfileRepository,
-    private val printerRepository: PrinterRepository,
-    private val printerConnectionFactory: PrinterConnectionFactory
+    private val storeProfileRepository: StoreProfileRepository
 ) : ViewModel() {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -98,17 +91,10 @@ class PosViewModel(
     val uiEvents: SharedFlow<PosUiEvent> = _uiEvents.asSharedFlow()
     private val _checkoutState = MutableStateFlow<CheckoutState>(CheckoutState.Idle)
     val checkoutState: StateFlow<CheckoutState> = _checkoutState.asStateFlow()
+
+    // BATCH H7: state cetak struk thermal, terpisah dari CheckoutState (lihat PrintUiState.kt).
     private val _printUiState = MutableStateFlow<PrintUiState>(PrintUiState.Idle)
     val printUiState: StateFlow<PrintUiState> = _printUiState.asStateFlow()
-
-    // BATCH H8: guard anti-dobel-klik TUNGGAL (bukan Set<Long> seperti Test Print di
-    // PrinterViewModel) karena tombol "Buka Laci" selalu menyasar SATU target yang sama
-    // (printer default) -- tidak ada daftar printer per-baris seperti Test Print.
-    // Flag ini DIPAKAI BERSAMA oleh trigger manual (openCashDrawerManually) dan trigger
-    // otomatis pasca-checkout Tunai (maybeAutoOpenDrawer), supaya keduanya tidak tabrakan
-    // berebut sesi Bluetooth/WiFi/USB yang sama (Q6).
-    private val _isOpeningDrawer = MutableStateFlow(false)
-    val isOpeningDrawer: StateFlow<Boolean> = _isOpeningDrawer.asStateFlow()
 
     val activeCashiers: StateFlow<List<CashierEntity>> = cashierRepository.activeCashiers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -261,13 +247,11 @@ class PosViewModel(
         } catch (e: Exception) {
             CheckoutState.Error("Gagal memproses: ${e.message ?: "kesalahan tak dikenal"}")
         }
+
+        // BATCH H7: auto-print HANYA kalau toggle di Profil Toko aktif. PrintCoordinator sendiri
+        // TIDAK mengecek toggle ini (sesuai kesepakatan pemisahan tanggung jawab) — jadi
+        // pengecekan `autoPrintEnabled` memang tempatnya di sini, bukan di PrintCoordinator.
         (_checkoutState.value as? CheckoutState.Success)?.let { success ->
-            // BATCH H8 (Q7 Opsi A): buka laci DULU (kasir butuh laci SEGERA untuk kembalian),
-            // baru cetak struk. Jeda 500ms HANYA dijalankan jika benar-benar terjadi upaya
-            // koneksi ke printer (attemptedDrawer == true) -- supaya transaksi non-tunai atau
-            // kondisi "belum ada printer default" tidak kena delay percuma tanpa manfaat.
-            val attemptedDrawer = maybeAutoOpenDrawer(success.result)
-            if (attemptedDrawer) delay(AUTO_DRAWER_TO_PRINT_GAP_MS)
             maybeAutoPrint(success.result)
         }
     }
@@ -279,67 +263,11 @@ class PosViewModel(
         }
     }
 
-    // BATCH H8 (Q1 auto-trigger): buka laci otomatis HANYA untuk PaymentMethod.CASH.
-    // Q4: silent fail + log, TIDAK ADA banner/snackbar untuk jalur otomatis ini -- beda
-    // dengan tombol manual openCashDrawerManually() yang WAJIB kasih feedback (Q8).
-    // Return value = apakah benar-benar terjadi upaya koneksi ke printer (dipakai checkout()
-    // untuk memutuskan perlu delay 500ms sebelum cetak struk atau tidak, sesuai saran Q7).
-    private suspend fun maybeAutoOpenDrawer(result: CheckoutResult): Boolean {
-        if (result.transaction.paymentMethod != PaymentMethod.CASH) return false
-        if (_isOpeningDrawer.value) {
-            Log.w(TAG, "Auto-buka laci dilewati: sedang ada proses buka-laci lain berjalan.")
-            return false
-        }
-
-        val printer = printerRepository.getDefault()
-        if (printer == null) {
-            Log.w(TAG, "Auto-buka laci dilewati: belum ada printer default yang diatur.")
-            return false
-        }
-
-        _isOpeningDrawer.value = true
-        return try {
-            when (val outcome = printerConnectionFactory.openCashDrawer(printer)) {
-                is CashDrawerResult.Success -> Unit
-                is CashDrawerResult.Failure ->
-                    Log.w(TAG, "Auto-buka laci gagal: ${outcome.message}")
-            }
-            true
-        } catch (e: Exception) {
-            Log.w(TAG, "Auto-buka laci gagal karena exception tak terduga: ${e.message}")
-            true
-        } finally {
-            _isOpeningDrawer.value = false
-        }
-    }
-
-    // BATCH H8 (Q1 Opsi C): tombol manual, SELALU bisa dipanggil kapan saja, tidak terikat
-    // transaksi apa pun. Q8: kasih feedback via Snackbar (_uiEvents) baik sukses maupun gagal,
-    // supaya kasir tahu hasil aksinya (beda dengan jalur otomatis yang silent per Q4).
-    fun openCashDrawerManually() {
-        if (_isOpeningDrawer.value) return // guard anti-dobel-klik (Q6)
-        viewModelScope.launch {
-            _isOpeningDrawer.value = true
-            try {
-                val printer = printerRepository.getDefault()
-                if (printer == null) {
-                    _uiEvents.emit(
-                        PosUiEvent.ShowMessage("Printer belum diatur. Atur printer default di tab Pengaturan.")
-                    )
-                    return@launch
-                }
-                when (val outcome = printerConnectionFactory.openCashDrawer(printer)) {
-                    is CashDrawerResult.Success ->
-                        _uiEvents.emit(PosUiEvent.ShowMessage("Laci kasir dibuka."))
-                    is CashDrawerResult.Failure ->
-                        _uiEvents.emit(PosUiEvent.ShowMessage(outcome.message))
-                }
-            } finally {
-                _isOpeningDrawer.value = false
-            }
-        }
-    }
-
+    /**
+     * Cetak struk thermal (H7) — dipakai baik oleh auto-print (di atas) maupun tombol manual
+     * "Cetak Struk" di SuccessDialog. Selalu pakai cascade default → priority (bukan pilih
+     * printer spesifik) karena ini alur "utama" pasca-checkout, bukan reprint dari riwayat.
+     */
     fun printReceipt(result: CheckoutResult) {
         if (_printUiState.value is PrintUiState.Printing) return
         viewModelScope.launch {
@@ -355,10 +283,7 @@ class PosViewModel(
     }
 
     companion object {
-        private const val TAG = "PosViewModel"
-        private const val AUTO_DRAWER_TO_PRINT_GAP_MS = 500L
-
-        fun computeTotals(
+           fun computeTotals(
             items: List<CartItemEntity>,
             discountType: DiscountType,
             discountValue: Double,

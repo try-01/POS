@@ -87,9 +87,7 @@ object ServiceLocator {
         cashierRepository,
         shiftRepository,
         printCoordinator,
-        storeProfileRepository,
-        printerRepository,
-        printerConnectionFactory
+        storeProfileRepository
     )
 
     fun inventoryViewModelFactory(): ViewModelProvider.Factory =
@@ -120,9 +118,7 @@ class PosViewModelFactory(
     private val cashierRepository: CashierRepository,
     private val shiftRepository: ShiftRepository,
     private val printCoordinator: PrintCoordinator,
-    private val storeProfileRepository: StoreProfileRepository,
-    private val printerRepository: PrinterRepository,
-    private val printerConnectionFactory: PrinterConnectionFactory
+    private val storeProfileRepository: StoreProfileRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
@@ -133,9 +129,7 @@ class PosViewModelFactory(
             cashierRepository,
             shiftRepository,
             printCoordinator,
-            storeProfileRepository,
-            printerRepository,
-            printerConnectionFactory
+            storeProfileRepository
         ) as T
 }
 
