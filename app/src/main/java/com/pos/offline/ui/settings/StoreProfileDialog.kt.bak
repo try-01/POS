@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,6 +21,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -32,12 +37,13 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -45,16 +51,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun StoreProfileDialog(
     viewModel: StoreProfileViewModel,
     onDismiss: () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    // FIX PERFORMA: Menggunakan lifecycle-aware state collection (menghemat memori & baterai)
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val form = uiState.formState
 
-    LaunchedEffect(Unit) {
+    // FIX UX: Menjadikan viewModel sebagai key agar siklus hidup Effect lebih aman
+    LaunchedEffect(viewModel) {
         viewModel.loadFormFromCurrentProfile()
     }
 
@@ -83,6 +94,7 @@ fun StoreProfileDialog(
                         fontWeight = FontWeight.Bold
                     )
                     IconButton(onClick = onDismiss) {
+                        // FIX ERROR: Memanggil icon via route lengkap receiver Icons.Rounded
                         Icon(Icons.Rounded.Close, contentDescription = "Tutup")
                     }
                 }
@@ -92,7 +104,8 @@ fun StoreProfileDialog(
                         .weight(1f)
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(rememberScrollState())
+                        .imePadding(), // FIX UX: Mencegah textfield tertutup oleh keyboard
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     // ---- Logo ----
@@ -127,6 +140,7 @@ fun StoreProfileDialog(
                                 onClick = { pickImageLauncher.launch("image/*") },
                                 enabled = !uiState.isProcessingLogo
                             ) {
+                                // FIX ERROR & BENTROK NAMA: Memanggil Icons.Rounded.Image tanpa alias ImageIcon
                                 Icon(Icons.Rounded.Image, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
                                 Text(if (form.logoBytes == null) "Pilih Logo" else "Ganti Logo", fontSize = 12.sp)
@@ -224,15 +238,23 @@ fun StoreProfileDialog(
 }
 
 /** Preview logo dari ByteArray -- dipakai juga di SettingsScreen untuk
- *  thumbnail ringkasan, karena itu TIDAK private. Dekode ulang dari
- *  ByteArray tiap kali [logoBytes] berubah (di-cache via remember key). */
+ * thumbnail ringkasan, karena itu TIDAK private. Dekode ulang dari
+ * ByteArray tiap kali [logoBytes] berubah (di-cache via remember key). */
 @Composable
 fun LogoPreview(logoBytes: ByteArray?, modifier: Modifier = Modifier) {
-    val bitmap = remember(logoBytes) {
-        logoBytes?.let { bytes ->
-            runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }.getOrNull()
+    // FIX PERFORMA: Memindahkan decode gambar ke Background Thread (Dispatchers.IO) agar UI tidak patah/freeze
+    val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = logoBytes) {
+        value = if (logoBytes != null) {
+            withContext(Dispatchers.IO) {
+                runCatching { 
+                    BitmapFactory.decodeByteArray(logoBytes, 0, logoBytes.size)?.asImageBitmap() 
+                }.getOrNull()
+            }
+        } else {
+            null
         }
     }
+
     if (bitmap != null) {
         Image(
             bitmap = bitmap,

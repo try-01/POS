@@ -242,7 +242,6 @@ fun StoreProfileDialog(
  * ByteArray tiap kali [logoBytes] berubah (di-cache via remember key). */
 @Composable
 fun LogoPreview(logoBytes: ByteArray?, modifier: Modifier = Modifier) {
-    // FIX PERFORMA: Memindahkan decode gambar ke Background Thread (Dispatchers.IO) agar UI tidak patah/freeze
     val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = logoBytes) {
         value = if (logoBytes != null) {
             withContext(Dispatchers.IO) {
@@ -255,14 +254,16 @@ fun LogoPreview(logoBytes: ByteArray?, modifier: Modifier = Modifier) {
         }
     }
 
-    if (bitmap != null) {
+    // FIX SMART CAST: Menggunakan ?.let dan ?: run sebagai pengganti if-else
+    bitmap?.let { nonNullBitmap ->
         Image(
-            bitmap = bitmap,
+            bitmap = nonNullBitmap, // Sekarang menggunakan nonNullBitmap yang dijamin tidak null
             contentDescription = "Logo toko",
             contentScale = ContentScale.Crop,
             modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant)
         )
-    } else {
+    } ?: run {
+        // Blok ini dieksekusi jika bitmap bernilai null
         Box(
             modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
