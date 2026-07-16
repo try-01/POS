@@ -39,25 +39,18 @@ class LogoImageProcessor(private val appContext: Context) {
      *  menghindari OutOfMemoryError untuk foto beresolusi sangat besar dari
      *  kamera/galeri (bisa puluhan megapixel) sebelum sempat di-downscale
      *  ke ~300px. */
-private fun decodeBitmapSafely(uri: Uri): Bitmap? {
-    val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    
-    // 1. Buka stream HANYA untuk mengecek ukuran (pisahkan pengecekan null-nya)
-    val boundsStream = appContext.contentResolver.openInputStream(uri) ?: return null
-    boundsStream.use { stream ->
-        BitmapFactory.decodeStream(stream, null, boundsOptions)
-    } // Tidak perlu ?: return null di sini, karena decodeStream memang pasti null
+    private fun decodeBitmapSafely(uri: Uri): Bitmap? {
+        val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        appContext.contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, boundsOptions)
+        } ?: return null
 
-    // 2. Hitung skala kompresi
-    val sampleSize = calculateInSampleSize(boundsOptions, MAX_DIMENSION * 2, MAX_DIMENSION * 2)
-    val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
-    
-    // 3. Buka stream BARU untuk benar-benar me-load gambar menjadi Bitmap
-    val decodeStream = appContext.contentResolver.openInputStream(uri) ?: return null
-    return decodeStream.use { stream ->
-        BitmapFactory.decodeStream(stream, null, decodeOptions)
+        val sampleSize = calculateInSampleSize(boundsOptions, MAX_DIMENSION * 2, MAX_DIMENSION * 2)
+        val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        return appContext.contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, decodeOptions)
+        }
     }
-}
 
     private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
         val height = options.outHeight
