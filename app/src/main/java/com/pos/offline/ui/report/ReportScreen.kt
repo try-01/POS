@@ -97,6 +97,10 @@ import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 import com.pos.offline.ui.components.discountRowLabel
 import com.pos.offline.ui.components.paymentMethodLabel
+import com.pos.offline.ui.receipt.PrintUiState
+import com.pos.offline.ui.receipt.forTransaction
+import com.pos.offline.util.ReceiptPrintOutcome
+import java.io.File
 import com.pos.offline.util.toRupiah
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -150,7 +154,8 @@ import java.time.Instant
 @Composable
 fun ReportScreen(
     viewModel: ReportViewModel,
-    onPrintBluetooth: (CheckoutResult) -> Unit,
+    onNavigateToSettings: () -> Unit,
+    onSharePdfFile: (File) -> Unit,
     onExportPdf: (CheckoutResult) -> Unit,
     onShare: (CheckoutResult) -> Unit
 ) {
@@ -162,6 +167,8 @@ fun ReportScreen(
     val closedShifts by viewModel.closedShifts.collectAsStateWithLifecycle()
     val selectedShiftDetail by viewModel.selectedShiftDetail.collectAsStateWithLifecycle()
     val showReturnDialog by viewModel.showReturnDialog.collectAsStateWithLifecycle()
+    val printUiState by viewModel.printUiState.collectAsStateWithLifecycle()
+    val pendingPrintTarget by viewModel.pendingPrintTarget.collectAsStateWithLifecycle()
     val returnMessage by viewModel.returnMessage.collectAsStateWithLifecycle()
     val returnSubmitting by viewModel.returnSubmitting.collectAsStateWithLifecycle()
     val returnSummary by viewModel.returnSummary.collectAsStateWithLifecycle()
@@ -355,21 +362,32 @@ fun ReportScreen(
     // Retur sedang terbuka (pola sama dgn `pendingVoidConfirm` sejak Batch D).
     if (selectedTransaction != null && !pendingVoidConfirm && !showReturnDialog) {
         val current = selectedTransaction!!
-        TransactionDetailDialog(
-            result = current,
-            banner = voidBanner,
-            onVoidClick = { pendingVoidConfirm = true },
-            onReturnClick = { viewModel.openReturnDialog() },
-            onPrint = { onPrintBluetooth(current) },
-            onExport = { onExportPdf(current) },
-            onShare = { onShare(current) },
-            onDismiss = {
-                pendingVoidConfirm = false
-                voidBanner = null
-                viewModel.closeTransactionDetail()
-            }
-        )
+TransactionDetailDialog(
+    result = current,
+    banner = voidBanner,
+    printUiState = printUiState.forTransaction(current.transaction.id),
+    onVoidClick = { pendingVoidConfirm = true },
+    onReturnClick = { viewModel.openReturnDialog() },
+    onPrint = { viewModel.printReceipt(current) },
+    onExport = { onExportPdf(current) },
+    onShare = { onShare(current) },
+    onSharePdfFile = onSharePdfFile,
+    onNavigateToSettings = onNavigateToSettings,
+    onDismiss = {
+        pendingVoidConfirm = false
+        voidBanner = null
+        viewModel.closeTransactionDetail()
     }
+)
+    }
+
+pendingPrintTarget?.let { target ->
+    PrinterPickerDialog(
+        printers = target.availablePrinters,
+        onSelect = { printer -> viewModel.onPrinterPicked(printer) },
+        onDismiss = { viewModel.cancelPrinterPicker() }
+    )
+}
 
     if (pendingVoidConfirm) {
         VoidConfirmDialog(
@@ -1237,7 +1255,8 @@ private fun ReturnedBadge() {
 private fun ReceiptActionsRow(
     onPrint: () -> Unit,
     onExport: () -> Unit,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    printEnabled: Boolean = true
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1245,8 +1264,9 @@ private fun ReceiptActionsRow(
     ) {
         ReceiptActionButton(
             icon = Icons.Rounded.Print,
-            label = "Cetak",
+            label = if (printEnabled) "Cetak" else "Mencetak...",
             onClick = onPrint,
+            enabled = printEnabled,
             modifier = Modifier.weight(1f)
         )
         ReceiptActionButton(
@@ -1269,27 +1289,30 @@ private fun ReceiptActionButton(
     icon: ImageVector,
     label: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-            .clickable(onClick = onClick)
+            .background(
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (enabled) 0.4f else 0.2f)
+            )
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
             icon,
             contentDescription = label,
-            modifier = Modifier.size(17.dp),
-            tint = MaterialTheme.colorScheme.primary
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.5f)
         )
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(4.dp))
         Text(
             label,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.5f)
         )
     }
 }
@@ -1308,11 +1331,14 @@ private fun ReceiptActionButton(
 private fun TransactionDetailDialog(
     result: CheckoutResult,
     banner: ReportMessage?,
+    printUiState: PrintUiState,
     onVoidClick: () -> Unit,
     onReturnClick: () -> Unit,
     onPrint: () -> Unit,
     onExport: () -> Unit,
     onShare: () -> Unit,
+    onSharePdfFile: (File) -> Unit,
+    onNavigateToSettings: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val tx = result.transaction
@@ -1376,11 +1402,19 @@ private fun TransactionDetailDialog(
                 }
 
                 Spacer(Modifier.height(8.dp))
-                ReceiptActionsRow(onPrint = onPrint, onExport = onExport, onShare = onShare)
+                ReceiptActionsRow(
+                    onPrint = onPrint,
+                    onExport = onExport,
+                    onShare = onShare,
+                    printEnabled = printUiState !is PrintUiState.Printing
+                )
 
-                // BATCH E3: aksi Retur & Void berdampingan — Retur hanya
-                // muncul jika belum pernah diretur; Void tetap mengikuti
-                // aturan lama (tidak terpengaruh status retur).
+                ReprintResultBanner(
+                    printUiState = printUiState,
+                    onSharePdfFile = onSharePdfFile,
+                    onNavigateToSettings = onNavigateToSettings
+                )
+
                 if (!isVoid) {
                     Spacer(Modifier.height(8.dp))
                     Row(
@@ -1458,6 +1492,48 @@ private fun TransactionDetailDialog(
             TextButton(onClick = onDismiss) { Text("Tutup") }
         }
     )
+}
+
+@Composable
+private fun ReprintResultBanner(
+    printUiState: PrintUiState,
+    onSharePdfFile: (File) -> Unit,
+    onNavigateToSettings: () -> Unit
+) {
+    val state = printUiState as? PrintUiState.Result ?: return
+    val outcome = state.outcome
+    val (message, isError) = when (outcome) {
+        is ReceiptPrintOutcome.Success -> "Struk terkirim ke \"${outcome.printer.label}\"." to false
+        is ReceiptPrintOutcome.Failed -> "Gagal mencetak ke semua printer." to true
+        ReceiptPrintOutcome.NoPrinterConfigured -> "Printer belum diatur." to true
+        ReceiptPrintOutcome.AlreadyInProgress -> "Sedang mencetak, mohon tunggu..." to false
+    }
+
+    Spacer(Modifier.height(6.dp))
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = if (isError) MaterialTheme.colorScheme.errorContainer
+                else MaterialTheme.colorScheme.primaryContainer
+    ) {
+        Text(
+            message,
+            modifier = Modifier.padding(10.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (isError) MaterialTheme.colorScheme.onErrorContainer
+                    else MaterialTheme.colorScheme.onPrimaryContainer
+        )
+    }
+    if (outcome is ReceiptPrintOutcome.Failed && outcome.fallbackPdf != null) {
+        TextButton(onClick = { onSharePdfFile(outcome.fallbackPdf) }) {
+            Text("Bagikan PDF Cadangan")
+        }
+    }
+    if (outcome is ReceiptPrintOutcome.NoPrinterConfigured) {
+        TextButton(onClick = onNavigateToSettings) {
+            Text("Buka Pengaturan Printer")
+        }
+    }
 }
 
 @Composable

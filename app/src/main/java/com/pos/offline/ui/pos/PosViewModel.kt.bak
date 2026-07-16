@@ -74,6 +74,14 @@ sealed interface CheckoutState {
  * nominal final dilakukan di [computeTotals] (untuk tampilan real-time) dan
  * di [TransactionRepository.checkout] (untuk persist) — DUA tempat ini WAJIB
  * pakai rumus yang identik, lihat komentar masing-masing.
+ *
+ * BATCH F (Fitur 1 — Daftar Shift Belum Ditutup): [openEndShiftDialog] kini
+ * menerima [ShiftEntity] SPESIFIK (bukan lagi selalu `openShift.value`),
+ * disimpan di [_endShiftTarget] — supaya bisa menutup shift MANAPUN yang
+ * masih terbuka (Opsi A: siapa pun boleh menutup shift siapa pun, sudah
+ * disepakati), dipicu dari layar baru "Kelola Shift" ([openShifts]), bukan
+ * hanya shift "yang ditunjuk aktif" via tap [ShiftIndicatorBar] seperti
+ * sebelumnya (perilaku tap lama TETAP SAMA, hanya jalur barunya ditambah).
  */
 @OptIn(kotlinx.coroutines.FlowPreview::class, ExperimentalCoroutinesApi::class)
 class PosViewModel(
@@ -132,7 +140,7 @@ class PosViewModel(
     val checkoutState: StateFlow<CheckoutState> = _checkoutState.asStateFlow()
 
     // =====================================================================
-    // Kasir & Shift (Batch 3C)
+    // Kasir & Shift (Batch 3C + Batch F)
     // =====================================================================
 
     val activeCashiers: StateFlow<List<CashierEntity>> = cashierRepository.activeCashiers
@@ -140,6 +148,13 @@ class PosViewModel(
 
     val openShift: StateFlow<ShiftEntity?> = shiftRepository.openShift
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /**
+     * BATCH F: SEMUA shift terbuka — dipakai layar "Kelola Shift". Beda dari
+     * [openShift] yang cuma satu ("yang ditunjuk aktif").
+     */
+    val openShifts: StateFlow<List<ShiftEntity>> = shiftRepository.openShifts
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _showStartShiftDialog = MutableStateFlow(false)
     val showStartShiftDialog: StateFlow<Boolean> = _showStartShiftDialog.asStateFlow()
@@ -149,6 +164,17 @@ class PosViewModel(
 
     private val _shiftSummary = MutableStateFlow<ShiftSummary?>(null)
     val shiftSummary: StateFlow<ShiftSummary?> = _shiftSummary.asStateFlow()
+
+    /** BATCH F: shift SPESIFIK yang sedang dituju oleh [showEndShiftDialog] — bisa shift mana pun, tidak harus [openShift]. */
+    private val _endShiftTarget = MutableStateFlow<ShiftEntity?>(null)
+    val endShiftTarget: StateFlow<ShiftEntity?> = _endShiftTarget.asStateFlow()
+
+    /** BATCH F: kontrol dialog "Kelola Shift" (daftar shift terbuka + tombol mulai baru). */
+    private val _showShiftListDialog = MutableStateFlow(false)
+    val showShiftListDialog: StateFlow<Boolean> = _showShiftListDialog.asStateFlow()
+
+    fun openShiftListDialog() { _showShiftListDialog.value = true }
+    fun dismissShiftListDialog() { _showShiftListDialog.value = false }
 
     fun openStartShiftDialog() { _showStartShiftDialog.value = true }
     fun dismissStartShiftDialog() { _showStartShiftDialog.value = false }
@@ -160,8 +186,13 @@ class PosViewModel(
         _uiEvents.emit(PosUiEvent.ShowMessage("Shift dimulai untuk ${cashier.name}."))
     }
 
-    fun openEndShiftDialog() = viewModelScope.launch {
-        val shift = openShift.value ?: return@launch
+    /**
+     * BATCH F: kini menerima [shift] SPESIFIK — dipanggil baik dari tap
+     * [ShiftIndicatorBar] (dengan `openShift.value`, perilaku lama) maupun
+     * dari layar "Kelola Shift" (dengan shift mana pun dari [openShifts]).
+     */
+    fun openEndShiftDialog(shift: ShiftEntity) = viewModelScope.launch {
+        _endShiftTarget.value = shift
         _shiftSummary.value = shiftRepository.getShiftSummary(shift.id)
         _showEndShiftDialog.value = true
     }
@@ -169,14 +200,17 @@ class PosViewModel(
     fun dismissEndShiftDialog() {
         _showEndShiftDialog.value = false
         _shiftSummary.value = null
+        _endShiftTarget.value = null
     }
 
+    /** BATCH F: menutup shift yang tersimpan di [_endShiftTarget], bukan lagi selalu `openShift.value`. */
     fun endShift(actualCash: Long) = viewModelScope.launch {
-        val shift = openShift.value ?: return@launch
+        val shift = _endShiftTarget.value ?: return@launch
         shiftRepository.endShift(shift.id, actualCash)
         _showEndShiftDialog.value = false
         _shiftSummary.value = null
-        _uiEvents.emit(PosUiEvent.ShowMessage("Shift ditutup."))
+        _endShiftTarget.value = null
+        _uiEvents.emit(PosUiEvent.ShowMessage("Shift ditutup untuk ${shift.cashierName}."))
     }
 
     // ---------- Aksi UI (keranjang) ----------

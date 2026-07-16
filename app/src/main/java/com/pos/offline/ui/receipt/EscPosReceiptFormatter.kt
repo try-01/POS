@@ -1,0 +1,190 @@
+package com.pos.offline.ui.receipt
+
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import com.dantsu.escposprinter.EscPosPrinter
+import com.dantsu.escposprinter.textparser.PrinterTextParserImg
+import com.pos.offline.data.local.entity.StoreProfileEntity
+import com.pos.offline.data.local.entity.TransactionEntity
+import com.pos.offline.data.local.entity.TransactionItemEntity
+import com.pos.offline.data.local.entity.isVoid
+import com.pos.offline.data.repository.CheckoutResult
+import com.pos.offline.ui.components.discountRowLabel
+import com.pos.offline.ui.components.paymentMethodLabel
+import com.pos.offline.util.toRupiah
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/**
+ * Formatter MURNI: hanya menghasilkan [String] markup ESC/POS (syntax DantSu)
+ * dari data transaksi + profil toko. TIDAK melakukan koneksi/cetak apa pun
+ * (itu tanggung jawab PrintCoordinator di Batch H6).
+ *
+ * Menerima instance [EscPosPrinter] yang SUDAH dibuat (bukan membuatnya sendiri)
+ * karena encoding logo (bitmapToHexadecimalString) butuh tahu lebar cetak
+ * printer (printerWidthPx) untuk auto-scale gambar.
+ */
+object EscPosReceiptFormatter {
+
+    /** Batas tinggi gambar yang didukung DantSu (lihat README: "Maximum height
+     * of printed image is 256px"). Lebar TIDAK dibatasi manual di sini karena
+     * bitmapToHexadecimalString() sudah auto-scale sesuai lebar kertas printer. */
+    private const val MAX_IMAGE_HEIGHT_PX = 256
+
+    /** Karakter yang reserved untuk syntax markup DantSu ([L][C][R], <b>, <font>, dst).
+     * Teks dinamis (input bebas dari user: nama produk/toko/alamat/kasir) WAJIB
+     * disaring dulu supaya tidak merusak parser jika kebetulan mengandung karakter ini. */
+    private val RESERVED_CHARS_REGEX = Regex("[\\[\\]<>]")
+
+    private fun sanitize(text: String): String = text.replace(RESERVED_CHARS_REGEX, "")
+
+    private val dateFormatterPattern = "dd/MM/yyyy HH:mm"
+
+    fun build(
+        printer: EscPosPrinter,
+        checkoutResult: CheckoutResult,
+        storeProfile: StoreProfileEntity
+    ): String = build(printer, checkoutResult.transaction, checkoutResult.items, storeProfile)
+
+    fun build(
+        printer: EscPosPrinter,
+        transaction: TransactionEntity,
+        items: List<TransactionItemEntity>,
+        storeProfile: StoreProfileEntity
+    ): String {
+        val sb = StringBuilder()
+        val charsPerLine = printer.nbrCharactersPerLine
+
+        // ---- Logo ----
+        buildLogoHex(printer, storeProfile.logoBytes)?.let { hex ->
+            sb.append("[C]<img>").append(hex).append("</img>\n")
+        }
+
+        // ---- Nama toko ----
+        val storeName = sanitize(storeProfile.storeName).trim()
+        if (storeName.isNotEmpty()) {
+            sb.append("[C]<b><font size='big'>").append(storeName).append("</font></b>\n")
+        } else {
+            sb.append("[C]<b><font size='big'>STRUK TRANSAKSI</font></b>\n")
+        }
+
+        // ---- Alamat (multi-baris) ----
+        appendCenteredMultiline(sb, storeProfile.address)
+
+        sb.append("[L]\n")
+
+        // ---- Meta transaksi ----
+        val dateFormatter = SimpleDateFormat(dateFormatterPattern, Locale.forLanguageTag("id-ID"))
+        sb.append("[C]").append(dateFormatter.format(Date(transaction.createdAt))).append("\n")
+        sb.append("[C]No: ").append(sanitize(transaction.id)).append("\n")
+        if (transaction.cashierName.isNotBlank()) {
+            sb.append("[C]Kasir: ").append(sanitize(transaction.cashierName)).append("\n")
+        }
+
+        // ---- Penanda VOID (isi ditentukan penuh di H7, di sini hanya markup dasar) ----
+        if (transaction.isVoid) {
+            sb.append("[L]\n")
+            sb.append("[C]<b>*** TRANSAKSI DIBATALKAN ***</b>\n")
+        }
+
+        sb.append(divider(charsPerLine))
+
+        // ---- Daftar item ----
+        items.forEach { item ->
+            val name = sanitize(item.productName).trim().ifEmpty { "(Tanpa nama)" }
+            sb.append("[L]<b>").append(name).append("</b>[R]")
+                .append(item.lineTotal.toRupiah()).append("\n")
+            sb.append("[L]  ").append(item.quantity).append(" x ")
+                .append(item.unitPrice.toRupiah()).append("\n")
+        }
+
+        sb.append(divider(charsPerLine))
+
+        // ---- Ringkasan total ----
+        sb.append("[L]Subtotal[R]").append(transaction.subtotal.toRupiah()).append("\n")
+
+        transaction.discountRowLabel()?.let { label ->
+            sb.append("[L]").append(sanitize(label)).append("[R]-")
+                .append(transaction.discount.toRupiah()).append("\n")
+        }
+
+        if (transaction.tax > 0) {
+            sb.append("[L]Pajak[R]").append(transaction.tax.toRupiah()).append("\n")
+        }
+
+        sb.append("[L]<b><font size='big'>TOTAL</font></b>[R]<b><font size='big'>")
+            .append(transaction.total.toRupiah()).append("</font></b>\n")
+
+        sb.append("[L]Bayar (").append(paymentMethodLabel(transaction.paymentMethod))
+            .append(")[R]").append(transaction.paidAmount.toRupiah()).append("\n")
+        sb.append("[L]Kembali[R]").append(transaction.change.toRupiah()).append("\n")
+
+        sb.append(divider(charsPerLine))
+
+        // ---- Footer ----
+        val footer = storeProfile.footerNote.trim()
+        if (footer.isNotEmpty()) {
+            appendCenteredMultiline(sb, footer)
+        } else {
+            sb.append("[C]Terima kasih\n")
+            sb.append("[C]Struk elektronik\n")
+        }
+
+        sb.append("[L]\n")
+
+        return sb.toString()
+    }
+
+    private fun divider(charsPerLine: Int): String {
+        val safeLength = charsPerLine.coerceAtLeast(1)
+        return "[C]" + "=".repeat(safeLength) + "\n"
+    }
+
+    private fun appendCenteredMultiline(sb: StringBuilder, rawText: String) {
+        if (rawText.isBlank()) return
+        rawText.split("\n").forEach { rawLine ->
+            val line = sanitize(rawLine).trim()
+            if (line.isNotEmpty()) {
+                sb.append("[C]").append(line).append("\n")
+            }
+        }
+    }
+
+    /**
+     * Decode [logoBytes] → resize tinggi maksimal 256px (batas DantSu, TIDAK
+     * mengubah bytes tersimpan di DB, hanya untuk kebutuhan cetak) → encode
+     * ke hex string via PrinterTextParserImg dengan gradient=true (logo H4
+     * berupa grayscale, bukan pure B&W, sehingga butuh algoritma dithering
+     * DantSu untuk hasil terbaik).
+     *
+     * Mengembalikan null (bukan melempar exception) jika logo tidak ada atau
+     * gagal diproses — struk tetap harus bisa dicetak tanpa logo.
+     */
+    private fun buildLogoHex(printer: EscPosPrinter, logoBytes: ByteArray?): String? {
+        if (logoBytes == null) return null
+        val original = try {
+            BitmapFactory.decodeByteArray(logoBytes, 0, logoBytes.size)
+        } catch (e: Exception) {
+            null
+        } ?: return null
+
+        val resized = if (original.height > MAX_IMAGE_HEIGHT_PX) {
+            val ratio = MAX_IMAGE_HEIGHT_PX.toFloat() / original.height
+            val newWidth = (original.width * ratio).toInt().coerceAtLeast(1)
+            try {
+                Bitmap.createScaledBitmap(original, newWidth, MAX_IMAGE_HEIGHT_PX, true)
+            } catch (e: Exception) {
+                original
+            }
+        } else {
+            original
+        }
+
+        return try {
+            PrinterTextParserImg.bitmapToHexadecimalString(printer, resized, true)
+        } catch (e: Exception) {
+            null
+        }
+    }
+}

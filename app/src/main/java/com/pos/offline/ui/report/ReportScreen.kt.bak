@@ -84,11 +84,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.local.entity.PaymentMethod
+import com.pos.offline.data.local.entity.ReturnEntity
+import com.pos.offline.data.local.entity.ReturnItemEntity
 import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.hasReturn
 import com.pos.offline.data.local.entity.isVoid
 import com.pos.offline.data.repository.CheckoutResult
+import com.pos.offline.data.repository.ReturnDetail
 import com.pos.offline.data.repository.ReturnItemInput
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.ThousandsSeparatorTransformation
@@ -122,10 +125,9 @@ import java.time.Instant
  * pendapatan, kurva tren) SELALU tampil terlepas tab aktif. Bagian BAWAH
  * berganti lewat tab "Transaksi"/"Shift":
  *  - Tab "Transaksi": daftar riwayat transaksi (perilaku lama, tidak berubah).
- *  - Tab "Shift": breakdown Tunai/QRIS untuk tanggal terpilih + "Riwayat
- *    Tutup Shift" (shift yang ditutup pada tanggal itu) — klik baris shift
- *    untuk lihat detail read-only (mirip dialog Tutup Shift di PosScreen,
- *    tapi angkanya sudah final/tersimpan, bukan input baru).
+ *  - Tab "Shift": breakdown Tunai/QRIS untuk tanggal terpilih + "Retur Hari
+ *    Ini" (Batch E4) + "Riwayat Tutup Shift" (shift yang ditutup pada
+ *    tanggal itu) — klik baris untuk lihat detail read-only.
  *
  * BATCH E3: [TransactionDetailDialog] kini punya badge "SUDAH DIRETUR" +
  * tombol "Retur Item" (berdampingan dengan "Batalkan Transaksi", dipindah
@@ -133,8 +135,16 @@ import java.time.Instant
  * punya 2 slot tombol bawaan). Dialog baru [ReturnItemDialog] menampilkan
  * checklist item + stepper qty + checkbox "Kembalikan ke stok?" per baris +
  * nominal pengembalian (sugesti bisa di-override manual) + metode refund.
- * Hanya SATU dialog yang tampil bergantian (detail / konfirmasi Void /
- * Retur) — pola sudah ada sejak Batch D untuk Void, sekarang diperluas.
+ *
+ * BATCH E4: section "Retur Hari Ini" di tab Shift ([ReturnSummarySection] +
+ * daftar [ReturnRow]) — REAKTIF mengikuti tanggal terpilih yang sama dengan
+ * [report]/[closedShifts]. Klik baris membuka [ReturnDetailDialog] read-only
+ * (item, status restock per item, metode, catatan) + tombol lompat ke
+ * transaksi asal.
+ *
+ * Hanya SATU dialog yang tampil bergantian (detail transaksi / konfirmasi
+ * Void / Retur / detail shift historis / detail retur) — pola sudah ada
+ * sejak Batch D untuk Void, sekarang diperluas ke semua dialog baru.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -154,6 +164,8 @@ fun ReportScreen(
     val showReturnDialog by viewModel.showReturnDialog.collectAsStateWithLifecycle()
     val returnMessage by viewModel.returnMessage.collectAsStateWithLifecycle()
     val returnSubmitting by viewModel.returnSubmitting.collectAsStateWithLifecycle()
+    val returnSummary by viewModel.returnSummary.collectAsStateWithLifecycle()
+    val selectedReturnDetail by viewModel.selectedReturnDetail.collectAsStateWithLifecycle()
     var pendingVoidConfirm by remember { mutableStateOf(false) }
     var voidBanner by remember { mutableStateOf<ReportMessage?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -280,6 +292,36 @@ fun ReportScreen(
                         )
                     }
 
+                    // BATCH E4: breakdown refund Tunai/QRIS + daftar retur.
+                    item(key = "return_summary") {
+                        ReturnSummarySection(
+                            cashRefundTotal = returnSummary.cashRefundTotal,
+                            qrisRefundTotal = returnSummary.qrisRefundTotal
+                        )
+                    }
+                    item(key = "returns_header") {
+                        Text(
+                            "Daftar Retur (${returnSummary.returns.size})",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    if (returnSummary.returns.isEmpty()) {
+                        item(key = "empty_returns") { EmptyReturns() }
+                    } else {
+                        items(
+                            items = returnSummary.returns,
+                            key = { "return_${it.id}" },
+                            contentType = { "return" }
+                        ) { ret ->
+                            ReturnRow(
+                                ret = ret,
+                                onClick = { viewModel.openReturnDetail(ret.id) }
+                            )
+                        }
+                    }
+
                     item(key = "closed_shifts_header") {
                         Text(
                             "Riwayat Tutup Shift (${closedShifts.size})",
@@ -357,6 +399,19 @@ fun ReportScreen(
         ClosedShiftDetailDialog(
             detail = detail,
             onDismiss = viewModel::closeShiftDetail
+        )
+    }
+
+    // BATCH E4: dialog detail retur (read-only) — bisa lompat ke transaksi
+    // asal, yang menutup dialog ini dan membuka TransactionDetailDialog.
+    selectedReturnDetail?.let { detail ->
+        ReturnDetailDialog(
+            detail = detail,
+            onViewOriginalTransaction = { invoiceId ->
+                viewModel.closeReturnDetail()
+                viewModel.openTransactionDetail(invoiceId)
+            },
+            onDismiss = viewModel::closeReturnDetail
         )
     }
 }
@@ -845,6 +900,242 @@ private fun PaymentBreakdownSection(cashRevenue: Long, qrisRevenue: Long) {
             )
         }
     }
+}
+
+// ============================ RETUR HARI INI (BATCH E4) ============================
+
+@Composable
+private fun ReturnSummarySection(cashRefundTotal: Long, qrisRefundTotal: Long) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            "Retur Hari Ini",
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+            fontWeight = FontWeight.SemiBold
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            StatCard(
+                modifier = Modifier.weight(1f),
+                label = "Refund Tunai",
+                value = cashRefundTotal.toRupiah(),
+                icon = Icons.Rounded.AttachMoney
+            )
+            StatCard(
+                modifier = Modifier.weight(1f),
+                label = "Refund QRIS",
+                value = qrisRefundTotal.toRupiah(),
+                icon = Icons.Rounded.QrCode
+            )
+        }
+    }
+}
+
+/**
+ * Baris ringkas satu retur — SEMUA field yang ditampilkan diambil langsung
+ * dari [ReturnEntity] (tanpa query tambahan per baris) untuk menghindari
+ * masalah N+1 query di dalam LazyColumn. Rincian item (butuh query
+ * `return_items` terpisah) ditampilkan di [ReturnDetailDialog] saat baris
+ * ini diklik.
+ */
+@Composable
+private fun ReturnRow(ret: ReturnEntity, onClick: () -> Unit) {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 12.dp,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+        onClick = onClick
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                ReportViewModel.timeFmt.format(Instant.ofEpochMilli(ret.returnedAt)),
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.tertiary
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    ret.transactionId,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "${ret.cashierName.ifBlank { "Tanpa kasir" }} · ${paymentMethodLabel(ret.refundMethod)}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                )
+                if (ret.note.isNotBlank()) {
+                    Text(
+                        ret.note,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Text(
+                "- ${ret.refundAmount.toRupiah()}",
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.error
+            )
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                Icons.Rounded.ChevronRight,
+                contentDescription = "Lihat detail retur",
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyReturns() {
+    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                Icons.Rounded.History,
+                contentDescription = null,
+                modifier = Modifier.size(40.dp),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Belum ada retur pada hari ini",
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        }
+    }
+}
+
+/**
+ * Dialog detail retur — READ-ONLY, dimuat dari [ReturnDetail] (header +
+ * item, hasil [com.pos.offline.data.repository.ReturnRepository.getDetail]).
+ * Menampilkan status restock PER ITEM (3 kondisi: dikembalikan / tidak
+ * dikembalikan / produk sudah dihapus dari master data) untuk transparansi
+ * penuh ke kasir, plus tombol lompat ke transaksi asal.
+ */
+@Composable
+private fun ReturnDetailDialog(
+    detail: ReturnDetail,
+    onViewOriginalTransaction: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val header = detail.header
+    val items = detail.items
+    val totalQty = items.sumOf { it.quantityReturned }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Detail Retur") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(header.transactionId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    ReportViewModel.dateTimeFmt.format(Instant.ofEpochMilli(header.returnedAt)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+
+                Spacer(Modifier.height(4.dp))
+                TextButton(
+                    onClick = { onViewOriginalTransaction(header.transactionId) },
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.ReceiptLong,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("Lihat Transaksi Asal", style = MaterialTheme.typography.labelSmall)
+                }
+
+                Spacer(Modifier.height(6.dp))
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                SummaryLine("Kasir", header.cashierName.ifBlank { "Tanpa kasir" })
+                SummaryLine("Shift", header.shiftId?.let { "#$it" } ?: "Tanpa shift")
+
+                Spacer(Modifier.height(10.dp))
+                Text("Item Diretur ($totalQty)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+
+                items.forEach { item ->
+                    ReturnDetailItemRow(item)
+                }
+
+                Spacer(Modifier.height(6.dp))
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                SummaryLine("Metode Pengembalian", paymentMethodLabel(header.refundMethod))
+                SummaryLine(
+                    "Total Refund",
+                    header.refundAmount.toRupiah(),
+                    emphasize = true,
+                    color = MaterialTheme.colorScheme.error
+                )
+
+                if (header.note.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text("Catatan", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        header.note,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Tutup") }
+        }
+    )
+}
+
+@Composable
+private fun ReturnDetailItemRow(item: ReturnItemEntity) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                Text(item.productName, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp))
+                Text(
+                    "${item.quantityReturned} x ${item.unitPrice.toRupiah()}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+            Text(
+                (item.unitPrice * item.quantityReturned.toLong()).toRupiah(),
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        RestockBadge(restocked = item.restocked, hasProduct = item.productId != null)
+    }
+}
+
+@Composable
+private fun RestockBadge(restocked: Boolean, hasProduct: Boolean) {
+    val (label, color) = when {
+        !hasProduct -> "Produk sudah dihapus · stok dilewati" to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+        restocked -> "✓ Dikembalikan ke stok" to MaterialTheme.colorScheme.primary
+        else -> "✗ Tidak dikembalikan ke stok" to MaterialTheme.colorScheme.error
+    }
+    Text(
+        label,
+        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+        color = color
+    )
 }
 
 // ============================ BARIS TRANSAKSI ============================

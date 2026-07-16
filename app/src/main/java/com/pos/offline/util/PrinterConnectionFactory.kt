@@ -22,25 +22,6 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
-/**
- * Implementasi DeviceConnection Bluetooth KUSTOM (BUKAN memakai
- * com.dantsu...connection.bluetooth.BluetoothConnection bawaan library) --
- * alasan teknis: BluetoothSocket di kelas bawaan bersifat PRIVATE tanpa
- * getter apa pun, sehingga TIDAK MUNGKIN dibatalkan paksa dari luar saat
- * connect() macet. BluetoothSocket.connect() juga tidak punya parameter
- * timeout bawaan & bisa blocking lama (device mati mendadak, sinyal lemah,
- * dll) -- kalau cuma "berhenti menunggu" di level coroutine tanpa menutup
- * socket-nya, thread di baliknya tetap jalan diam-diam sampai OS-level
- * timeout Android (bisa >10 detik), tidak sesuai target "timeout ~5 detik"
- * dan boros resource thread.
- *
- * Karena field outputStream/data di DeviceConnection (abstract base) BERSIFAT
- * PROTECTED, kita bisa extend langsung & simpan referensi BluetoothSocket
- * sendiri -- forceCloseIfStuck() dipanggil watchdog eksternal saat timeout,
- * menutup socket dari thread lain membuat connect() yang sedang blocking
- * langsung melempar IOException (perilaku resmi terdokumentasi Android),
- * sehingga thread benar-benar berhenti alih-alih menggantung tanpa batas.
- */
 class CancellableBluetoothConnection(private val device: BluetoothDevice) : DeviceConnection() {
 
     @Volatile private var socket: BluetoothSocket? = null
@@ -53,16 +34,6 @@ class CancellableBluetoothConnection(private val device: BluetoothDevice) : Devi
     override fun connect(): DeviceConnection {
         if (isConnected()) return this
         try {
-            // 🐛 BUGFIX (skenario "Bluetooth ponsel mati" -> crash INSTAN):
-            // resolveServiceUuid() (memanggil device.uuids) SEBELUMNYA berada
-            // DI LUAR try-block ini. Beberapa API BluetoothDevice (termasuk
-            // getUuids()) diketahui melempar exception NON-IOException
-            // (mis. IllegalStateException "BT Adapter is not turned ON") saat
-            // adapter Bluetooth mati -- exception itu lolos mentah-mentah
-            // tanpa tertangkap sama sekali. Sekarang SEMUA pemanggilan API
-            // Bluetooth (termasuk resolveServiceUuid) ada DI DALAM try, dan
-            // catch diperluas dari IOException menjadi Exception umum untuk
-            // menangkap kemungkinan exception non-standar dari OEM tertentu.
             val uuid = resolveServiceUuid()
             val newSocket = device.createRfcommSocketToServiceRecord(uuid)
             socket = newSocket
@@ -86,8 +57,6 @@ class CancellableBluetoothConnection(private val device: BluetoothDevice) : Devi
         return this
     }
 
-    /** Dipanggil dari watchdog timeout eksternal untuk memaksa batalkan
-     *  koneksi yang macet -- lihat penjelasan lengkap di dokumentasi kelas. */
     fun forceCloseIfStuck() {
         socket?.let { runCatching { it.close() } }
     }
@@ -107,9 +76,20 @@ class CancellableBluetoothConnection(private val device: BluetoothDevice) : Devi
     }
 }
 
+/** Hasil operasi Test Print (H3d) — TIDAK diubah, dipakai persis seperti sebelumnya oleh PrinterViewModel. */
 sealed class TestPrintResult {
     object Success : TestPrintResult()
     data class Failure(val message: String) : TestPrintResult()
+}
+
+/**
+ * Hasil operasi cetak struk asli (H6) — sengaja dipisah dari [TestPrintResult] supaya
+ * pemanggil (PrintCoordinator) tidak rancu antara "test print ke satu printer" vs
+ * "cetak struk sungguhan yang mungkin perlu tahu printer mana yang dipakai/gagal".
+ */
+sealed class PrintResult {
+    data class Success(val printer: PrinterEntity) : PrintResult()
+    data class Failure(val printer: PrinterEntity, val message: String) : PrintResult()
 }
 
 private sealed class ConnectionResolution {
@@ -117,26 +97,60 @@ private sealed class ConnectionResolution {
     data class Error(val message: String) : ConnectionResolution()
 }
 
-/**
- * Factory + orkestrasi Test Print (Batch H3d). Cakupan sengaja MINIMAL --
- * satu printer, satu percobaan cetak per pemanggilan, TANPA cascade ke
- * printer cadangan (itu baru masuk scope PrintCoordinator di H6).
- *
- * Auto-detect supportsStatusQuery DITUNDA (keputusan disepakati bersama
- * user) -- DeviceConnection DantSu TIDAK menyediakan akses baca respons
- * (InputStream) lewat API publik/protected apa pun, library ini murni
- * satu-arah (write-only). Field supportsStatusQuery untuk saat ini murni
- * toggle manual di form edit printer.
- */
+/** Hasil internal satu kali percobaan job (dipakai bersama oleh testPrint() & printReceipt()). */
+private sealed class JobOutcome {
+    object Success : JobOutcome()
+    data class Failure(val message: String) : JobOutcome()
+}
+
 class PrinterConnectionFactory(
     private val bluetoothHelper: BluetoothPrinterHelper,
     private val usbHelper: UsbPrinterHelper
 ) {
 
+    /**
+     * Test Print (H3d) — TIDAK BERUBAH secara perilaku/signature dari versi sebelumnya.
+     * Sudah teruji fisik di RPP02N via Bluetooth. Internal-nya sekarang delegasi ke
+     * [executePrintJob] yang juga dipakai [printReceipt] (H6), tapi hasil akhirnya sama persis.
+     */
     suspend fun testPrint(printer: PrinterEntity): TestPrintResult {
+        val outcome = executePrintJob(printer) { buildTestPrintMarkup(printer) }
+        return when (outcome) {
+            is JobOutcome.Success -> TestPrintResult.Success
+            is JobOutcome.Failure -> TestPrintResult.Failure(outcome.message)
+        }
+    }
+
+    /**
+     * Cetak struk asli (H6). [markupBuilder] menerima instance [EscPosPrinter] yang SUDAH
+     * terkonstruksi (dibutuhkan oleh EscPosReceiptFormatter untuk encode logo, karena
+     * PrinterTextParserImg.bitmapToHexadecimalString() butuh referensi printer untuk skala lebar).
+     *
+     * Tidak melakukan cascade ke printer lain — itu tanggung jawab PrintCoordinator (H6),
+     * fungsi ini murni "coba cetak ke SATU printer, dengan retry koneksi seperti testPrint()".
+     */
+    suspend fun printReceipt(
+        printer: PrinterEntity,
+        markupBuilder: (EscPosPrinter) -> String
+    ): PrintResult {
+        val outcome = executePrintJob(printer, markupBuilder)
+        return when (outcome) {
+            is JobOutcome.Success -> PrintResult.Success(printer)
+            is JobOutcome.Failure -> PrintResult.Failure(printer, outcome.message)
+        }
+    }
+
+    /**
+     * Inti logika koneksi + retry, diekstrak dari testPrint() versi H3d TANPA mengubah
+     * urutan/perilaku sama sekali — hanya markup builder-nya sekarang parameter, bukan hardcode.
+     */
+    private suspend fun executePrintJob(
+        printer: PrinterEntity,
+        markupBuilder: (EscPosPrinter) -> String
+    ): JobOutcome {
         val resolution = resolveConnection(printer)
         val ready = when (resolution) {
-            is ConnectionResolution.Error -> return TestPrintResult.Failure(resolution.message)
+            is ConnectionResolution.Error -> return JobOutcome.Failure(resolution.message)
             is ConnectionResolution.Ready -> resolution
         }
 
@@ -159,22 +173,23 @@ class PrinterConnectionFactory(
                         printer.charPerLine
                     )
                 }
+                val markup = markupBuilder(escPosPrinter)
                 withContext(Dispatchers.IO) {
-                    escPosPrinter.printFormattedTextAndCut(buildTestPrintMarkup(printer))
+                    escPosPrinter.printFormattedTextAndCut(markup)
                 }
                 withContext(Dispatchers.IO) {
                     escPosPrinter.disconnectPrinter()
                 }
-                TestPrintResult.Success
+                JobOutcome.Success
             } catch (e: Exception) {
                 runCatching { ready.connection.disconnect() }
-                TestPrintResult.Failure(
+                JobOutcome.Failure(
                     "Terhubung ke printer, tetapi gagal mencetak: ${e.message ?: "kesalahan tidak diketahui"}"
                 )
             }
         }
 
-        return TestPrintResult.Failure(genericErrorMessage)
+        return JobOutcome.Failure(genericErrorMessage)
     }
 
     private suspend fun resolveConnection(printer: PrinterEntity): ConnectionResolution =
@@ -209,12 +224,6 @@ class PrinterConnectionFactory(
         }
         val adapter = BluetoothAdapter.getDefaultAdapter()
             ?: return ConnectionResolution.Error("Perangkat ini tidak mendukung Bluetooth.")
-
-        // 🐛 BUGFIX (skenario "Bluetooth ponsel mati" -> crash instan):
-        // validasi proaktif SEBELUM mencoba apa pun -- daripada menangkap
-        // exception setelah terlanjur memanggil API Bluetooth saat adapter
-        // mati (yang berisiko melempar exception non-standar di berbagai
-        // OEM), langsung tolak lebih awal dengan pesan ramah.
         if (!adapter.isEnabled) {
             return ConnectionResolution.Error(
                 "Bluetooth ponsel sedang mati. Nyalakan Bluetooth terlebih dahulu."
@@ -250,36 +259,6 @@ class PrinterConnectionFactory(
         return ConnectionResolution.Ready(UsbConnection(usbManager, device), printer.label)
     }
 
-    /**
-     * Membuka koneksi dengan batas waktu ~5 detik.
-     *
-     * 🐛 BUGFIX RIWAYAT (ditemukan saat pengujian H3d, app force close ~5
-     * detik setelah Test Print saat printer Bluetooth mati/tidak terjangkau):
-     *
-     * Percobaan 1 (SUDAH diperbaiki sebelumnya): menghapus connectJob.cancel()
-     * eksplisit setelah forceCloseIfStuck() -- kombinasi keduanya adalah race
-     * condition fatal (Job yang sudah diminta cancel() TAPI menyelesaikan
-     * diri dengan exception LAIN dianggap "unhandled" oleh coroutine
-     * machinery). Perbaikan ini TERNYATA BELUM CUKUP (masih crash).
-     *
-     * Percobaan 2 (fix saat ini): ganti coroutineScope -> supervisorScope.
-     * coroutineScope OTOMATIS membatalkan SEMUA sibling coroutine (termasuk
-     * watchdog) begitu SATU child (connectJob) gagal -- perilaku ini terjadi
-     * independen dari kapan/apakah kita memanggil .await(), dan diduga jadi
-     * sumber race kedua. supervisorScope TIDAK melakukan auto-propagasi
-     * kegagalan antar-sibling seperti ini -- kegagalan connectJob hanya
-     * "terlihat" saat kita eksplisit .await()-nya, benar-benar terisolasi
-     * dari watchdog.
-     *
-     * CATATAN JUJUR: jika app MASIH force close setelah kedua perbaikan ini,
-     * kemungkinan penyebabnya adalah crash NATIVE (di luar JVM, tidak bisa
-     * ditangkap try/catch Kotlin apa pun) akibat BluetoothSocket.close()
-     * dipanggil dari thread berbeda saat connect() sedang berlangsung --
-     * perilaku ini dilaporkan bermasalah pada sebagian stack Bluetooth OEM.
-     * Kalau ini terjadi, WAJIB dapatkan stack trace Logcat asli untuk
-     * diagnosis lebih lanjut, karena tidak bisa dipastikan lewat membaca
-     * kode saja.
-     */
     private suspend fun connectWithTimeout(connection: DeviceConnection): Boolean = supervisorScope {
         val connectJob = async(Dispatchers.IO) { connection.connect() }
         val watchdog = launch(Dispatchers.IO) {

@@ -114,7 +114,11 @@ import com.pos.offline.ui.components.formatPercentTrim
 import com.pos.offline.ui.components.paymentMethodLabel
 import com.pos.offline.util.toRupiah
 import com.pos.offline.ui.components.ThousandsSeparatorTransformation
+import com.pos.offline.ui.receipt.PrintUiState
+import com.pos.offline.ui.receipt.forTransaction
+import com.pos.offline.util.ReceiptPrintOutcome
 import java.text.SimpleDateFormat
+import java.io.File
 import java.util.Date
 import java.util.Locale
 
@@ -134,7 +138,8 @@ import java.util.Locale
 @Composable
 fun PosScreen(
     viewModel: PosViewModel,
-    onPrintBluetooth: (CheckoutResult) -> Unit,
+    onNavigateToSettings: () -> Unit,
+    onSharePdfFile: (File) -> Unit,
     onExportPdf: (CheckoutResult) -> Unit,
     forceWideLayout: Boolean = false
 ) {
@@ -147,6 +152,7 @@ fun PosScreen(
     val taxRate by viewModel.taxRate.collectAsStateWithLifecycle()
     val paid by viewModel.paid.collectAsStateWithLifecycle()
     val checkoutState by viewModel.checkoutState.collectAsStateWithLifecycle()
+    val printUiState by viewModel.printUiState.collectAsStateWithLifecycle()
 
     val paymentMethod by viewModel.paymentMethod.collectAsStateWithLifecycle()
 
@@ -317,12 +323,15 @@ if (isWide) {
     }
 
     when (val state = checkoutState) {
-        is CheckoutState.Success -> SuccessDialog(
-            result = state.result,
-            onPrint = { onPrintBluetooth(state.result) },
-            onExport = { onExportPdf(state.result) },
-            onDismiss = viewModel::resetCheckoutState
-        )
+is CheckoutState.Success -> SuccessDialog(
+    result = state.result,
+    printUiState = printUiState.forTransaction(state.result.transaction.id),
+    onPrint = { viewModel.printReceipt(state.result) },
+    onExport = { onExportPdf(state.result) },
+    onSharePdfFile = onSharePdfFile,
+    onNavigateToSettings = onNavigateToSettings,
+    onDismiss = viewModel::resetCheckoutState
+)
         is CheckoutState.Error -> AlertDialog(
             onDismissRequest = viewModel::resetCheckoutState,
             confirmButton = { TextButton(onClick = viewModel::resetCheckoutState) { Text("Tutup") } },
@@ -1801,8 +1810,11 @@ private fun QuantityEditDialog(
 @Composable
 private fun SuccessDialog(
     result: CheckoutResult,
+    printUiState: PrintUiState,
     onPrint: () -> Unit,
     onExport: () -> Unit,
+    onSharePdfFile: (File) -> Unit,
+    onNavigateToSettings: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -1832,18 +1844,86 @@ private fun SuccessDialog(
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = onPrint, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Rounded.Print, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Cetak Bluetooth")
+                    FilledTonalButton(
+                        onClick = onPrint,
+                        enabled = printUiState !is PrintUiState.Printing,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (printUiState is PrintUiState.Printing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Mencetak...")
+                        } else {
+                            Icon(Icons.Rounded.Print, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Cetak Struk")
+                        }
                     }
                     OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) {
                         Text("Ekspor PDF")
                     }
+
+                    PrintResultBanner(
+                        printUiState = printUiState,
+                        onSharePdfFile = onSharePdfFile,
+                        onNavigateToSettings = onNavigateToSettings
+                    )
                 }
             }
         }
     )
+}
+
+/**
+ * Banner hasil cetak (H7) — sengaja di KONTEN dialog, bukan Snackbar, karena Snackbar milik
+ * Scaffold tidak reliable terlihat/ter-tap selagi AlertDialog ini masih terbuka (window terpisah).
+ * Konsisten dengan konvensi lama proyek: aksi tambahan di dialog >2 tombol ditaruh di konten.
+ */
+@Composable
+private fun PrintResultBanner(
+    printUiState: PrintUiState,
+    onSharePdfFile: (File) -> Unit,
+    onNavigateToSettings: () -> Unit
+) {
+    val state = printUiState as? PrintUiState.Result ?: return
+    val outcome = state.outcome
+    val (message, isError) = when (outcome) {
+        is ReceiptPrintOutcome.Success -> "Struk terkirim ke \"${outcome.printer.label}\"." to false
+        is ReceiptPrintOutcome.Failed -> "Gagal mencetak ke semua printer." to true
+        ReceiptPrintOutcome.NoPrinterConfigured -> "Printer belum diatur." to true
+        ReceiptPrintOutcome.AlreadyInProgress -> "Sedang mencetak, mohon tunggu..." to false
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            color = if (isError) MaterialTheme.colorScheme.errorContainer
+                    else MaterialTheme.colorScheme.primaryContainer
+        ) {
+            Text(
+                message,
+                modifier = Modifier.padding(10.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isError) MaterialTheme.colorScheme.onErrorContainer
+                        else MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+        if (outcome is ReceiptPrintOutcome.Failed && outcome.fallbackPdf != null) {
+            TextButton(onClick = { onSharePdfFile(outcome.fallbackPdf) }) {
+                Text("Bagikan PDF Cadangan")
+            }
+        }
+        if (outcome is ReceiptPrintOutcome.NoPrinterConfigured) {
+            TextButton(onClick = onNavigateToSettings) {
+                Text("Buka Pengaturan Printer")
+            }
+        }
+    }
 }
 
 @Composable

@@ -21,6 +21,7 @@ import com.pos.offline.ui.settings.SettingsViewModel
 import com.pos.offline.ui.settings.StoreProfileViewModel
 import com.pos.offline.util.BluetoothPrinterHelper
 import com.pos.offline.util.LogoImageProcessor
+import com.pos.offline.util.PrintCoordinator
 import com.pos.offline.util.PrinterConnectionFactory
 import com.pos.offline.util.UsbPrinterHelper
 
@@ -72,6 +73,9 @@ object ServiceLocator {
     private val logoImageProcessor: LogoImageProcessor by lazy {
         LogoImageProcessor(appContext)
     }
+    private val printCoordinator: PrintCoordinator by lazy {
+        PrintCoordinator(appContext, printerRepository, storeProfileRepository, printerConnectionFactory)
+    }
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
@@ -81,13 +85,15 @@ object ServiceLocator {
         cartRepository,
         transactionRepository,
         cashierRepository,
-        shiftRepository
+        shiftRepository,
+        printCoordinator,
+        storeProfileRepository
     )
 
     fun inventoryViewModelFactory(): ViewModelProvider.Factory =
         InventoryViewModelFactory(productRepository)
     fun reportViewModelFactory(): ViewModelProvider.Factory =
-        ReportViewModelFactory(transactionRepository, shiftRepository, returnRepository)
+        ReportViewModelFactory(transactionRepository, shiftRepository, returnRepository, printCoordinator, printerRepository)
     fun settingsViewModelFactory(): ViewModelProvider.Factory =
         SettingsViewModelFactory(cashierRepository, shiftRepository)
     fun printerViewModelFactory(): ViewModelProvider.Factory =
@@ -102,6 +108,7 @@ object ServiceLocator {
     fun returnRepository(): ReturnRepository = returnRepository
     fun printerRepository(): PrinterRepository = printerRepository
     fun storeProfileRepository(): StoreProfileRepository = storeProfileRepository
+    fun printCoordinator(): PrintCoordinator = printCoordinator
 }
 
 class PosViewModelFactory(
@@ -109,7 +116,9 @@ class PosViewModelFactory(
     private val cartRepository: CartRepository,
     private val transactionRepository: TransactionRepository,
     private val cashierRepository: CashierRepository,
-    private val shiftRepository: ShiftRepository
+    private val shiftRepository: ShiftRepository,
+    private val printCoordinator: PrintCoordinator,
+    private val storeProfileRepository: StoreProfileRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
@@ -118,7 +127,9 @@ class PosViewModelFactory(
             cartRepository,
             transactionRepository,
             cashierRepository,
-            shiftRepository
+            shiftRepository,
+            printCoordinator,
+            storeProfileRepository
         ) as T
 }
 
@@ -133,11 +144,13 @@ class InventoryViewModelFactory(
 class ReportViewModelFactory(
     private val transactionRepository: TransactionRepository,
     private val shiftRepository: ShiftRepository,
-    private val returnRepository: ReturnRepository
+    private val returnRepository: ReturnRepository,
+    private val printCoordinator: PrintCoordinator,
+    private val printerRepository: PrinterRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        ReportViewModel(transactionRepository, shiftRepository, returnRepository) as T
+        ReportViewModel(transactionRepository, shiftRepository, returnRepository, printCoordinator, printerRepository) as T
 }
 
 class SettingsViewModelFactory(

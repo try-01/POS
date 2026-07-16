@@ -24,15 +24,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
-
-/** Perataan baris pada struk. */
 enum class ReceiptAlign { LEFT, CENTER, RIGHT }
-
-/**
- * Satu baris struk. Bisa berupa teks tunggal, atau dua kolom (left/right) yang
- * dipakai untuk baris "Nama ........... Total". Model tunggal ini menjadi sumber
- * konten yang sama bagi keluaran ESC/POS, PDF, maupun Bitmap.
- */
 data class ReceiptLine(
     val left: String = "",
     val right: String = "",
@@ -40,32 +32,16 @@ data class ReceiptLine(
     val bold: Boolean = false,
     val large: Boolean = false
 )
-
-/**
- * Manajer struk: membangun konten dan mengekspor ke 4 target:
- *  1) Byte ESC/POS → dicetak via Bluetooth thermal printer.
- *  2) Dokumen PDF → disimpan ke storage aplikasi (tanpa izin runtime).
- *  3) Bitmap → untuk dipratinjau.
- *  4) BATCH: Intent Bagikan (share) → gambar struk dikirim ke aplikasi lain
- *     (WhatsApp, dsb), dipakai dari Detail Transaksi (Laporan) untuk
- *     skenario pembeli minta struk duplikat/dikirim digital.
- *
- * Semua operasi berat (jaringan/I-O) berjalan di [Dispatchers.IO] via coroutines.
- */
 object ReceiptManager {
 
     private const val STORE_NAME = "TOKO KASIR OFFLINE"
     private val dateFmt = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("id-ID"))
-
-    // ---------- Sumber konten tunggal ----------
     fun buildLines(result: CheckoutResult): List<ReceiptLine> {
         val tx = result.transaction
         val lines = mutableListOf<ReceiptLine>()
         lines += ReceiptLine(left = STORE_NAME, align = ReceiptAlign.CENTER, bold = true, large = true)
         lines += ReceiptLine(left = dateFmt.format(Date(tx.createdAt)), align = ReceiptAlign.CENTER)
         lines += ReceiptLine(left = "No: ${tx.id}", align = ReceiptAlign.CENTER)
-        // Nama kasir SAJA (tanpa info shift) — hemat kertas printer thermal.
-        // Struk/PDF akan didesain ulang lebih efisien pada batch terpisah nanti.
         if (tx.cashierName.isNotBlank()) {
             lines += ReceiptLine(left = "Kasir: ${tx.cashierName}", align = ReceiptAlign.CENTER)
         }
@@ -76,8 +52,6 @@ object ReceiptManager {
         }
         lines += divider()
         lines += ReceiptLine(left = "Subtotal", right = tx.subtotal.toRupiah())
-        // Label & format diskon MURNI dari fungsi bersama (ui.components) —
-        // sinkron dengan tampilan SuccessDialog & Detail Transaksi.
         tx.discountRowLabel()?.let { label ->
             lines += ReceiptLine(left = label, right = "- ${tx.discount.toRupiah()}")
         }
@@ -93,10 +67,6 @@ object ReceiptManager {
 
     private fun divider(): ReceiptLine =
         ReceiptLine(left = "--------------------------------", align = ReceiptAlign.CENTER)
-
-    // ====================== 1) ESC/POS (Bluetooth) ======================
-
-    /** Ubah baris menjadi byte perintah ESC/POS untuk printer thermal 58/80mm. */
     fun toEscPosBytes(lines: List<ReceiptLine>, paperChars: Int = 32): ByteArray {
         val os = ByteArrayOutputStream()
         fun cmd(vararg b: Int) = b.forEach { os.write(it) }       // perintah kontrol
@@ -116,8 +86,6 @@ object ReceiptManager {
         cmd(0x1D, 0x56, 0x00) // GS V 0  : potong kertas
         return os.toByteArray()
     }
-
-    /** Susun dua kolom (left ... right) ke lebar kertas tetap dengan padding. */
     private fun twoColumn(left: String, right: String, width: Int): String {
         val gap = 2
         val maxLeft = (width - right.length - gap).coerceAtLeast(0)
@@ -125,10 +93,6 @@ object ReceiptManager {
         val pad = (width - right.length - l.length).coerceAtLeast(0)
         return l + " ".repeat(pad) + right
     }
-
-    // ====================== 2) Ekspor PDF ======================
-
-    /** Render struk ke PDF; simpan di direktori khusus aplikasi (tanpa izin runtime). */
     fun exportToPdf(context: Context, result: CheckoutResult): File {
         val lines = buildLines(result)
         val pageWidth = 240               // ~3,3 inci (lebar struk)
@@ -155,10 +119,6 @@ object ReceiptManager {
         document.close()
         return file
     }
-
-    // ====================== 3) Ekspor Bitmap ======================
-
-    /** Render struk ke Bitmap (mis. untuk dipratinjau/dibagikan). */
     fun renderToBitmap(result: CheckoutResult, scale: Int = 3): Bitmap {
         val lines = buildLines(result)
         val w = 240 * scale
@@ -175,8 +135,6 @@ object ReceiptManager {
         }
         return bmp
     }
-
-    /** Gambar satu baris (dipakai PDF & Bitmap) sesuai perataan / dua kolom. */
     private fun drawLine(
         canvas: Canvas, line: ReceiptLine, pageWidth: Float, margin: Float, y: Float, scale: Float = 1f
     ) {
@@ -203,23 +161,6 @@ object ReceiptManager {
             }
         }
     }
-
-    // ====================== 4) Bagikan (Share) — BARU ======================
-
-    /**
-     * Siapkan [Intent] untuk membagikan struk sebagai gambar PNG ke aplikasi
-     * lain (WhatsApp, Telegram, dsb).
-     *
-     * Memakai [FileProvider] (BUKAN `Uri.fromFile`) karena Android 7+ (API 24+)
-     * melempar `FileUriExposedException` untuk `file://` URI yang dibagikan
-     * lintas-aplikasi. Authority mengikuti konvensi standar
-     * `"${applicationId}.fileprovider"` — WAJIB didaftarkan di
-     * `AndroidManifest.xml` (lihat catatan penyerta).
-     *
-     * File disimpan di `cacheDir` (bukan `getExternalFilesDir`) karena ini
-     * murni salinan sementara untuk keperluan share — tidak perlu disimpan
-     * permanen seperti hasil `exportToPdf()`.
-     */
     fun buildShareIntent(context: Context, result: CheckoutResult): Intent {
         val bitmap = renderToBitmap(result)
         val dir = File(context.cacheDir, "shared_receipts").apply { mkdirs() }
@@ -237,21 +178,30 @@ object ReceiptManager {
         return Intent.createChooser(sendIntent, "Bagikan Struk")
     }
 
-    // ====================== Bluetooth ======================
+    /**
+     * BARU (H7): bagikan file PDF yang SUDAH dibuat (mis. hasil fallback [PrintCoordinator]
+     * saat semua printer thermal gagal) via Intent share. Terpisah dari [buildShareIntent] yang
+     * merender ulang jadi PNG dari [CheckoutResult] — di sini kita hanya membungkus [File] PDF
+     * yang sudah ada apa adanya, TIDAK generate ulang.
+     */
+    fun buildPdfShareIntent(context: Context, file: File): Intent {
+        val authority = "${context.packageName}.fileprovider"
+        val uri = FileProvider.getUriForFile(context, authority, file)
 
-    /** Daftar printer thermal yang sudah dipasang (paired). */
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        return Intent.createChooser(sendIntent, "Bagikan Struk PDF")
+    }
+
     fun bondedPrinters(context: Context): List<BluetoothDevice> = try {
         context.getSystemService(BluetoothManager::class.java)
             ?.adapter?.bondedDevices?.toList() ?: emptyList()
     } catch (e: SecurityException) {
         emptyList() // BLUETOOTH_CONNECT belum diberikan (Android 12+)
     }
-
-    /**
-     * Cetak ke printer Bluetooth pertama yang terpasang.
-     * Mengembalikan true jika pengiriman berhasil.
-     * CATATAN: butuh izin runtime BLUETOOTH_CONNECT di Android 12+.
-     */
     suspend fun printToFirstBonded(context: Context, result: CheckoutResult): Boolean = try {
         val device = bondedPrinters(context).firstOrNull() ?: return false
         val data = toEscPosBytes(buildLines(result))
@@ -260,11 +210,6 @@ object ReceiptManager {
         false
     }
 }
-
-/**
- * Pengirim ESC/POS via Bluetooth Classic (SPP RFCOMM).
- * Koneksi blocking dijalankan pada [Dispatchers.IO].
- */
 class BluetoothReceiptPrinter {
     private val sppUuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 

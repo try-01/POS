@@ -3,12 +3,14 @@ package com.pos.offline.ui.receipt
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import androidx.core.content.FileProvider
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.ui.components.discountRowLabel
 import com.pos.offline.util.toRupiah
@@ -40,10 +42,13 @@ data class ReceiptLine(
 )
 
 /**
- * Manajer struk: membangun konten dan mengekspor ke 3 target:
+ * Manajer struk: membangun konten dan mengekspor ke 4 target:
  *  1) Byte ESC/POS → dicetak via Bluetooth thermal printer.
  *  2) Dokumen PDF → disimpan ke storage aplikasi (tanpa izin runtime).
- *  3) Bitmap → untuk dibagikan/dipratinjau.
+ *  3) Bitmap → untuk dipratinjau.
+ *  4) BATCH: Intent Bagikan (share) → gambar struk dikirim ke aplikasi lain
+ *     (WhatsApp, dsb), dipakai dari Detail Transaksi (Laporan) untuk
+ *     skenario pembeli minta struk duplikat/dikirim digital.
  *
  * Semua operasi berat (jaringan/I-O) berjalan di [Dispatchers.IO] via coroutines.
  */
@@ -197,6 +202,39 @@ object ReceiptManager {
                 }
             }
         }
+    }
+
+    // ====================== 4) Bagikan (Share) — BARU ======================
+
+    /**
+     * Siapkan [Intent] untuk membagikan struk sebagai gambar PNG ke aplikasi
+     * lain (WhatsApp, Telegram, dsb).
+     *
+     * Memakai [FileProvider] (BUKAN `Uri.fromFile`) karena Android 7+ (API 24+)
+     * melempar `FileUriExposedException` untuk `file://` URI yang dibagikan
+     * lintas-aplikasi. Authority mengikuti konvensi standar
+     * `"${applicationId}.fileprovider"` — WAJIB didaftarkan di
+     * `AndroidManifest.xml` (lihat catatan penyerta).
+     *
+     * File disimpan di `cacheDir` (bukan `getExternalFilesDir`) karena ini
+     * murni salinan sementara untuk keperluan share — tidak perlu disimpan
+     * permanen seperti hasil `exportToPdf()`.
+     */
+    fun buildShareIntent(context: Context, result: CheckoutResult): Intent {
+        val bitmap = renderToBitmap(result)
+        val dir = File(context.cacheDir, "shared_receipts").apply { mkdirs() }
+        val file = File(dir, "${result.transaction.id}_${System.currentTimeMillis()}.png")
+        FileOutputStream(file).use { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }
+
+        val authority = "${context.packageName}.fileprovider"
+        val uri = FileProvider.getUriForFile(context, authority, file)
+
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        return Intent.createChooser(sendIntent, "Bagikan Struk")
     }
 
     // ====================== Bluetooth ======================

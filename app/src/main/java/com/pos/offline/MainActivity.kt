@@ -70,6 +70,7 @@ import com.pos.offline.ui.settings.SettingsViewModel
 import com.pos.offline.ui.settings.StoreProfileViewModel
 import com.pos.offline.ui.theme.PosTheme
 import kotlinx.coroutines.launch
+import java.io.File
 
 private enum class Dest(val label: String) {
     POS("Kasir"), INVENTORY("Inventaris"), REPORT("Laporan"), SETTINGS("Pengaturan")
@@ -124,7 +125,12 @@ if (isLandscape) {
                 .fillMaxHeight()
                 .imePadding()
         ) {
-            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel, printerViewModel, storeProfileViewModel, context, scope, isLandscape = true)
+            ScreenContent(
+                dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel,
+                printerViewModel, storeProfileViewModel, context, scope,
+                onNavigateToSettings = { dest = Dest.SETTINGS },
+                isLandscape = true
+            )
         }
         SideNavRail(selected = dest, onSelect = { dest = it })
     }
@@ -140,7 +146,12 @@ if (isLandscape) {
                 .fillMaxWidth()
                 .imePadding()
         ) {
-            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel, printerViewModel, storeProfileViewModel, context, scope, isLandscape = false)
+            ScreenContent(
+                dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel,
+                printerViewModel, storeProfileViewModel, context, scope,
+                onNavigateToSettings = { dest = Dest.SETTINGS },
+                isLandscape = false
+            )
         }
 
         AnimatedVisibility(
@@ -164,22 +175,16 @@ private fun ScreenContent(
     storeProfileViewModel: StoreProfileViewModel,
     context: android.content.Context,
     scope: kotlinx.coroutines.CoroutineScope,
+    onNavigateToSettings: () -> Unit,
     isLandscape: Boolean
 ) {
     when (dest) {
         Dest.POS -> PosScreen(
             viewModel = posViewModel,
             forceWideLayout = isLandscape,
-            onPrintBluetooth = { result ->
-                scope.launch {
-                    val ok = ReceiptManager.printToFirstBonded(context, result)
-                    Toast.makeText(
-                        context,
-                        if (ok) "Mengirim ke printer…"
-                        else "Gagal: pasang & izinkan printer Bluetooth",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+            onNavigateToSettings = onNavigateToSettings,
+            onSharePdfFile = { file ->
+                context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
             },
             onExportPdf = { result ->
                 val file = ReceiptManager.exportToPdf(context, result)
@@ -189,16 +194,9 @@ private fun ScreenContent(
         Dest.INVENTORY -> InventoryScreen(viewModel = inventoryViewModel)
         Dest.REPORT -> ReportScreen(
             viewModel = reportViewModel,
-            onPrintBluetooth = { result ->
-                scope.launch {
-                    val ok = ReceiptManager.printToFirstBonded(context, result)
-                    Toast.makeText(
-                        context,
-                        if (ok) "Mengirim ke printer…"
-                        else "Gagal: pasang & izinkan printer Bluetooth",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+            onNavigateToSettings = onNavigateToSettings,
+            onSharePdfFile = { file ->
+                context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
             },
             onExportPdf = { result ->
                 val file = ReceiptManager.exportToPdf(context, result)

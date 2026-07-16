@@ -3,11 +3,13 @@ package com.pos.offline.ui.report
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pos.offline.data.local.entity.PaymentMethod
+import com.pos.offline.data.local.entity.PrinterEntity
 import com.pos.offline.data.local.entity.ReturnEntity
 import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.isVoid
 import com.pos.offline.data.repository.CheckoutResult
+import com.pos.offline.data.repository.PrinterRepository
 import com.pos.offline.data.repository.ReturnDetail
 import com.pos.offline.data.repository.ReturnItemInput
 import com.pos.offline.data.repository.ReturnOutcome
@@ -16,6 +18,8 @@ import com.pos.offline.data.repository.ShiftRepository
 import com.pos.offline.data.repository.ShiftSummary
 import com.pos.offline.data.repository.TransactionRepository
 import com.pos.offline.data.repository.VoidOutcome
+import com.pos.offline.ui.receipt.PrintUiState
+import com.pos.offline.util.PrintCoordinator
 import com.pos.offline.util.toRupiah
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -35,24 +39,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
-
-/**
- * Ringkasan laporan untuk satu hari tertentu. Semua angka uang bertipe [Long]
- * (presisi penuh, bebas floating-point).
- *
- * BATCH D — pemisahan penting:
- *  - [transactions]: SEMUA baris (termasuk VOID) — sumber untuk daftar
- *    riwayat di UI (badge "Dibatalkan" ditampilkan di sana untuk yang VOID).
- *  - [totalRevenue]/[transactionCount]/dst: HANYA dari transaksi COMPLETED —
- *    sumber untuk kartu statistik & grafik tren (transaksi dibatalkan tidak
- *    boleh mendistorsi angka pendapatan/laba).
- *  - [voidedCount]: jumlah transaksi VOID pada hari ini (info tambahan).
- *
- * BATCH G (Fitur 2) — [cashRevenue]/[qrisRevenue]: breakdown pendapatan per
- * metode bayar, HANYA dari transaksi COMPLETED (konsisten dgn [totalRevenue]).
- * Diturunkan di memori dari [transactions] yang sudah ada — TIDAK butuh
- * query DB baru.
- */
 data class DailyReport(
     val date: LocalDate,
     val transactions: List<TransactionEntity>, // SEMUA baris, termasuk VOID
@@ -82,50 +68,9 @@ data class DailyReport(
         )
     }
 }
-
-/**
- * Pesan hasil aksi (mis. Void, Retur) untuk ditampilkan ke pengguna.
- *
- * BATCH D (fix): dulunya [String] polos dikirim lewat SharedFlow lalu
- * SELALU ditampilkan via Snackbar Scaffold — tapi ternyata Snackbar itu
- * tertutup [AlertDialog] yang sedang terbuka (AlertDialog = window Android
- * TERPISAH, render di atas segalanya, termasuk Snackbar di window utama).
- * Sekarang [isError] disertakan supaya UI (baik banner inline di dalam
- * dialog, maupun Snackbar biasa) bisa memberi warna yang sesuai.
- *
- * BATCH E3: dipakai ulang untuk pesan SUKSES Retur (lewat [messages], sama
- * seperti Void) — TAPI pesan ERROR Retur (validasi gagal saat dialog Retur
- * masih terbuka) sengaja PISAH lewat [returnMessage], bukan [messages],
- * supaya tidak "tertelan" oleh dialog Retur yang menutupi TransactionDetailDialog
- * (masalah window-di-atas-window yang sama seperti kasus Void di atas).
- */
 data class ReportMessage(val text: String, val isError: Boolean = false)
-
-/**
- * BATCH G (Fitur 2): tab konten bagian BAWAH layar Laporan. Bagian ATAS
- * (navigator tanggal, kartu ringkasan pendapatan, kurva tren) SELALU tampil
- * apa pun tab yang aktif — hanya konten di bawahnya yang berganti.
- */
 enum class ReportTab { TRANSACTIONS, SHIFTS }
-
-/**
- * BATCH G: detail shift historis yang sedang dibuka pengguna — gabungan
- * [shift] (entity tersimpan, untuk `endingCashActual`/`note`/timestamp ASLI
- * saat shift itu ditutup dulu) + [summary] (hasil hitung ulang on-demand
- * via [ShiftRepository.getShiftSummary], untuk breakdown Tunai/QRIS/Laba
- * Kotor). Rekomputasi ini AMAN karena transaksi pada shift yang SUDAH
- * DITUTUP tidak bisa lagi di-Void (aturan Batch D) — angkanya dijamin selalu
- * konsisten dengan kondisi saat shift ditutup dulu.
- */
 data class ClosedShiftDetail(val shift: ShiftEntity, val summary: ShiftSummary)
-
-/**
- * BATCH E4: agregasi retur untuk rentang tanggal terpilih — [returns] SEMUA
- * baris retur yang `returnedAt`-nya jatuh pada tanggal itu (sumber daftar
- * "Retur Hari Ini"), [cashRefundTotal]/[qrisRefundTotal] diturunkan di
- * memori dari [returns] — TIDAK butuh query DB baru, sama seperti pola
- * cashRevenue/qrisRevenue di [DailyReport].
- */
 data class ReturnSummary(
     val returns: List<ReturnEntity>,
     val cashRefundTotal: Long,
@@ -136,87 +81,39 @@ data class ReturnSummary(
     }
 }
 
-/**
- * ViewModel Laporan Harian.
- *
- * Prinsip performa:
- *  - Satu-satunya query DB transaksi adalah `dailyTransactions(start, end)`;
- *    sisanya (pendapatan, jumlah, rata-rata, distribusi per jam, breakdown
- *    metode bayar) diturunkan di-memori lewat [map] → hemat round-trip DB.
- *  - `flatMapLatest` membatalkan query tanggal lama saat pengguna pindah hari.
- *  - `WhileSubscribed(5000)` → Flow berhenti saat layar tak terlihat (hemat baterai).
- *
- * BATCH C: [selectedTransaction] menampung detail transaksi (header + item)
- * yang sedang dibuka pengguna dari daftar riwayat — dimuat sekali-jalan via
- * [TransactionRepository.loadReceipt] (BUKAN reaktif/Flow) karena ini murni
- * tampilan read-only snapshot, tidak perlu ikut berubah live.
- *
- * BATCH D: tambah [voidSelectedTransaction] + [messages] (SharedFlow untuk
- * feedback aksi) — hasil Void (sukses/gagal validasi) dilaporkan sebagai
- * pesan satu-kali. UI ([ReportScreen]) yang memutuskan cara menampilkannya
- * (banner inline dalam dialog vs Snackbar) tergantung apakah dialog detail
- * sedang terbuka — lihat catatan di [ReportMessage].
- *
- * BATCH G (Fitur 2): tambah [ShiftRepository] sebagai dependency baru untuk
- * "Riwayat Tutup Shift" — [closedShifts] mengikuti filter tanggal yang sama
- * dengan [report] (BUKAN rentang independen), sesuai keputusan final.
- *
- * BATCH E3: tambah [ReturnRepository] sebagai dependency baru untuk Retur
- * Produk. [showReturnDialog]/[returnMessage]/[returnSubmitting] mengatur
- * lingkaran hidup dialog Retur — SENGAJA di-owned ViewModel (bukan local
- * Composable state seperti [pendingVoidConfirm] gaya lama) karena keputusan
- * "tutup dialog otomatis HANYA jika sukses, tetap terbuka jika validasi
- * gagal" butuh tahu hasil operasi asinkron dulu sebelum UI diputuskan.
- * Retur dikaitkan ke shift AKTIF SAAT DIKONFIRMASI (bukan shift transaksi
- * asal) — diambil via [ShiftRepository.getOpenShift] tepat sebelum memanggil
- * [ReturnRepository.processReturn], konsisten dengan keputusan arsitektur.
- *
- * BATCH E4: tambah [returnSummary] (reaktif, mengikuti filter tanggal yang
- * sama dengan [report]/[closedShifts]) untuk section "Retur Hari Ini" di tab
- * Shift, dan [selectedReturnDetail] untuk dialog detail read-only satu retur
- * (dimuat sekali-jalan via [ReturnRepository.getDetail], sama seperti pola
- * [selectedTransaction]).
- */
+/** BATCH H7: kandidat printer menunggu dipilih user untuk reprint (>1 printer tersedia). */
+data class PendingPrintTarget(
+    val checkoutResult: CheckoutResult,
+    val availablePrinters: List<PrinterEntity>
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReportViewModel(
     private val transactionRepository: TransactionRepository,
     private val shiftRepository: ShiftRepository,
-    private val returnRepository: ReturnRepository
+    private val returnRepository: ReturnRepository,
+    private val printCoordinator: PrintCoordinator,
+    private val printerRepository: PrinterRepository
 ) : ViewModel() {
 
     private val zone: ZoneId = ZoneId.systemDefault()
-
-    // Tanggal terpilih (default hari ini).
     private val _selectedDate = MutableStateFlow(LocalDate.now(zone))
     val selectedDate: StateFlow<LocalDate> = _selectedDate.asStateFlow()
-
-    /** Apakah tanggal terpilih = hari ini (untuk menonaktifkan tombol "besok"). */
     val isToday: StateFlow<Boolean> = _selectedDate
         .map { it.isEqual(LocalDate.now(zone)) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
-
-    /** Laporan reaktif untuk tanggal terpilih. */
     val report: StateFlow<DailyReport> = _selectedDate
         .flatMapLatest { date ->
             val (start, end) = dayBounds(date)
             transactionRepository.dailyTransactions(start, end).map { aggregate(date, it) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DailyReport.empty(LocalDate.now()))
-
-    // ---------- BATCH G (Fitur 2): tab & riwayat tutup shift ----------
-
     private val _selectedTab = MutableStateFlow(ReportTab.TRANSACTIONS)
     val selectedTab: StateFlow<ReportTab> = _selectedTab.asStateFlow()
 
     fun selectTab(tab: ReportTab) {
         _selectedTab.value = tab
     }
-
-    /**
-     * Shift yang `endedAt`-nya jatuh pada tanggal terpilih — ikut filter
-     * tanggal `ReportScreen` yang sama dengan [report] (bukan rentang bebas
-     * terpisah, sesuai keputusan final).
-     */
     val closedShifts: StateFlow<List<ShiftEntity>> = _selectedDate
         .flatMapLatest { date ->
             val (start, end) = dayBounds(date)
@@ -225,10 +122,7 @@ class ReportViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _selectedShiftDetail = MutableStateFlow<ClosedShiftDetail?>(null)
-    /** Detail shift historis yang sedang dilihat (null = dialog tertutup). */
     val selectedShiftDetail: StateFlow<ClosedShiftDetail?> = _selectedShiftDetail.asStateFlow()
-
-    /** Buka dialog read-only untuk satu shift historis — hitung ulang ringkasan on-demand. */
     fun openShiftDetail(shift: ShiftEntity) {
         viewModelScope.launch {
             _selectedShiftDetail.value = ClosedShiftDetail(
@@ -241,18 +135,6 @@ class ReportViewModel(
     fun closeShiftDetail() {
         _selectedShiftDetail.value = null
     }
-
-    // ---------- BATCH E4: "Retur Hari Ini" ----------
-
-    /**
-     * Retur yang `returnedAt`-nya jatuh pada tanggal terpilih — ikut filter
-     * tanggal yang sama dengan [report]/[closedShifts] (BUKAN rentang bebas
-     * terpisah, konsisten dengan pola Batch G). REAKTIF (bukan one-shot):
-     * kalau ada retur baru diproses (mis. dari dialog Retur di tab
-     * Transaksi) SAAT layar tab Shift sedang terbuka, daftar & kartu
-     * ringkasan di sini otomatis ter-refresh via Room invalidation tracking
-     * — tidak perlu pengguna keluar-masuk layar.
-     */
     val returnSummary: StateFlow<ReturnSummary> = _selectedDate
         .flatMapLatest { date ->
             val (start, end) = dayBounds(date)
@@ -261,10 +143,7 @@ class ReportViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ReturnSummary.empty())
 
     private val _selectedReturnDetail = MutableStateFlow<ReturnDetail?>(null)
-    /** Detail satu retur yang sedang dilihat (null = dialog tertutup). */
     val selectedReturnDetail: StateFlow<ReturnDetail?> = _selectedReturnDetail.asStateFlow()
-
-    /** Buka dialog detail read-only untuk satu retur — dimuat sekali-jalan (snapshot), sama pola [openTransactionDetail]. */
     fun openReturnDetail(returnId: Long) {
         viewModelScope.launch {
             _selectedReturnDetail.value = returnRepository.getDetail(returnId)
@@ -274,24 +153,18 @@ class ReportViewModel(
     fun closeReturnDetail() {
         _selectedReturnDetail.value = null
     }
-
-    // ---------- BATCH C: Detail Transaksi (read-only) ----------
-
     private val _selectedTransaction = MutableStateFlow<CheckoutResult?>(null)
-    /** Transaksi yang sedang dilihat detailnya (null = dialog tertutup). */
     val selectedTransaction: StateFlow<CheckoutResult?> = _selectedTransaction.asStateFlow()
-
-    // ---------- BATCH D: pesan satu-kali untuk hasil aksi Void / sukses Retur ----------
-
     private val _messages = MutableSharedFlow<ReportMessage>(extraBufferCapacity = 1)
     val messages: SharedFlow<ReportMessage> = _messages.asSharedFlow()
 
-    /**
-     * Buka dialog detail untuk satu transaksi. Memuat ULANG dari DB via
-     * [TransactionRepository.loadReceipt] (bukan mengambil dari [report]
-     * yang sudah ada di memori) — supaya header & item selalu konsisten
-     * satu paket, dan siap dipakai ulang setelah Void/Retur (status ter-refresh).
-     */
+    // BATCH H7: state cetak ulang struk thermal.
+    private val _printUiState = MutableStateFlow<PrintUiState>(PrintUiState.Idle)
+    val printUiState: StateFlow<PrintUiState> = _printUiState.asStateFlow()
+
+    private val _pendingPrintTarget = MutableStateFlow<PendingPrintTarget?>(null)
+    val pendingPrintTarget: StateFlow<PendingPrintTarget?> = _pendingPrintTarget.asStateFlow()
+
     fun openTransactionDetail(invoiceId: String) {
         viewModelScope.launch {
             _selectedTransaction.value = transactionRepository.loadReceipt(invoiceId)
@@ -300,22 +173,11 @@ class ReportViewModel(
 
     fun closeTransactionDetail() {
         _selectedTransaction.value = null
-        // BATCH E3: pastikan dialog Retur ikut tertutup & bersih kalau
-        // pengguna menutup detail transaksi induknya.
         _showReturnDialog.value = false
         _returnMessage.value = null
+        _printUiState.value = PrintUiState.Idle
+        _pendingPrintTarget.value = null
     }
-
-    /**
-     * BATCH D: batalkan transaksi yang sedang dibuka di dialog detail.
-     * Setelah selesai (berhasil/gagal), [selectedTransaction] di-refresh
-     * (supaya dialog langsung menampilkan status VOID terbaru jika sukses)
-     * dan hasilnya dilaporkan lewat [messages] untuk ditampilkan sebagai
-     * banner (dialog masih terbuka) atau Snackbar (kalau tertutup).
-     *
-     * [report] TIDAK perlu di-refresh manual — Room Flow otomatis emit ulang
-     * begitu tabel `transactions` berubah (invalidation tracking bawaan).
-     */
     fun voidSelectedTransaction() {
         val invoiceId = _selectedTransaction.value?.transaction?.id ?: return
         viewModelScope.launch {
@@ -342,22 +204,14 @@ class ReportViewModel(
             }
         }
     }
-
-    // ---------- BATCH E3: Retur Item ----------
-
     private val _showReturnDialog = MutableStateFlow(false)
-    /** true = dialog "Retur Item" sedang terbuka (mengambil alih tampilan dari TransactionDetailDialog). */
     val showReturnDialog: StateFlow<Boolean> = _showReturnDialog.asStateFlow()
 
     private val _returnMessage = MutableStateFlow<ReportMessage?>(null)
-    /** Pesan error validasi Retur — tampil sebagai banner DI DALAM dialog Retur (lihat catatan [ReportMessage]). */
     val returnMessage: StateFlow<ReportMessage?> = _returnMessage.asStateFlow()
 
     private val _returnSubmitting = MutableStateFlow(false)
-    /** true selagi [submitReturn] sedang berjalan — dipakai UI untuk spinner & menonaktifkan tombol. */
     val returnSubmitting: StateFlow<Boolean> = _returnSubmitting.asStateFlow()
-
-    /** Buka dialog Retur untuk transaksi yang sedang dibuka di [selectedTransaction]. */
     fun openReturnDialog() {
         _returnMessage.value = null
         _showReturnDialog.value = true
@@ -367,22 +221,6 @@ class ReportViewModel(
         _showReturnDialog.value = false
         _returnMessage.value = null
     }
-
-    /**
-     * Proses retur untuk transaksi yang sedang dibuka di [selectedTransaction].
-     * Shift aktif diambil SAAT INI (bukan shift transaksi asal) — sesuai
-     * keputusan arsitektur retur boleh lintas shift/hari. Jika tidak ada
-     * shift aktif, `shiftId`/`cashierId` dikirim null (retur tetap diproses,
-     * konsisten dengan filosofi "Shift OPSIONAL").
-     *
-     * Hasil:
-     *  - [ReturnOutcome.Success]: [selectedTransaction] di-refresh (badge
-     *    "Sudah Diretur" langsung tampil), dialog Retur ditutup, pesan
-     *    sukses dikirim lewat [messages] (akan muncul sebagai banner di
-     *    TransactionDetailDialog yang kembali tampil).
-     *  - Selain itu: dialog Retur TETAP TERBUKA, pesan error tampil lewat
-     *    [returnMessage] supaya pengguna bisa memperbaiki input.
-     */
     fun submitReturn(
         items: List<ReturnItemInput>,
         refundAmount: Long,
@@ -446,32 +284,51 @@ class ReportViewModel(
         }
     }
 
-    // ---------- Kalkulasi murni (terpisah → mudah diuji) ----------
+    // ---- BATCH H7: reprint manual (TANPA cascade) ----
 
     /**
-     * Batas hari dalam epoch millis. `end` = awal hari berikutnya (eksklusif),
-     * cocok dengan query `createdAt >= start AND createdAt < end` /
-     * `endedAt >= start AND endedAt < end` / `returnedAt >= start AND < end`.
+     * Reprint struk (H7). Logika bypass-picker (YAGNI, sesuai kesepakatan):
+     * 0 printer -> NoPrinterConfigured langsung; 1 printer -> langsung cetak tanpa dialog;
+     * >1 printer -> tampilkan [PrinterPickerDialog] agar user pilih secara eksplisit.
      */
+    fun printReceipt(result: CheckoutResult) {
+        if (_printUiState.value is PrintUiState.Printing) return
+        viewModelScope.launch {
+            val printers = printerRepository.getAllOrderedByPriority()
+            when {
+                printers.isEmpty() -> {
+                    _printUiState.value = PrintUiState.Result(
+                        com.pos.offline.util.ReceiptPrintOutcome.NoPrinterConfigured,
+                        result
+                    )
+                }
+                printers.size == 1 -> executePrint(printers.first(), result)
+                else -> _pendingPrintTarget.value = PendingPrintTarget(result, printers)
+            }
+        }
+    }
+
+    fun onPrinterPicked(printer: PrinterEntity) {
+        val target = _pendingPrintTarget.value ?: return
+        _pendingPrintTarget.value = null
+        viewModelScope.launch { executePrint(printer, target.checkoutResult) }
+    }
+
+    fun cancelPrinterPicker() {
+        _pendingPrintTarget.value = null
+    }
+
+    private suspend fun executePrint(printer: PrinterEntity, result: CheckoutResult) {
+        _printUiState.value = PrintUiState.Printing(result)
+        val outcome = printCoordinator.printReceiptToSpecific(printer, result)
+        _printUiState.value = PrintUiState.Result(outcome, result)
+    }
+
     private fun dayBounds(date: LocalDate): Pair<Long, Long> {
         val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
         val end = date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         return start to end
     }
-
-    /**
-     * Agregasi harian + distribusi pendapatan per jam + breakdown metode bayar.
-     *
-     * BATCH D: [txs] berisi SEMUA transaksi (termasuk VOID) untuk daftar
-     * riwayat UI, tapi seluruh statistik (pendapatan, diskon, pajak, rata-rata,
-     * distribusi per jam) HANYA dihitung dari transaksi COMPLETED — transaksi
-     * VOID dikecualikan total dari angka-angka ini.
-     *
-     * BATCH G: [cashRevenue]/[qrisRevenue] juga HANYA dari transaksi
-     * COMPLETED, filter berdasarkan `paymentMethod` (disimpan sebagai String
-     * di [TransactionEntity], dibandingkan dgn `PaymentMethod.CASH.name`/
-     * `PaymentMethod.QRIS.name`).
-     */
     private fun aggregate(date: LocalDate, txs: List<TransactionEntity>): DailyReport {
         if (txs.isEmpty()) return DailyReport.empty(date)
 
@@ -489,8 +346,6 @@ class ReportViewModel(
         val qrisRevenue = completed
             .filter { it.paymentMethod == PaymentMethod.QRIS.name }
             .sumOf { it.total }
-
-        // Distribusi per jam: bucket-kan setiap transaksi COMPLETED ke jam kejadian.
         val hourly = MutableList(24) { 0L }
         for (tx in completed) {
             val hour = Instant.ofEpochMilli(tx.createdAt).atZone(zone).hour
@@ -513,15 +368,7 @@ class ReportViewModel(
             qrisRevenue = qrisRevenue
         )
     }
-
-    /**
-     * BATCH E4: agregasi total refund Tunai/QRIS dari daftar retur pada
-     * rentang tanggal terpilih. Sengaja filter berdasarkan `refundMethod`
-     * (String di [ReturnEntity]) dibandingkan dengan `PaymentMethod.CASH.name`/
-     * `PaymentMethod.QRIS.name` — pola identik dengan breakdown pendapatan
-     * di [aggregate], untuk konsistensi gaya kode.
-     */
-    private fun aggregateReturns(returns: List<ReturnEntity>): ReturnSummary {
+   private fun aggregateReturns(returns: List<ReturnEntity>): ReturnSummary {
         val cashRefundTotal = returns
             .filter { it.refundMethod == PaymentMethod.CASH.name }
             .sumOf { it.refundAmount }
@@ -530,12 +377,7 @@ class ReportViewModel(
             .sumOf { it.refundAmount }
         return ReturnSummary(returns, cashRefundTotal, qrisRefundTotal)
     }
-
-    // ---------- Aksi UI ----------
-
     fun previousDay() { _selectedDate.value = _selectedDate.value.minusDays(1) }
-
-    /** Maju satu hari, tapi tidak melewati hari ini. */
     fun nextDay() {
         val today = LocalDate.now(zone)
         val current = _selectedDate.value
@@ -545,18 +387,11 @@ class ReportViewModel(
     fun goToday() { _selectedDate.value = LocalDate.now(zone) }
 
     companion object {
-        /** Format tanggal panjang Indonesia, mis. "Senin, 5 Mei 2025". */
         val dateFmt: DateTimeFormatter =
             DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(Locale.forLanguageTag("id-ID"))
 
-        /** Format jam singkat, mis. "14.05". */
         val timeFmt: DateTimeFormatter =
             DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
-
-        /**
-         * BATCH C: format tanggal+jam LENGKAP (dengan detik) untuk Detail
-         * Transaksi & Detail Shift — mis. "Senin, 5 Mei 2025 · 14:05:32".
-         */
         val dateTimeFmt: DateTimeFormatter =
             DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy · HH:mm:ss", Locale.forLanguageTag("id-ID"))
                 .withZone(ZoneId.systemDefault())

@@ -3,10 +3,12 @@ package com.pos.offline.ui.report
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pos.offline.data.local.entity.PaymentMethod
+import com.pos.offline.data.local.entity.ReturnEntity
 import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.isVoid
 import com.pos.offline.data.repository.CheckoutResult
+import com.pos.offline.data.repository.ReturnDetail
 import com.pos.offline.data.repository.ReturnItemInput
 import com.pos.offline.data.repository.ReturnOutcome
 import com.pos.offline.data.repository.ReturnRepository
@@ -118,6 +120,23 @@ enum class ReportTab { TRANSACTIONS, SHIFTS }
 data class ClosedShiftDetail(val shift: ShiftEntity, val summary: ShiftSummary)
 
 /**
+ * BATCH E4: agregasi retur untuk rentang tanggal terpilih — [returns] SEMUA
+ * baris retur yang `returnedAt`-nya jatuh pada tanggal itu (sumber daftar
+ * "Retur Hari Ini"), [cashRefundTotal]/[qrisRefundTotal] diturunkan di
+ * memori dari [returns] — TIDAK butuh query DB baru, sama seperti pola
+ * cashRevenue/qrisRevenue di [DailyReport].
+ */
+data class ReturnSummary(
+    val returns: List<ReturnEntity>,
+    val cashRefundTotal: Long,
+    val qrisRefundTotal: Long
+) {
+    companion object {
+        fun empty() = ReturnSummary(emptyList(), 0L, 0L)
+    }
+}
+
+/**
  * ViewModel Laporan Harian.
  *
  * Prinsip performa:
@@ -151,6 +170,12 @@ data class ClosedShiftDetail(val shift: ShiftEntity, val summary: ShiftSummary)
  * Retur dikaitkan ke shift AKTIF SAAT DIKONFIRMASI (bukan shift transaksi
  * asal) — diambil via [ShiftRepository.getOpenShift] tepat sebelum memanggil
  * [ReturnRepository.processReturn], konsisten dengan keputusan arsitektur.
+ *
+ * BATCH E4: tambah [returnSummary] (reaktif, mengikuti filter tanggal yang
+ * sama dengan [report]/[closedShifts]) untuk section "Retur Hari Ini" di tab
+ * Shift, dan [selectedReturnDetail] untuk dialog detail read-only satu retur
+ * (dimuat sekali-jalan via [ReturnRepository.getDetail], sama seperti pola
+ * [selectedTransaction]).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReportViewModel(
@@ -215,6 +240,39 @@ class ReportViewModel(
 
     fun closeShiftDetail() {
         _selectedShiftDetail.value = null
+    }
+
+    // ---------- BATCH E4: "Retur Hari Ini" ----------
+
+    /**
+     * Retur yang `returnedAt`-nya jatuh pada tanggal terpilih — ikut filter
+     * tanggal yang sama dengan [report]/[closedShifts] (BUKAN rentang bebas
+     * terpisah, konsisten dengan pola Batch G). REAKTIF (bukan one-shot):
+     * kalau ada retur baru diproses (mis. dari dialog Retur di tab
+     * Transaksi) SAAT layar tab Shift sedang terbuka, daftar & kartu
+     * ringkasan di sini otomatis ter-refresh via Room invalidation tracking
+     * — tidak perlu pengguna keluar-masuk layar.
+     */
+    val returnSummary: StateFlow<ReturnSummary> = _selectedDate
+        .flatMapLatest { date ->
+            val (start, end) = dayBounds(date)
+            returnRepository.returnsBetween(start, end).map { aggregateReturns(it) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ReturnSummary.empty())
+
+    private val _selectedReturnDetail = MutableStateFlow<ReturnDetail?>(null)
+    /** Detail satu retur yang sedang dilihat (null = dialog tertutup). */
+    val selectedReturnDetail: StateFlow<ReturnDetail?> = _selectedReturnDetail.asStateFlow()
+
+    /** Buka dialog detail read-only untuk satu retur — dimuat sekali-jalan (snapshot), sama pola [openTransactionDetail]. */
+    fun openReturnDetail(returnId: Long) {
+        viewModelScope.launch {
+            _selectedReturnDetail.value = returnRepository.getDetail(returnId)
+        }
+    }
+
+    fun closeReturnDetail() {
+        _selectedReturnDetail.value = null
     }
 
     // ---------- BATCH C: Detail Transaksi (read-only) ----------
@@ -393,7 +451,7 @@ class ReportViewModel(
     /**
      * Batas hari dalam epoch millis. `end` = awal hari berikutnya (eksklusif),
      * cocok dengan query `createdAt >= start AND createdAt < end` /
-     * `endedAt >= start AND endedAt < end`.
+     * `endedAt >= start AND endedAt < end` / `returnedAt >= start AND < end`.
      */
     private fun dayBounds(date: LocalDate): Pair<Long, Long> {
         val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
@@ -454,6 +512,23 @@ class ReportViewModel(
             cashRevenue = cashRevenue,
             qrisRevenue = qrisRevenue
         )
+    }
+
+    /**
+     * BATCH E4: agregasi total refund Tunai/QRIS dari daftar retur pada
+     * rentang tanggal terpilih. Sengaja filter berdasarkan `refundMethod`
+     * (String di [ReturnEntity]) dibandingkan dengan `PaymentMethod.CASH.name`/
+     * `PaymentMethod.QRIS.name` — pola identik dengan breakdown pendapatan
+     * di [aggregate], untuk konsistensi gaya kode.
+     */
+    private fun aggregateReturns(returns: List<ReturnEntity>): ReturnSummary {
+        val cashRefundTotal = returns
+            .filter { it.refundMethod == PaymentMethod.CASH.name }
+            .sumOf { it.refundAmount }
+        val qrisRefundTotal = returns
+            .filter { it.refundMethod == PaymentMethod.QRIS.name }
+            .sumOf { it.refundAmount }
+        return ReturnSummary(returns, cashRefundTotal, qrisRefundTotal)
     }
 
     // ---------- Aksi UI ----------

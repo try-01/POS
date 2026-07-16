@@ -15,7 +15,10 @@ import com.pos.offline.data.repository.InsufficientStockException
 import com.pos.offline.data.repository.ProductRepository
 import com.pos.offline.data.repository.ShiftRepository
 import com.pos.offline.data.repository.ShiftSummary
+import com.pos.offline.data.repository.StoreProfileRepository
 import com.pos.offline.data.repository.TransactionRepository
+import com.pos.offline.ui.receipt.PrintUiState
+import com.pos.offline.util.PrintCoordinator
 import com.pos.offline.util.roundToRupiah
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -31,14 +34,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-
-/**
- * Ringkasan kalkulasi keranjang (nilai murni, mudah di-unit-test).
- *
- * [discountCapped] = true kalau nilai diskon mentah (terutama mode NOMINAL)
- * melebihi [subtotal] sehingga dipangkas — dipakai UI untuk menampilkan
- * peringatan inline non-blocking di bawah field diskon.
- */
 data class Totals(
     val subtotal: Long = 0L,
     val discount: Long = 0L,
@@ -46,57 +41,27 @@ data class Totals(
     val total: Long = 0L,
     val discountCapped: Boolean = false
 )
-
-/** Event UI sekali-jalan (bukan state) — cocok untuk Snackbar/Toast, tidak "nempel" saat rotasi. */
 sealed interface PosUiEvent {
     data class ShowMessage(val message: String) : PosUiEvent
 }
-
-/** Status proses checkout (unidirectional: UI hanya membaca, VM yang menulis). */
 sealed interface CheckoutState {
     data object Idle : CheckoutState
     data object Processing : CheckoutState
     data class Success(val result: CheckoutResult) : CheckoutState
     data class Error(val message: String) : CheckoutState
 }
-
-/**
- * ViewModel layar Kasir.
- *
- * BATCH 3D menambah state [paymentMethod] — dipilih via toggle di
- * TotalsSummary SEBELUM tombol Bayar ditekan, dibaca oleh [checkout] saat
- * dipanggil (bukan dikirim sebagai parameter dari Composable, konsisten
- * dengan pola atribusi shift/kasir di Batch 3C). QRIS di sini murni
- * PENCATATAN — tidak ada integrasi payment gateway sungguhan.
- *
- * BATCH DISKON % : [discount] Long lama diganti [discountType]+[discountValue]
- * — nilai MENTAH yang diketik kasir (bukan hasil konversi). Konversi ke
- * nominal final dilakukan di [computeTotals] (untuk tampilan real-time) dan
- * di [TransactionRepository.checkout] (untuk persist) — DUA tempat ini WAJIB
- * pakai rumus yang identik, lihat komentar masing-masing.
- *
- * BATCH F (Fitur 1 — Daftar Shift Belum Ditutup): [openEndShiftDialog] kini
- * menerima [ShiftEntity] SPESIFIK (bukan lagi selalu `openShift.value`),
- * disimpan di [_endShiftTarget] — supaya bisa menutup shift MANAPUN yang
- * masih terbuka (Opsi A: siapa pun boleh menutup shift siapa pun, sudah
- * disepakati), dipicu dari layar baru "Kelola Shift" ([openShifts]), bukan
- * hanya shift "yang ditunjuk aktif" via tap [ShiftIndicatorBar] seperti
- * sebelumnya (perilaku tap lama TETAP SAMA, hanya jalur barunya ditambah).
- */
 @OptIn(kotlinx.coroutines.FlowPreview::class, ExperimentalCoroutinesApi::class)
 class PosViewModel(
     private val productRepository: ProductRepository,
     private val cartRepository: CartRepository,
     private val transactionRepository: TransactionRepository,
     private val cashierRepository: CashierRepository,
-    private val shiftRepository: ShiftRepository
+    private val shiftRepository: ShiftRepository,
+    private val printCoordinator: PrintCoordinator,
+    private val storeProfileRepository: StoreProfileRepository
 ) : ViewModel() {
-
-    // ---------- Input state (sesi, tidak di-persist) ----------
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
-
-    // ---------- Diskon: tipe (Nominal/Persen) + nilai mentah ----------
     private val _discountType = MutableStateFlow(DiscountType.NOMINAL)
     val discountType: StateFlow<DiscountType> = _discountType.asStateFlow()
 
@@ -108,51 +73,34 @@ class PosViewModel(
 
     private val _paid = MutableStateFlow(0L)
     val paid: StateFlow<Long> = _paid.asStateFlow()
-
-    // ---------- BATCH 3D: metode bayar ----------
     private val _paymentMethod = MutableStateFlow(PaymentMethod.CASH)
     val paymentMethod: StateFlow<PaymentMethod> = _paymentMethod.asStateFlow()
-
-    // ---------- Daftar produk (reaktif, debounce) ----------
     val products: StateFlow<List<ProductEntity>> = _searchQuery
         .debounce(180)
         .distinctUntilChanged()
         .flatMapLatest { productRepository.search(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    // ---------- Keranjang (reaktif dari DB) ----------
     val cart: StateFlow<List<CartItemEntity>> = cartRepository.cartItems
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    // ---------- Total turunan ----------
     val totals: StateFlow<Totals> = combine(
         cart, _discountType, _discountValue, _taxRate
     ) { items, discType, discValue, rate ->
         computeTotals(items, discType, discValue, rate)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Totals())
-
-    // ---------- Event UI sekali-jalan ----------
     private val _uiEvents = MutableSharedFlow<PosUiEvent>(extraBufferCapacity = 4)
     val uiEvents: SharedFlow<PosUiEvent> = _uiEvents.asSharedFlow()
-
-    // ---------- Status checkout ----------
     private val _checkoutState = MutableStateFlow<CheckoutState>(CheckoutState.Idle)
     val checkoutState: StateFlow<CheckoutState> = _checkoutState.asStateFlow()
 
-    // =====================================================================
-    // Kasir & Shift (Batch 3C + Batch F)
-    // =====================================================================
+    // BATCH H7: state cetak struk thermal, terpisah dari CheckoutState (lihat PrintUiState.kt).
+    private val _printUiState = MutableStateFlow<PrintUiState>(PrintUiState.Idle)
+    val printUiState: StateFlow<PrintUiState> = _printUiState.asStateFlow()
 
     val activeCashiers: StateFlow<List<CashierEntity>> = cashierRepository.activeCashiers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val openShift: StateFlow<ShiftEntity?> = shiftRepository.openShift
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
-    /**
-     * BATCH F: SEMUA shift terbuka — dipakai layar "Kelola Shift". Beda dari
-     * [openShift] yang cuma satu ("yang ditunjuk aktif").
-     */
     val openShifts: StateFlow<List<ShiftEntity>> = shiftRepository.openShifts
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -164,12 +112,8 @@ class PosViewModel(
 
     private val _shiftSummary = MutableStateFlow<ShiftSummary?>(null)
     val shiftSummary: StateFlow<ShiftSummary?> = _shiftSummary.asStateFlow()
-
-    /** BATCH F: shift SPESIFIK yang sedang dituju oleh [showEndShiftDialog] — bisa shift mana pun, tidak harus [openShift]. */
     private val _endShiftTarget = MutableStateFlow<ShiftEntity?>(null)
     val endShiftTarget: StateFlow<ShiftEntity?> = _endShiftTarget.asStateFlow()
-
-    /** BATCH F: kontrol dialog "Kelola Shift" (daftar shift terbuka + tombol mulai baru). */
     private val _showShiftListDialog = MutableStateFlow(false)
     val showShiftListDialog: StateFlow<Boolean> = _showShiftListDialog.asStateFlow()
 
@@ -185,12 +129,6 @@ class PosViewModel(
         _showStartShiftDialog.value = false
         _uiEvents.emit(PosUiEvent.ShowMessage("Shift dimulai untuk ${cashier.name}."))
     }
-
-    /**
-     * BATCH F: kini menerima [shift] SPESIFIK — dipanggil baik dari tap
-     * [ShiftIndicatorBar] (dengan `openShift.value`, perilaku lama) maupun
-     * dari layar "Kelola Shift" (dengan shift mana pun dari [openShifts]).
-     */
     fun openEndShiftDialog(shift: ShiftEntity) = viewModelScope.launch {
         _endShiftTarget.value = shift
         _shiftSummary.value = shiftRepository.getShiftSummary(shift.id)
@@ -202,8 +140,6 @@ class PosViewModel(
         _shiftSummary.value = null
         _endShiftTarget.value = null
     }
-
-    /** BATCH F: menutup shift yang tersimpan di [_endShiftTarget], bukan lagi selalu `openShift.value`. */
     fun endShift(actualCash: Long) = viewModelScope.launch {
         val shift = _endShiftTarget.value ?: return@launch
         shiftRepository.endShift(shift.id, actualCash)
@@ -212,28 +148,13 @@ class PosViewModel(
         _endShiftTarget.value = null
         _uiEvents.emit(PosUiEvent.ShowMessage("Shift ditutup untuk ${shift.cashierName}."))
     }
-
-    // ---------- Aksi UI (keranjang) ----------
     fun search(q: String) { _searchQuery.value = q }
-
-    /**
-     * Set nilai diskon MENTAH sesuai tipe yang sedang aktif.
-     * NOMINAL: hanya dibatasi >= 0 (pemangkasan ke subtotal terjadi saat
-     * kalkulasi total, lihat [Totals.discountCapped] untuk peringatan UI).
-     * PERCENT: dibatasi 0..100 (diskon > 100% tidak masuk akal secara bisnis).
-     */
     fun setDiscountValue(raw: Double) {
         _discountValue.value = when (_discountType.value) {
             DiscountType.NOMINAL -> raw.coerceAtLeast(0.0)
             DiscountType.PERCENT -> raw.coerceIn(0.0, 100.0)
         }
     }
-
-    /**
-     * Balik tipe diskon (Nominal <-> Persen) dan RESET nilai ke 0.
-     * Reset disengaja: angka yang sama (mis. "50") punya arti yang jauh
-     * berbeda antara Rp 50 dan 50% — mencegah salah tafsir tak sengaja.
-     */
     fun toggleDiscountType() {
         _discountType.value = if (_discountType.value == DiscountType.NOMINAL) {
             DiscountType.PERCENT
@@ -245,8 +166,6 @@ class PosViewModel(
 
     fun setTaxRate(rate: Double) { _taxRate.value = rate.coerceIn(0.0, 1.0) }
     fun setPaid(value: Long) { _paid.value = value.coerceAtLeast(0L) }
-
-    /** BATCH 3D: dipanggil dari toggle Tunai/QRIS di TotalsSummary. */
     fun setPaymentMethod(method: PaymentMethod) { _paymentMethod.value = method }
 
     fun addToCart(product: ProductEntity) = viewModelScope.launch {
@@ -297,25 +216,12 @@ class PosViewModel(
     }
 
     fun clearCart() = viewModelScope.launch { cartRepository.clear() }
-
-    /**
-     * Jalankan checkout di background; update state untuk UI.
-     *
-     * BATCH 3D: [paymentMethod] kini dibaca dari state internal (hasil
-     * toggle Tunai/QRIS), bukan lagi selalu CASH. Direset ke CASH setelah
-     * sukses — sama seperti discount/paid — dengan asumsi mayoritas
-     * transaksi berikutnya kemungkinan tunai lagi.
-     *
-     * BATCH DISKON %: [discountType]/[discountValue] dikirim mentah ke
-     * repository — konversi ke nominal final dilakukan DI SANA (bukan di
-     * sini), supaya ada satu tempat tunggal yang menentukan nominal final
-     * yang benar-benar disimpan.
-     */
     fun checkout() = viewModelScope.launch {
         val currentCart = cart.value
         if (currentCart.isEmpty()) return@launch
 
         _checkoutState.value = CheckoutState.Processing
+        _printUiState.value = PrintUiState.Idle // reset sisa status cetak transaksi sebelumnya
         _checkoutState.value = try {
             val shift = openShift.value
             val currentTotal = totals.value.total
@@ -341,20 +247,43 @@ class PosViewModel(
         } catch (e: Exception) {
             CheckoutState.Error("Gagal memproses: ${e.message ?: "kesalahan tak dikenal"}")
         }
+
+        // BATCH H7: auto-print HANYA kalau toggle di Profil Toko aktif. PrintCoordinator sendiri
+        // TIDAK mengecek toggle ini (sesuai kesepakatan pemisahan tanggung jawab) — jadi
+        // pengecekan `autoPrintEnabled` memang tempatnya di sini, bukan di PrintCoordinator.
+        (_checkoutState.value as? CheckoutState.Success)?.let { success ->
+            maybeAutoPrint(success.result)
+        }
     }
 
-    fun resetCheckoutState() { _checkoutState.value = CheckoutState.Idle }
+    private suspend fun maybeAutoPrint(result: CheckoutResult) {
+        val profile = storeProfileRepository.get()
+        if (profile.autoPrintEnabled) {
+            printReceipt(result)
+        }
+    }
+
+    /**
+     * Cetak struk thermal (H7) — dipakai baik oleh auto-print (di atas) maupun tombol manual
+     * "Cetak Struk" di SuccessDialog. Selalu pakai cascade default → priority (bukan pilih
+     * printer spesifik) karena ini alur "utama" pasca-checkout, bukan reprint dari riwayat.
+     */
+    fun printReceipt(result: CheckoutResult) {
+        if (_printUiState.value is PrintUiState.Printing) return
+        viewModelScope.launch {
+            _printUiState.value = PrintUiState.Printing(result)
+            val outcome = printCoordinator.printReceiptAuto(result)
+            _printUiState.value = PrintUiState.Result(outcome, result)
+        }
+    }
+
+    fun resetCheckoutState() {
+        _checkoutState.value = CheckoutState.Idle
+        _printUiState.value = PrintUiState.Idle
+    }
 
     companion object {
-        /**
-         * Kalkulasi total real-time untuk tampilan UI.
-         *
-         * URUTAN (sesuai aturan PPN): subtotal (bruto) → diskon → DPP →
-         * pajak dari DPP → total. HARUS identik dengan rumus di
-         * [TransactionRepository.checkout] — kalau salah satu diubah,
-         * yang satu lagi wajib ikut diubah.
-         */
-        fun computeTotals(
+           fun computeTotals(
             items: List<CartItemEntity>,
             discountType: DiscountType,
             discountValue: Double,
