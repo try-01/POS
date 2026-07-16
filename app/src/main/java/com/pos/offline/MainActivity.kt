@@ -67,6 +67,7 @@ import com.pos.offline.ui.report.ReportViewModel
 import com.pos.offline.ui.settings.PrinterViewModel
 import com.pos.offline.ui.settings.SettingsScreen
 import com.pos.offline.ui.settings.SettingsViewModel
+import com.pos.offline.ui.settings.StoreProfileViewModel
 import com.pos.offline.ui.theme.PosTheme
 import kotlinx.coroutines.launch
 
@@ -97,6 +98,8 @@ private fun AppRoot() {
         viewModel(factory = ServiceLocator.settingsViewModelFactory())
     val printerViewModel: PrinterViewModel =
         viewModel(factory = ServiceLocator.printerViewModelFactory())
+    val storeProfileViewModel: StoreProfileViewModel =
+        viewModel(factory = ServiceLocator.storeProfileViewModelFactory())
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var dest by rememberSaveable { mutableStateOf(Dest.POS) }
@@ -121,7 +124,7 @@ if (isLandscape) {
                 .fillMaxHeight()
                 .imePadding()
         ) {
-            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel, printerViewModel, context, scope, isLandscape = true)
+            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel, printerViewModel, storeProfileViewModel, context, scope, isLandscape = true)
         }
         SideNavRail(selected = dest, onSelect = { dest = it })
     }
@@ -137,7 +140,7 @@ if (isLandscape) {
                 .fillMaxWidth()
                 .imePadding()
         ) {
-            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel, printerViewModel, context, scope, isLandscape = false)
+            ScreenContent(dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel, printerViewModel, storeProfileViewModel, context, scope, isLandscape = false)
         }
 
         AnimatedVisibility(
@@ -158,6 +161,7 @@ private fun ScreenContent(
     reportViewModel: ReportViewModel,
     settingsViewModel: SettingsViewModel,
     printerViewModel: PrinterViewModel,
+    storeProfileViewModel: StoreProfileViewModel,
     context: android.content.Context,
     scope: kotlinx.coroutines.CoroutineScope,
     isLandscape: Boolean
@@ -205,7 +209,11 @@ private fun ScreenContent(
                 context.startActivity(intent)
             }
         )
-        Dest.SETTINGS -> SettingsScreen(viewModel = settingsViewModel, printerViewModel = printerViewModel)
+        Dest.SETTINGS -> SettingsScreen(
+            viewModel = settingsViewModel,
+            printerViewModel = printerViewModel,
+            storeProfileViewModel = storeProfileViewModel
+        )
     }
 }
 @Composable

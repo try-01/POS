@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudDownload
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -47,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -60,13 +63,16 @@ import com.pos.offline.ui.components.GlassCard
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
-    printerViewModel: PrinterViewModel
+    printerViewModel: PrinterViewModel,
+    storeProfileViewModel: StoreProfileViewModel
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val cashiers by viewModel.cashiers.collectAsState()
     val printers by printerViewModel.printers.collectAsState()
+    val storeProfile by storeProfileViewModel.profile.collectAsState()
     var showPrinterDialog by remember { mutableStateOf(false) }
+    var showStoreProfileDialog by remember { mutableStateOf(false) }
 
     // --- SAF launchers ---
     val exportLauncher = rememberLauncherForActivityResult(
@@ -85,6 +91,12 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         printerViewModel.messages.collect { msg ->
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        storeProfileViewModel.messages.collect { msg ->
             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
         }
     }
@@ -111,6 +123,13 @@ fun SettingsScreen(
         PrinterManagementDialog(
             viewModel = printerViewModel,
             onDismiss = { showPrinterDialog = false }
+        )
+    }
+
+    if (showStoreProfileDialog) {
+        StoreProfileDialog(
+            viewModel = storeProfileViewModel,
+            onDismiss = { showStoreProfileDialog = false }
         )
     }
 
@@ -159,10 +178,6 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-
-                    // BARU: 2 tombol sejajar — "Simpan" (SAF, seperti semula)
-                    // & "Bagikan" (share Intent langsung, Opsi A: independen
-                    // dari alur SAF, tidak perlu pilih folder dulu).
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -250,6 +265,55 @@ fun SettingsScreen(
                         Icon(Icons.Rounded.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Tambah Kasir", fontSize = 13.sp)
+                    }
+                }
+            }
+
+            SectionLabel("Profil Toko & Struk")
+
+            GlassCard(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(14.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (storeProfile.storeName.isBlank() && storeProfile.logoBytes == null) {
+                        Text(
+                            "Profil toko belum diatur. Nama toko, alamat, & logo akan " +
+                                "tampil di struk cetak.",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            LogoPreview(
+                                logoBytes = storeProfile.logoBytes,
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    storeProfile.storeName.ifBlank { "(Nama toko belum diisi)" },
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    if (storeProfile.autoPrintEnabled) "Cetak otomatis aktif" else "Cetak otomatis nonaktif",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = { showStoreProfileDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Rounded.Storefront, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Edit Profil Toko", fontSize = 13.sp)
                     }
                 }
             }

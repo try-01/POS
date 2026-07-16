@@ -18,7 +18,9 @@ import com.pos.offline.ui.pos.PosViewModel
 import com.pos.offline.ui.report.ReportViewModel
 import com.pos.offline.ui.settings.PrinterViewModel
 import com.pos.offline.ui.settings.SettingsViewModel
+import com.pos.offline.ui.settings.StoreProfileViewModel
 import com.pos.offline.util.BluetoothPrinterHelper
+import com.pos.offline.util.LogoImageProcessor
 import com.pos.offline.util.PrinterConnectionFactory
 import com.pos.offline.util.UsbPrinterHelper
 
@@ -67,6 +69,9 @@ object ServiceLocator {
     private val printerConnectionFactory: PrinterConnectionFactory by lazy {
         PrinterConnectionFactory(bluetoothPrinterHelper, usbPrinterHelper)
     }
+    private val logoImageProcessor: LogoImageProcessor by lazy {
+        LogoImageProcessor(appContext)
+    }
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
@@ -87,6 +92,8 @@ object ServiceLocator {
         SettingsViewModelFactory(cashierRepository, shiftRepository)
     fun printerViewModelFactory(): ViewModelProvider.Factory =
         PrinterViewModelFactory(printerRepository, bluetoothPrinterHelper, usbPrinterHelper, printerConnectionFactory)
+    fun storeProfileViewModelFactory(): ViewModelProvider.Factory =
+        StoreProfileViewModelFactory(storeProfileRepository, logoImageProcessor)
 
     fun transactionRepository(): TransactionRepository = transactionRepository
     fun productRepository(): ProductRepository = productRepository
@@ -151,4 +158,13 @@ class PrinterViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
         PrinterViewModel(printerRepository, bluetoothPrinterHelper, usbPrinterHelper, printerConnectionFactory) as T
+}
+
+class StoreProfileViewModelFactory(
+    private val storeProfileRepository: StoreProfileRepository,
+    private val logoImageProcessor: LogoImageProcessor
+) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T =
+        StoreProfileViewModel(storeProfileRepository, logoImageProcessor) as T
 }

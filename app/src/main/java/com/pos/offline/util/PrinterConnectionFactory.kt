@@ -49,6 +49,7 @@ class CancellableBluetoothConnection(private val device: BluetoothDevice) : Devi
         socket?.isConnected == true && super.isConnected()
 
     @SuppressLint("MissingPermission") // dijaga pemanggil: cek hasPermissions() di resolveBluetooth()
+    @Suppress("DEPRECATION")
     override fun connect(): DeviceConnection {
         if (isConnected()) return this
         try {
@@ -195,6 +196,7 @@ class PrinterConnectionFactory(
         )
     }
 
+    @Suppress("DEPRECATION")
     private fun resolveBluetooth(printer: PrinterEntity): ConnectionResolution {
         val address = printer.bluetoothMacAddress
         if (address.isNullOrBlank()) {
@@ -309,7 +311,7 @@ class PrinterConnectionFactory(
         }
 
     private fun buildTestPrintMarkup(printer: PrinterEntity): String {
-        val timestamp = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("id", "ID")).format(Date())
+        val timestamp = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.forLanguageTag("id-ID")).format(Date())
         return buildString {
             append("[C]<b>TEST PRINT KASIR OFFLINE</b>\n")
             append("[C]${printer.label}\n")
