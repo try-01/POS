@@ -54,7 +54,7 @@ object EscPosReceiptFormatter {
         storeProfile: StoreProfileEntity
     ): String {
         val sb = StringBuilder()
-        val charsPerLine = printer.printerNbrCharactersPerLine
+        val charsPerLine = printer.nbrCharactersPerLine
 
         // ---- Logo ----
         buildLogoHex(printer, storeProfile.logoBytes)?.let { hex ->
