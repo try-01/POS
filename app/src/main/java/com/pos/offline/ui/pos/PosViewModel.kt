@@ -285,7 +285,7 @@ class PosViewModel(
     // Return value = apakah benar-benar terjadi upaya koneksi ke printer (dipakai checkout()
     // untuk memutuskan perlu delay 500ms sebelum cetak struk atau tidak, sesuai saran Q7).
     private suspend fun maybeAutoOpenDrawer(result: CheckoutResult): Boolean {
-        if (result.transaction.paymentMethod != PaymentMethod.CASH) return false
+        if (result.transaction.paymentMethod != PaymentMethod.CASH.name) return false
         if (_isOpeningDrawer.value) {
             Log.w(TAG, "Auto-buka laci dilewati: sedang ada proses buka-laci lain berjalan.")
             return false
