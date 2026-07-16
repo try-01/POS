@@ -171,7 +171,7 @@ class PrinterConnectionFactory(
                         DEFAULT_PRINTER_DPI,
                         printer.paperWidth.printableWidthMM(),
                         printer.charPerLine
-                    )
+                    ).useEscAsteriskCommand(true)
                 }
                 val markup = markupBuilder(escPosPrinter)
                 withContext(Dispatchers.IO) {
