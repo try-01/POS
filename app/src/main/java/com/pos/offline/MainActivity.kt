@@ -8,6 +8,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -19,12 +22,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -78,7 +83,6 @@ import com.pos.offline.ui.settings.SettingsViewModel
 import com.pos.offline.ui.settings.StoreProfileViewModel
 import com.pos.offline.ui.theme.PosTheme
 import kotlinx.coroutines.launch
-import java.io.File
 
 private enum class Dest(val label: String) {
     POS("Kasir"), INVENTORY("Inventaris"), REPORT("Laporan"), SETTINGS("Pengaturan")
@@ -249,7 +253,6 @@ private fun AppRoot() {
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    // Poin 3: Berikan Background Utama untuk menghilangkan warna abu-abu sistem
     if (isLandscape) {
         Row(
             Modifier
@@ -281,16 +284,27 @@ private fun AppRoot() {
             }
         }
     } else {
-        // Poin 1: Ubah struktur Root Portrait ke Box (Overlay)
+        // Hitung tinggi System Navigation Bar (Gesture Bar)
+        val navBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        
+        // Animasikan padding bawah konten agar selalu sejajar dengan tinggi BottomNavBar
+        // Saat keyboard aktif, padding jadi 0. Saat tidak aktif, padding sebesar tinggi BottomNavBar (56.dp + navBarHeight).
+        val contentBottomPadding by animateDpAsState(
+            targetValue = if (imeVisible) 0.dp else (56.dp + navBarHeight),
+            animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+            label = "contentBottomPadding"
+        )
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Konten Utama dengan imePadding() murni, tanpa gangguan animasi BottomBar
+            // Konten Utama dengan padding bawah dinamis dan imePadding murni
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .padding(bottom = contentBottomPadding)
                     .imePadding()
             ) {
                 ScreenContent(
@@ -377,7 +391,6 @@ private fun ScreenContent(
 
 @Composable
 private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
-    // Poin 2: navigationBarsPadding() dipindahkan ke dalam komponen BottomNavBar
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -423,7 +436,6 @@ private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
 
 @Composable
 private fun SideNavRail(selected: Dest, onSelect: (Dest) -> Unit) {
-    // Poin 2: systemBarsPadding() dipindahkan ke dalam komponen SideNavRail (Lanskap)
     Surface(
         modifier = Modifier
             .fillMaxHeight()
