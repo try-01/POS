@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material.icons.Icons
@@ -123,8 +124,8 @@ private fun AppRoot() {
         dest = Dest.POS
     }
 
-    // Intercept Back HP 2: Jika sudah di Kasir, cegah keluar paksa dan tampilkan dialog validasi shift
-    BackHandler(enabled = dest == Dest.POS) {
+    // Intercept Back HP 2: Jika sudah di Kasir dan dialog belum muncul, tampilkan dialog
+    BackHandler(enabled = dest == Dest.POS && !showExitDialog) {
         showExitDialog = true
     }
 
@@ -151,12 +152,21 @@ private fun AppRoot() {
                     )
                 },
                 text = {
-                    Text(
-                        "Shift kasir atas nama ${shift.cashierName} masih berjalan. " +
-                            "Untuk keakuratan laporan keuangan dan laci kas (rekonsiliasi uang fisik), " +
-                            "sangat disarankan untuk menutup shift terlebih dahulu di tab Kasir.",
-                        fontSize = 13.sp
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "Shift kasir atas nama ${shift.cashierName} masih berjalan. " +
+                                "Untuk keakuratan laporan keuangan dan laci kas (rekonsiliasi uang fisik), " +
+                                "sangat disarankan untuk menutup shift terlebih dahulu di tab Kasir.",
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            "Catatan: Jika Anda memilih 'Tetap Keluar', sesi shift akan tetap aktif menggantung " +
+                                "dan harus ditutup secara normal saat aplikasi dibuka kembali.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 },
                 confirmButton = {
                     // Tutup Shift Dulu (Bobot Visual: Tinggi / Filled Button)
@@ -239,12 +249,15 @@ private fun AppRoot() {
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+    // Poin 3: Berikan Background Utama untuk menghilangkan warna abu-abu sistem
     if (isLandscape) {
         Row(
             Modifier
                 .fillMaxSize()
-                .navigationBarsPadding()
+                .background(MaterialTheme.colorScheme.background)
         ) {
+            SideNavRail(selected = dest, onSelect = { dest = it })
+            
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -266,18 +279,18 @@ private fun AppRoot() {
                     isLandscape = true
                 )
             }
-            SideNavRail(selected = dest, onSelect = { dest = it })
         }
     } else {
-        Column(
-            Modifier
+        // Poin 1: Ubah struktur Root Portrait ke Box (Overlay)
+        Box(
+            modifier = Modifier
                 .fillMaxSize()
-                .navigationBarsPadding()
+                .background(MaterialTheme.colorScheme.background)
         ) {
+            // Konten Utama dengan imePadding() murni, tanpa gangguan animasi BottomBar
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
+                    .fillMaxSize()
                     .imePadding()
             ) {
                 ScreenContent(
@@ -296,10 +309,12 @@ private fun AppRoot() {
                 )
             }
 
+            // BottomNavBar dilayangkan (overlay) di atas konten utama
             AnimatedVisibility(
                 visible = !imeVisible,
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                modifier = Modifier.align(Alignment.BottomCenter)
             ) {
                 BottomNavBar(selected = dest, onSelect = { dest = it })
             }
@@ -362,8 +377,11 @@ private fun ScreenContent(
 
 @Composable
 private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
+    // Poin 2: navigationBarsPadding() dipindahkan ke dalam komponen BottomNavBar
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding(),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 3.dp
     ) {
@@ -405,8 +423,12 @@ private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
 
 @Composable
 private fun SideNavRail(selected: Dest, onSelect: (Dest) -> Unit) {
+    // Poin 2: systemBarsPadding() dipindahkan ke dalam komponen SideNavRail (Lanskap)
     Surface(
-        modifier = Modifier.fillMaxHeight().width(64.dp),
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(64.dp)
+            .systemBarsPadding(),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 3.dp
     ) {
