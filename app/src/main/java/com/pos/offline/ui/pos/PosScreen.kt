@@ -885,7 +885,6 @@ private fun CartPane(
     var previousCartSize by remember { mutableStateOf(cart.size) }
     LaunchedEffect(cart.size) {
         if (cart.size > previousCartSize && cart.isNotEmpty()) {
-            // Scroll ke item terakhir yang baru ditambahkan
             listState.animateScrollToItem(cart.lastIndex)
         }
         previousCartSize = cart.size
@@ -942,10 +941,10 @@ private fun CartPane(
             if (showFull) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
-                // 1. AREA DAFTAR ITEM (FIXED HEIGHT, TIDAK AKAN LONCAT)
+                // Box ini mengunci tinggi area daftar agar tidak melompat saat item bertambah
                 Box(
                     modifier = Modifier
-                        .weight(1f) // Mengambil sisa ruang yang tersisa
+                        .weight(1f) // weight(1f) tanpa fill=false akan mengunci tinggi secara rigid
                         .fillMaxWidth()
                 ) {
                     LazyColumn(
@@ -998,6 +997,52 @@ private fun CartPane(
                                     modifier = Modifier.animateItem()
                                 )
                             }
+
+                            // Masukkan kembali Total & Tombol Bayar ke dalam LazyColumn
+                            // agar daftar item di atas mendapat ruang layar yang maksimal
+                            item(key = "cart_divider") {
+                                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                            }
+
+                            item(key = "cart_totals") {
+                                TotalsSummary(
+                                    totals = totals,
+                                    change = change,
+                                    discountType = discountType,
+                                    discountValue = discountValue,
+                                    taxRate = taxRate,
+                                    paid = paid,
+                                    paymentMethod = paymentMethod,
+                                    onDiscountTypeToggle = onDiscountTypeToggle,
+                                    onDiscountValueChange = onDiscountValueChange,
+                                    onTaxRateChange = onTaxRateChange,
+                                    onPaidChange = onPaidChange,
+                                    onPaymentMethodChange = onPaymentMethodChange
+                                )
+                            }
+
+                            item(key = "cart_checkout_button") {
+                                Spacer(Modifier.height(6.dp))
+                                Button(
+                                    onClick = ::attemptCheckout,
+                                    enabled = canCheckout,
+                                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    if (isProcessing) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            color = MaterialTheme.colorScheme.onPrimary,
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Bayar · ${totals.total.toRupiah()}")
+                                    }
+                                }
+                                Spacer(Modifier.height(4.dp))
+                            }
                         }
                     }
 
@@ -1018,44 +1063,6 @@ private fun CartPane(
                         )
                     }
                 }
-
-                // 2. AREA TOTAL & TOMBOL BAYAR (PINNED DI BAWAH, DI LUAR SCROLL)
-                HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                TotalsSummary(
-                    totals = totals,
-                    change = change,
-                    discountType = discountType,
-                    discountValue = discountValue,
-                    taxRate = taxRate,
-                    paid = paid,
-                    paymentMethod = paymentMethod,
-                    onDiscountTypeToggle = onDiscountTypeToggle,
-                    onDiscountValueChange = onDiscountValueChange,
-                    onTaxRateChange = onTaxRateChange,
-                    onPaidChange = onPaidChange,
-                    onPaymentMethodChange = onPaymentMethodChange
-                )
-
-                Spacer(Modifier.height(6.dp))
-                Button(
-                    onClick = ::attemptCheckout,
-                    enabled = canCheckout,
-                    modifier = Modifier.fillMaxWidth().height(42.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    if (isProcessing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Bayar · ${totals.total.toRupiah()}")
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
             } else {
                 Spacer(Modifier.height(4.dp))
                 Row(

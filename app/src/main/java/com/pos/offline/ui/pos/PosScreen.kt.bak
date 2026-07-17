@@ -880,13 +880,12 @@ private fun CartPane(
         }
     }
 
-    // Menggunakan LazyListState untuk kontrol scroll yang lebih baik
     val listState = rememberLazyListState()
 
     var previousCartSize by remember { mutableStateOf(cart.size) }
     LaunchedEffect(cart.size) {
         if (cart.size > previousCartSize && cart.isNotEmpty()) {
-            // Scroll tepat ke item keranjang terakhir yang baru ditambahkan
+            // Scroll ke item terakhir yang baru ditambahkan
             listState.animateScrollToItem(cart.lastIndex)
         }
         previousCartSize = cart.size
@@ -943,22 +942,21 @@ private fun CartPane(
             if (showFull) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
+                // 1. AREA DAFTAR ITEM (FIXED HEIGHT, TIDAK AKAN LONCAT)
                 Box(
                     modifier = Modifier
-                        .weight(1f, fill = false)
+                        .weight(1f) // Mengambil sisa ruang yang tersisa
                         .fillMaxWidth()
-                        .heightIn(min = 56.dp)
                 ) {
-                    // PERUBAHAN UTAMA: Column verticalScroll menjadi LazyColumn
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxSize()
                     ) {
                         if (cart.isEmpty()) {
                             item(key = "empty_cart") {
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxWidth()
+                                        .fillMaxSize()
                                         .padding(vertical = 24.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -986,7 +984,7 @@ private fun CartPane(
                         } else {
                             items(
                                 items = cart,
-                                key = { it.id } // Key sangat penting agar animasi placement berfungsi
+                                key = { it.id }
                             ) { item ->
                                 val stock = stockByProductId[item.productId]
                                 val canIncrease = stock == null || item.quantity < stock
@@ -997,54 +995,9 @@ private fun CartPane(
                                     onDecrease = { onDecrease(item) },
                                     onRemove = { onRemove(item) },
                                     onQuantityClick = { qtyEditItem = item },
-                                    // KUNCI ANIMASI: Item lain akan bergeser mulus saat ini dihapus
                                     modifier = Modifier.animateItem()
                                 )
                             }
-                        }
-
-                        item(key = "cart_divider") {
-                            HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                        }
-
-                        item(key = "cart_totals") {
-                            TotalsSummary(
-                                totals = totals,
-                                change = change,
-                                discountType = discountType,
-                                discountValue = discountValue,
-                                taxRate = taxRate,
-                                paid = paid,
-                                paymentMethod = paymentMethod,
-                                onDiscountTypeToggle = onDiscountTypeToggle,
-                                onDiscountValueChange = onDiscountValueChange,
-                                onTaxRateChange = onTaxRateChange,
-                                onPaidChange = onPaidChange,
-                                onPaymentMethodChange = onPaymentMethodChange
-                            )
-                        }
-
-                        item(key = "cart_checkout_button") {
-                            Spacer(Modifier.height(6.dp))
-                            Button(
-                                onClick = ::attemptCheckout,
-                                enabled = canCheckout,
-                                modifier = Modifier.fillMaxWidth().height(42.dp),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                if (isProcessing) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        color = MaterialTheme.colorScheme.onPrimary,
-                                        strokeWidth = 2.dp
-                                    )
-                                } else {
-                                    Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Bayar · ${totals.total.toRupiah()}")
-                                }
-                            }
-                            Spacer(Modifier.height(4.dp))
                         }
                     }
 
@@ -1065,6 +1018,44 @@ private fun CartPane(
                         )
                     }
                 }
+
+                // 2. AREA TOTAL & TOMBOL BAYAR (PINNED DI BAWAH, DI LUAR SCROLL)
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                TotalsSummary(
+                    totals = totals,
+                    change = change,
+                    discountType = discountType,
+                    discountValue = discountValue,
+                    taxRate = taxRate,
+                    paid = paid,
+                    paymentMethod = paymentMethod,
+                    onDiscountTypeToggle = onDiscountTypeToggle,
+                    onDiscountValueChange = onDiscountValueChange,
+                    onTaxRateChange = onTaxRateChange,
+                    onPaidChange = onPaidChange,
+                    onPaymentMethodChange = onPaymentMethodChange
+                )
+
+                Spacer(Modifier.height(6.dp))
+                Button(
+                    onClick = ::attemptCheckout,
+                    enabled = canCheckout,
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (isProcessing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Bayar · ${totals.total.toRupiah()}")
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
             } else {
                 Spacer(Modifier.height(4.dp))
                 Row(
