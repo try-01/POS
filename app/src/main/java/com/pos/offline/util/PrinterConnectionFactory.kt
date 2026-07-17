@@ -108,7 +108,7 @@ class PrinterConnectionFactory(
     private val usbHelper: UsbPrinterHelper
 ) {
     suspend fun testPrint(printer: PrinterEntity): TestPrintResult {
-        val outcome = executePrintJob(printer) { buildTestPrintMarkup(printer) }
+        val outcome = executePrintJob(printer) { listOf(buildTestPrintMarkup(printer)) }
         return when (outcome) {
             is JobOutcome.Success -> TestPrintResult.Success
             is JobOutcome.Failure -> TestPrintResult.Failure(outcome.message)
@@ -116,7 +116,7 @@ class PrinterConnectionFactory(
     }
     suspend fun printReceipt(
         printer: PrinterEntity,
-        markupBuilder: (EscPosPrinter) -> String
+        markupBuilder: (EscPosPrinter) -> List<String>
     ): PrintResult {
         val outcome = executePrintJob(printer, markupBuilder)
         return when (outcome) {
@@ -183,7 +183,7 @@ class PrinterConnectionFactory(
 
     private suspend fun executePrintJob(
         printer: PrinterEntity,
-        markupBuilder: (EscPosPrinter) -> String
+        markupBuilder: (EscPosPrinter) -> List<String>
     ): JobOutcome {
         val resolution = resolveConnection(printer)
         val ready = when (resolution) {
@@ -210,10 +210,19 @@ class PrinterConnectionFactory(
                         printer.charPerLine
                     ).useEscAsteriskCommand(true)
                 }
-                val markup = markupBuilder(escPosPrinter)
-                withContext(Dispatchers.IO) {
-                    escPosPrinter.printFormattedTextAndCut(markup)
-                }
+val markups = markupBuilder(escPosPrinter)
+withContext(Dispatchers.IO) {
+    markups.forEachIndexed { index, markup ->
+        if (index == markups.lastIndex) {
+            // Chunk terakhir: cetak dan potong kertas
+            escPosPrinter.printFormattedTextAndCut(markup)
+        } else {
+            // Chunk awal (Logo): cetak tanpa potong, lalu beri jeda RAM
+            escPosPrinter.printFormattedText(markup)
+            delay(1500) // JEDA KRUSIAL: Cegah buffer Kassen/RPP02N overflow
+        }
+    }
+}
                 withContext(Dispatchers.IO) {
                     escPosPrinter.disconnectPrinter()
                 }

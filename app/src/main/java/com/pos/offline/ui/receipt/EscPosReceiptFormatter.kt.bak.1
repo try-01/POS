@@ -47,19 +47,19 @@ object EscPosReceiptFormatter {
         storeProfile: StoreProfileEntity
     ): String = build(printer, checkoutResult.transaction, checkoutResult.items, storeProfile)
 
-fun build(
-    printer: EscPosPrinter,
-    transaction: TransactionEntity,
-    items: List<TransactionItemEntity>,
-    storeProfile: StoreProfileEntity
-): List<String> {
-    // ---- 1. Siapkan Logo (Terpisah) ----
-    val logoHex = buildLogoHex(printer, storeProfile.logoBytes)
-    val logoMarkup = logoHex?.let { "[C]<img>$it</img>\n" }
+    fun build(
+        printer: EscPosPrinter,
+        transaction: TransactionEntity,
+        items: List<TransactionItemEntity>,
+        storeProfile: StoreProfileEntity
+    ): String {
+        val sb = StringBuilder()
+        val charsPerLine = printer.printerNbrCharactersPerLine
 
-    // ---- 2. Siapkan Teks ----
-    val sb = StringBuilder()
-    val charsPerLine = printer.printerNbrCharactersPerLine
+        // ---- Logo ----
+        buildLogoHex(printer, storeProfile.logoBytes)?.let { hex ->
+            sb.append("[C]<img>").append(hex).append("</img>\n")
+        }
 
         // ---- Nama toko ----
         val storeName = sanitize(storeProfile.storeName).trim()
@@ -133,7 +133,7 @@ fun build(
 
         sb.append("[L]\n")
 
-        return listOfNotNull(logoMarkup, sb.toString())
+        return sb.toString()
     }
 
     private fun divider(charsPerLine: Int): String {
