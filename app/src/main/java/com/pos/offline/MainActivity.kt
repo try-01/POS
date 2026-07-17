@@ -173,7 +173,6 @@ private fun AppRoot() {
                     }
                 },
                 confirmButton = {
-                    // Tutup Shift Dulu (Bobot Visual: Tinggi / Filled Button)
                     Button(
                         onClick = {
                             showExitDialog = false
@@ -188,7 +187,6 @@ private fun AppRoot() {
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Tetap Keluar (Bobot Visual: Rendah / Text Button dengan warna merah bahaya)
                         TextButton(
                             onClick = {
                                 showExitDialog = false
@@ -200,7 +198,6 @@ private fun AppRoot() {
                         ) {
                             Text("Tetap Keluar", fontSize = 13.sp)
                         }
-                        // Batal (Bobot Visual: Menengah / Outlined Button)
                         OutlinedButton(
                             onClick = { showExitDialog = false }
                         ) {
@@ -254,13 +251,15 @@ private fun AppRoot() {
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     if (isLandscape) {
+        // Poin Perbaikan Landscape: systemBarsPadding() dipasang di Root Row
+        // agar seluruh konten dan menu sama-sama terhindar dari tombol sistem.
         Row(
-            Modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
+                .systemBarsPadding()
         ) {
-            SideNavRail(selected = dest, onSelect = { dest = it })
-            
+            // Konten utama berada di kiri, memenuhi sisa ruang
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -282,13 +281,14 @@ private fun AppRoot() {
                     isLandscape = true
                 )
             }
+            
+            // SideNavRail dikembalikan ke posisi KANAN
+            SideNavRail(selected = dest, onSelect = { dest = it })
         }
     } else {
         // Hitung tinggi System Navigation Bar (Gesture Bar)
         val navBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         
-        // Animasikan padding bawah konten agar selalu sejajar dengan tinggi BottomNavBar
-        // Saat keyboard aktif, padding jadi 0. Saat tidak aktif, padding sebesar tinggi BottomNavBar (56.dp + navBarHeight).
         val contentBottomPadding by animateDpAsState(
             targetValue = if (imeVisible) 0.dp else (56.dp + navBarHeight),
             animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
@@ -300,7 +300,6 @@ private fun AppRoot() {
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Konten Utama dengan padding bawah dinamis dan imePadding murni
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -323,7 +322,6 @@ private fun AppRoot() {
                 )
             }
 
-            // BottomNavBar dilayangkan (overlay) di atas konten utama
             AnimatedVisibility(
                 visible = !imeVisible,
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
@@ -436,11 +434,11 @@ private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
 
 @Composable
 private fun SideNavRail(selected: Dest, onSelect: (Dest) -> Unit) {
+    // Hapus systemBarsPadding() dari sini karena sudah ditangani Root Row
     Surface(
         modifier = Modifier
             .fillMaxHeight()
-            .width(64.dp)
-            .systemBarsPadding(),
+            .width(64.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 3.dp
     ) {
