@@ -28,8 +28,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -880,14 +878,12 @@ private fun CartPane(
         }
     }
 
-    // Menggunakan LazyListState untuk kontrol scroll yang lebih baik
-    val listState = rememberLazyListState()
+    val scrollState = rememberScrollState()
 
     var previousCartSize by remember { mutableStateOf(cart.size) }
     LaunchedEffect(cart.size) {
-        if (cart.size > previousCartSize && cart.isNotEmpty()) {
-            // Scroll tepat ke item keranjang terakhir yang baru ditambahkan
-            listState.animateScrollToItem(cart.lastIndex)
+        if (cart.size > previousCartSize) {
+            scrollState.animateScrollTo(scrollState.maxValue)
         }
         previousCartSize = cart.size
     }
@@ -949,107 +945,96 @@ private fun CartPane(
                         .fillMaxWidth()
                         .heightIn(min = 56.dp)
                 ) {
-                    // PERUBAHAN UTAMA: Column verticalScroll menjadi LazyColumn
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxWidth()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(scrollState)
                     ) {
                         if (cart.isEmpty()) {
-                            item(key = "empty_cart") {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 24.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Icon(
-                                            Icons.Rounded.ShoppingCart,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(32.dp),
-                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                                        )
-                                        Spacer(Modifier.height(8.dp))
-                                        Text(
-                                            "Keranjang masih kosong",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                        )
-                                        Text(
-                                            "Ketuk produk di atas untuk menambahkan",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                                        )
-                                    }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Rounded.ShoppingCart,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(32.dp),
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "Keranjang masih kosong",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    )
+                                    Text(
+                                        "Ketuk produk di atas untuk menambahkan",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                    )
                                 }
                             }
                         } else {
-                            items(
-                                items = cart,
-                                key = { it.id } // Key sangat penting agar animasi placement berfungsi
-                            ) { item ->
-                                val stock = stockByProductId[item.productId]
-                                val canIncrease = stock == null || item.quantity < stock
-                                CartRow(
-                                    item = item,
-                                    canIncrease = canIncrease,
-                                    onIncrease = { onIncrease(item) },
-                                    onDecrease = { onDecrease(item) },
-                                    onRemove = { onRemove(item) },
-                                    onQuantityClick = { qtyEditItem = item },
-                                    // KUNCI ANIMASI: Item lain akan bergeser mulus saat ini dihapus
-                                    modifier = Modifier.animateItem()
-                                )
-                            }
-                        }
-
-                        item(key = "cart_divider") {
-                            HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                        }
-
-                        item(key = "cart_totals") {
-                            TotalsSummary(
-                                totals = totals,
-                                change = change,
-                                discountType = discountType,
-                                discountValue = discountValue,
-                                taxRate = taxRate,
-                                paid = paid,
-                                paymentMethod = paymentMethod,
-                                onDiscountTypeToggle = onDiscountTypeToggle,
-                                onDiscountValueChange = onDiscountValueChange,
-                                onTaxRateChange = onTaxRateChange,
-                                onPaidChange = onPaidChange,
-                                onPaymentMethodChange = onPaymentMethodChange
-                            )
-                        }
-
-                        item(key = "cart_checkout_button") {
-                            Spacer(Modifier.height(6.dp))
-                            Button(
-                                onClick = ::attemptCheckout,
-                                enabled = canCheckout,
-                                modifier = Modifier.fillMaxWidth().height(42.dp),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                if (isProcessing) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        color = MaterialTheme.colorScheme.onPrimary,
-                                        strokeWidth = 2.dp
+                            cart.forEach { item ->
+                                key(item.id) {
+                                    val stock = stockByProductId[item.productId]
+                                    val canIncrease = stock == null || item.quantity < stock
+                                    CartRow(
+                                        item = item,
+                                        canIncrease = canIncrease,
+                                        onIncrease = { onIncrease(item) },
+                                        onDecrease = { onDecrease(item) },
+                                        onRemove = { onRemove(item) },
+                                        onQuantityClick = { qtyEditItem = item }
                                     )
-                                } else {
-                                    Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Bayar · ${totals.total.toRupiah()}")
                                 }
                             }
-                            Spacer(Modifier.height(4.dp))
                         }
+
+                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+
+                        TotalsSummary(
+                            totals = totals,
+                            change = change,
+                            discountType = discountType,
+                            discountValue = discountValue,
+                            taxRate = taxRate,
+                            paid = paid,
+                            paymentMethod = paymentMethod,
+                            onDiscountTypeToggle = onDiscountTypeToggle,
+                            onDiscountValueChange = onDiscountValueChange,
+                            onTaxRateChange = onTaxRateChange,
+                            onPaidChange = onPaidChange,
+                            onPaymentMethodChange = onPaymentMethodChange
+                        )
+
+                        Spacer(Modifier.height(6.dp))
+                        Button(
+                            onClick = ::attemptCheckout,
+                            enabled = canCheckout,
+                            modifier = Modifier.fillMaxWidth().height(42.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (isProcessing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Bayar · ${totals.total.toRupiah()}")
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
                     }
 
-                    val showTopFade by remember { derivedStateOf { listState.canScrollBackward } }
-                    val showBottomFade by remember { derivedStateOf { listState.canScrollForward } }
+                    val showTopFade by remember { derivedStateOf { scrollState.canScrollBackward } }
+                    val showBottomFade by remember { derivedStateOf { scrollState.canScrollForward } }
                     if (showTopFade) {
                         HorizontalDivider(
                             modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth(),
