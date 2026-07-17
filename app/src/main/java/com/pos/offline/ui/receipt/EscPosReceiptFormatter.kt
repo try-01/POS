@@ -41,12 +41,13 @@ object EscPosReceiptFormatter {
 
     private val dateFormatterPattern = "dd/MM/yyyy HH:mm"
 
-    fun build(
-        printer: EscPosPrinter,
-        checkoutResult: CheckoutResult,
-        storeProfile: StoreProfileEntity
-    ): String = build(printer, checkoutResult.transaction, checkoutResult.items, storeProfile)
+fun build(
+    printer: EscPosPrinter,
+    checkoutResult: CheckoutResult,
+    storeProfile: StoreProfileEntity
+): List<String> = build(printer, checkoutResult.transaction, checkoutResult.items, storeProfile)
 
+// 2. Ubah fungsi utama
 fun build(
     printer: EscPosPrinter,
     transaction: TransactionEntity,
