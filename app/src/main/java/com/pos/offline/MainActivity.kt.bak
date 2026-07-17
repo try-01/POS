@@ -34,6 +34,12 @@ import androidx.compose.material.icons.rounded.Assessment
 import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.ShoppingCart
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -105,11 +111,127 @@ private fun AppRoot() {
     val scope = rememberCoroutineScope()
     var dest by rememberSaveable { mutableStateOf(Dest.POS) }
 
-    // Memantau status shift aktif dari Kasir
+    // Memantau status shift aktif secara dinamis dari DB
     val openShift by posViewModel.openShift.collectAsStateWithLifecycle()
 
+    // State Dialog Exit tersentralisasi di Root Level
+    var showExitDialog by rememberSaveable { mutableStateOf(false) }
+
+    // Intercept Back HP 1: Jika tidak berada di halaman Kasir, kembalikan ke Kasir
     BackHandler(enabled = dest != Dest.POS) {
         dest = Dest.POS
+    }
+
+    // Intercept Back HP 2: Jika sudah di Kasir, cegah keluar paksa dan tampilkan dialog validasi shift
+    BackHandler(enabled = dest == Dest.POS) {
+        showExitDialog = true
+    }
+
+    // Dialog Konfirmasi Keluar Tersentralisasi (Root Level)
+    if (showExitDialog) {
+        val shift = openShift
+        if (shift != null) {
+            // Skenario A: Masih ada shift aktif (Warning Keras)
+            AlertDialog(
+                onDismissRequest = { showExitDialog = false },
+                icon = {
+                    Icon(
+                        Icons.Rounded.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(28.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        "Ada Shift Kasir Aktif!",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Text(
+                        "Shift kasir atas nama ${shift.cashierName} masih berjalan. " +
+                            "Untuk keakuratan laporan keuangan dan laci kas (rekonsiliasi uang fisik), " +
+                            "sangat disarankan untuk menutup shift terlebih dahulu di tab Kasir.",
+                        fontSize = 13.sp
+                    )
+                },
+                confirmButton = {
+                    // Tutup Shift Dulu (Bobot Visual: Tinggi / Filled Button)
+                    Button(
+                        onClick = {
+                            showExitDialog = false
+                            dest = Dest.POS
+                        }
+                    ) {
+                        Text("Tutup Shift Dulu", fontSize = 13.sp)
+                    }
+                },
+                dismissButton = {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Tetap Keluar (Bobot Visual: Rendah / Text Button dengan warna merah bahaya)
+                        TextButton(
+                            onClick = {
+                                showExitDialog = false
+                                (context as? android.app.Activity)?.finishAndRemoveTask()
+                            },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("Tetap Keluar", fontSize = 13.sp)
+                        }
+                        // Batal (Bobot Visual: Menengah / Outlined Button)
+                        OutlinedButton(
+                            onClick = { showExitDialog = false }
+                        ) {
+                            Text("Batal", fontSize = 13.sp)
+                        }
+                    }
+                }
+            )
+        } else {
+            // Skenario B: Tidak ada shift aktif (Konfirmasi Bersih)
+            AlertDialog(
+                onDismissRequest = { showExitDialog = false },
+                title = {
+                    Text(
+                        "Keluar Aplikasi?",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Text(
+                        "Semua data transaksi dan laci kas Anda telah tersimpan dengan aman di database lokal. " +
+                            "Sesi kasir Anda saat ini bersih (tidak ada shift berjalan). Keluar sekarang?",
+                        fontSize = 13.sp
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showExitDialog = false
+                            (context as? android.app.Activity)?.finishAndRemoveTask()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Keluar", fontSize = 13.sp)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showExitDialog = false }) {
+                        Text("Batal", fontSize = 13.sp)
+                    }
+                }
+            )
+        }
     }
 
     val density = LocalDensity.current
@@ -139,8 +261,7 @@ private fun AppRoot() {
                     context = context,
                     scope = scope,
                     onNavigateToSettings = { dest = Dest.SETTINGS },
-                    onNavigateToPos = { dest = Dest.POS },
-                    activeShift = openShift,
+                    onRequestExit = { showExitDialog = true },
                     isLandscape = true
                 )
             }
@@ -169,8 +290,7 @@ private fun AppRoot() {
                     context = context,
                     scope = scope,
                     onNavigateToSettings = { dest = Dest.SETTINGS },
-                    onNavigateToPos = { dest = Dest.POS },
-                    activeShift = openShift,
+                    onRequestExit = { showExitDialog = true },
                     isLandscape = false
                 )
             }
@@ -198,8 +318,7 @@ private fun ScreenContent(
     context: android.content.Context,
     scope: kotlinx.coroutines.CoroutineScope,
     onNavigateToSettings: () -> Unit,
-    onNavigateToPos: () -> Unit,
-    activeShift: com.pos.offline.data.local.entity.ShiftEntity?,
+    onRequestExit: () -> Unit,
     isLandscape: Boolean
 ) {
     when (dest) {
@@ -235,12 +354,7 @@ private fun ScreenContent(
             viewModel = settingsViewModel,
             printerViewModel = printerViewModel,
             storeProfileViewModel = storeProfileViewModel,
-            activeShift = activeShift,
-            onNavigateToPos = onNavigateToPos,
-            onExitApp = {
-                // Mematikan dan membersihkan aplikasi dari RAM secara total & aman
-                (context as? android.app.Activity)?.finishAndRemoveTask()
-            }
+            onExitClick = onRequestExit
         )
     }
 }
