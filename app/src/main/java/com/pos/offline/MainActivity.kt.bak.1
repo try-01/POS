@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,12 +35,6 @@ import androidx.compose.material.icons.rounded.Assessment
 import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.ShoppingCart
-import androidx.compose.material.icons.rounded.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -60,7 +55,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.draw.clip
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pos.offline.data.di.ServiceLocator
 import com.pos.offline.ui.inventory.InventoryScreen
@@ -111,201 +105,65 @@ private fun AppRoot() {
     val scope = rememberCoroutineScope()
     var dest by rememberSaveable { mutableStateOf(Dest.POS) }
 
-    // Memantau status shift aktif secara dinamis dari DB
-    val openShift by posViewModel.openShift.collectAsStateWithLifecycle()
-
-    // State Dialog Exit tersentralisasi di Root Level
-    var showExitDialog by rememberSaveable { mutableStateOf(false) }
-
-    // Intercept Back HP 1: Jika tidak berada di halaman Kasir, kembalikan ke Kasir
     BackHandler(enabled = dest != Dest.POS) {
-        dest = Dest.POS
-    }
-
-    // Intercept Back HP 2: Jika sudah di Kasir, cegah keluar paksa dan tampilkan dialog validasi shift
-    BackHandler(enabled = dest == Dest.POS) {
-        showExitDialog = true
-    }
-
-    // Dialog Konfirmasi Keluar Tersentralisasi (Root Level)
-    if (showExitDialog) {
-        val shift = openShift
-        if (shift != null) {
-            // Skenario A: Masih ada shift aktif (Warning Keras)
-            AlertDialog(
-                onDismissRequest = { showExitDialog = false },
-                icon = {
-                    Icon(
-                        Icons.Rounded.Warning,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(28.dp)
-                    )
-                },
-                title = {
-                    Text(
-                        "Ada Shift Kasir Aktif!",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                text = {
-                    Text(
-                        "Shift kasir atas nama ${shift.cashierName} masih berjalan. " +
-                            "Untuk keakuratan laporan keuangan dan laci kas (rekonsiliasi uang fisik), " +
-                            "sangat disarankan untuk menutup shift terlebih dahulu di tab Kasir.",
-                        fontSize = 13.sp
-                    )
-                },
-                confirmButton = {
-                    // Tutup Shift Dulu (Bobot Visual: Tinggi / Filled Button)
-                    Button(
-                        onClick = {
-                            showExitDialog = false
-                            dest = Dest.POS
-                        }
-                    ) {
-                        Text("Tutup Shift Dulu", fontSize = 13.sp)
-                    }
-                },
-                dismissButton = {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Tetap Keluar (Bobot Visual: Rendah / Text Button dengan warna merah bahaya)
-                        TextButton(
-                            onClick = {
-                                showExitDialog = false
-                                (context as? android.app.Activity)?.finishAndRemoveTask()
-                            },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error
-                            )
-                        ) {
-                            Text("Tetap Keluar", fontSize = 13.sp)
-                        }
-                        // Batal (Bobot Visual: Menengah / Outlined Button)
-                        OutlinedButton(
-                            onClick = { showExitDialog = false }
-                        ) {
-                            Text("Batal", fontSize = 13.sp)
-                        }
-                    }
-                }
-            )
-        } else {
-            // Skenario B: Tidak ada shift aktif (Konfirmasi Bersih)
-            AlertDialog(
-                onDismissRequest = { showExitDialog = false },
-                title = {
-                    Text(
-                        "Keluar Aplikasi?",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                text = {
-                    Text(
-                        "Semua data transaksi dan laci kas Anda telah tersimpan dengan aman di database lokal. " +
-                            "Sesi kasir Anda saat ini bersih (tidak ada shift berjalan). Keluar sekarang?",
-                        fontSize = 13.sp
-                    )
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            showExitDialog = false
-                            (context as? android.app.Activity)?.finishAndRemoveTask()
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Text("Keluar", fontSize = 13.sp)
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showExitDialog = false }) {
-                        Text("Batal", fontSize = 13.sp)
-                    }
-                }
-            )
-        }
+    dest = Dest.POS
     }
 
     val density = LocalDensity.current
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    if (isLandscape) {
-        Row(
-            Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
+if (isLandscape) {
+    Row(
+        Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .imePadding()
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .imePadding()
-            ) {
-                ScreenContent(
-                    dest = dest,
-                    posViewModel = posViewModel,
-                    inventoryViewModel = inventoryViewModel,
-                    reportViewModel = reportViewModel,
-                    settingsViewModel = settingsViewModel,
-                    printerViewModel = printerViewModel,
-                    storeProfileViewModel = storeProfileViewModel,
-                    context = context,
-                    scope = scope,
-                    onNavigateToSettings = { dest = Dest.SETTINGS },
-                    onRequestExit = { showExitDialog = true },
-                    isLandscape = true
-                )
-            }
-            SideNavRail(selected = dest, onSelect = { dest = it })
+            ScreenContent(
+                dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel,
+                printerViewModel, storeProfileViewModel, context, scope,
+                onNavigateToSettings = { dest = Dest.SETTINGS },
+                isLandscape = true
+            )
         }
-    } else {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
+        SideNavRail(selected = dest, onSelect = { dest = it })
+    }
+} else {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .imePadding()
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .imePadding()
-            ) {
-                ScreenContent(
-                    dest = dest,
-                    posViewModel = posViewModel,
-                    inventoryViewModel = inventoryViewModel,
-                    reportViewModel = reportViewModel,
-                    settingsViewModel = settingsViewModel,
-                    printerViewModel = printerViewModel,
-                    storeProfileViewModel = storeProfileViewModel,
-                    context = context,
-                    scope = scope,
-                    onNavigateToSettings = { dest = Dest.SETTINGS },
-                    onRequestExit = { showExitDialog = true },
-                    isLandscape = false
-                )
-            }
+            ScreenContent(
+                dest, posViewModel, inventoryViewModel, reportViewModel, settingsViewModel,
+                printerViewModel, storeProfileViewModel, context, scope,
+                onNavigateToSettings = { dest = Dest.SETTINGS },
+                isLandscape = false
+            )
+        }
 
-            AnimatedVisibility(
-                visible = !imeVisible,
-                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
-            ) {
-                BottomNavBar(selected = dest, onSelect = { dest = it })
-            }
+        AnimatedVisibility(
+            visible = !imeVisible,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+        ) {
+            BottomNavBar(selected = dest, onSelect = { dest = it })
         }
     }
 }
-
+}
 @Composable
 private fun ScreenContent(
     dest: Dest,
@@ -318,7 +176,6 @@ private fun ScreenContent(
     context: android.content.Context,
     scope: kotlinx.coroutines.CoroutineScope,
     onNavigateToSettings: () -> Unit,
-    onRequestExit: () -> Unit,
     isLandscape: Boolean
 ) {
     when (dest) {
@@ -353,12 +210,10 @@ private fun ScreenContent(
         Dest.SETTINGS -> SettingsScreen(
             viewModel = settingsViewModel,
             printerViewModel = printerViewModel,
-            storeProfileViewModel = storeProfileViewModel,
-            onExitClick = onRequestExit
+            storeProfileViewModel = storeProfileViewModel
         )
     }
 }
-
 @Composable
 private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
     Surface(
@@ -401,7 +256,6 @@ private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
         }
     }
 }
-
 @Composable
 private fun SideNavRail(selected: Dest, onSelect: (Dest) -> Unit) {
     Surface(
