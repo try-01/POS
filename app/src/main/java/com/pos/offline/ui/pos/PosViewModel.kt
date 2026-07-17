@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
 data class Totals(
     val subtotal: Long = 0L,
     val discount: Long = 0L,
@@ -46,15 +47,18 @@ data class Totals(
     val total: Long = 0L,
     val discountCapped: Boolean = false
 )
+
 sealed interface PosUiEvent {
     data class ShowMessage(val message: String) : PosUiEvent
 }
+
 sealed interface CheckoutState {
     data object Idle : CheckoutState
     data object Processing : CheckoutState
     data class Success(val result: CheckoutResult) : CheckoutState
     data class Error(val message: String) : CheckoutState
 }
+
 @OptIn(kotlinx.coroutines.FlowPreview::class, ExperimentalCoroutinesApi::class)
 class PosViewModel(
     private val productRepository: ProductRepository,
@@ -67,8 +71,10 @@ class PosViewModel(
     private val printerRepository: PrinterRepository,
     private val printerConnectionFactory: PrinterConnectionFactory
 ) : ViewModel() {
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
     private val _discountType = MutableStateFlow(DiscountType.NOMINAL)
     val discountType: StateFlow<DiscountType> = _discountType.asStateFlow()
 
@@ -80,41 +86,47 @@ class PosViewModel(
 
     private val _paid = MutableStateFlow(0L)
     val paid: StateFlow<Long> = _paid.asStateFlow()
+
     private val _paymentMethod = MutableStateFlow(PaymentMethod.CASH)
     val paymentMethod: StateFlow<PaymentMethod> = _paymentMethod.asStateFlow()
+
     val products: StateFlow<List<ProductEntity>> = _searchQuery
         .debounce(180)
         .distinctUntilChanged()
         .flatMapLatest { productRepository.search(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val cart: StateFlow<List<CartItemEntity>> = cartRepository.cartItems
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val totals: StateFlow<Totals> = combine(
         cart, _discountType, _discountValue, _taxRate
     ) { items, discType, discValue, rate ->
         computeTotals(items, discType, discValue, rate)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Totals())
+
     private val _uiEvents = MutableSharedFlow<PosUiEvent>(extraBufferCapacity = 4)
     val uiEvents: SharedFlow<PosUiEvent> = _uiEvents.asSharedFlow()
+
     private val _checkoutState = MutableStateFlow<CheckoutState>(CheckoutState.Idle)
     val checkoutState: StateFlow<CheckoutState> = _checkoutState.asStateFlow()
+
     private val _printUiState = MutableStateFlow<PrintUiState>(PrintUiState.Idle)
     val printUiState: StateFlow<PrintUiState> = _printUiState.asStateFlow()
 
-    // BATCH H8: guard anti-dobel-klik TUNGGAL (bukan Set<Long> seperti Test Print di
-    // PrinterViewModel) karena tombol "Buka Laci" selalu menyasar SATU target yang sama
-    // (printer default) -- tidak ada daftar printer per-baris seperti Test Print.
-    // Flag ini DIPAKAI BERSAMA oleh trigger manual (openCashDrawerManually) dan trigger
-    // otomatis pasca-checkout Tunai (maybeAutoOpenDrawer), supaya keduanya tidak tabrakan
-    // berebut sesi Bluetooth/WiFi/USB yang sama (Q6).
     private val _isOpeningDrawer = MutableStateFlow(false)
     val isOpeningDrawer: StateFlow<Boolean> = _isOpeningDrawer.asStateFlow()
+
+    // BATCH H8: State untuk Toggle Buka Laci (Default OFF)
+    private val _openDrawerOnPrint = MutableStateFlow(false)
+    val openDrawerOnPrint: StateFlow<Boolean> = _openDrawerOnPrint.asStateFlow()
 
     val activeCashiers: StateFlow<List<CashierEntity>> = cashierRepository.activeCashiers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val openShift: StateFlow<ShiftEntity?> = shiftRepository.openShift
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     val openShifts: StateFlow<List<ShiftEntity>> = shiftRepository.openShifts
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -126,14 +138,19 @@ class PosViewModel(
 
     private val _shiftSummary = MutableStateFlow<ShiftSummary?>(null)
     val shiftSummary: StateFlow<ShiftSummary?> = _shiftSummary.asStateFlow()
+
     private val _endShiftTarget = MutableStateFlow<ShiftEntity?>(null)
     val endShiftTarget: StateFlow<ShiftEntity?> = _endShiftTarget.asStateFlow()
+
     private val _showShiftListDialog = MutableStateFlow(false)
     val showShiftListDialog: StateFlow<Boolean> = _showShiftListDialog.asStateFlow()
 
+    fun toggleOpenDrawerOnPrint(enabled: Boolean) {
+        _openDrawerOnPrint.value = enabled
+    }
+
     fun openShiftListDialog() { _showShiftListDialog.value = true }
     fun dismissShiftListDialog() { _showShiftListDialog.value = false }
-
     fun openStartShiftDialog() { _showStartShiftDialog.value = true }
     fun dismissStartShiftDialog() { _showStartShiftDialog.value = false }
 
@@ -143,6 +160,7 @@ class PosViewModel(
         _showStartShiftDialog.value = false
         _uiEvents.emit(PosUiEvent.ShowMessage("Shift dimulai untuk ${cashier.name}."))
     }
+
     fun openEndShiftDialog(shift: ShiftEntity) = viewModelScope.launch {
         _endShiftTarget.value = shift
         _shiftSummary.value = shiftRepository.getShiftSummary(shift.id)
@@ -154,6 +172,7 @@ class PosViewModel(
         _shiftSummary.value = null
         _endShiftTarget.value = null
     }
+
     fun endShift(actualCash: Long) = viewModelScope.launch {
         val shift = _endShiftTarget.value ?: return@launch
         shiftRepository.endShift(shift.id, actualCash)
@@ -162,13 +181,16 @@ class PosViewModel(
         _endShiftTarget.value = null
         _uiEvents.emit(PosUiEvent.ShowMessage("Shift ditutup untuk ${shift.cashierName}."))
     }
+
     fun search(q: String) { _searchQuery.value = q }
+
     fun setDiscountValue(raw: Double) {
         _discountValue.value = when (_discountType.value) {
             DiscountType.NOMINAL -> raw.coerceAtLeast(0.0)
             DiscountType.PERCENT -> raw.coerceIn(0.0, 100.0)
         }
     }
+
     fun toggleDiscountType() {
         _discountType.value = if (_discountType.value == DiscountType.NOMINAL) {
             DiscountType.PERCENT
@@ -230,12 +252,13 @@ class PosViewModel(
     }
 
     fun clearCart() = viewModelScope.launch { cartRepository.clear() }
+
     fun checkout() = viewModelScope.launch {
         val currentCart = cart.value
         if (currentCart.isEmpty()) return@launch
 
         _checkoutState.value = CheckoutState.Processing
-        _printUiState.value = PrintUiState.Idle // reset sisa status cetak transaksi sebelumnya
+        _printUiState.value = PrintUiState.Idle 
         _checkoutState.value = try {
             val shift = openShift.value
             val currentTotal = totals.value.total
@@ -261,13 +284,8 @@ class PosViewModel(
         } catch (e: Exception) {
             CheckoutState.Error("Gagal memproses: ${e.message ?: "kesalahan tak dikenal"}")
         }
+
         (_checkoutState.value as? CheckoutState.Success)?.let { success ->
-            // BATCH H8 (Q7 Opsi A): buka laci DULU (kasir butuh laci SEGERA untuk kembalian),
-            // baru cetak struk. Jeda 500ms HANYA dijalankan jika benar-benar terjadi upaya
-            // koneksi ke printer (attemptedDrawer == true) -- supaya transaksi non-tunai atau
-            // kondisi "belum ada printer default" tidak kena delay percuma tanpa manfaat.
-            val attemptedDrawer = maybeAutoOpenDrawer(success.result)
-            if (attemptedDrawer) delay(AUTO_DRAWER_TO_PRINT_GAP_MS)
             maybeAutoPrint(success.result)
         }
     }
@@ -279,45 +297,9 @@ class PosViewModel(
         }
     }
 
-    // BATCH H8 (Q1 auto-trigger): buka laci otomatis HANYA untuk PaymentMethod.CASH.
-    // Q4: silent fail + log, TIDAK ADA banner/snackbar untuk jalur otomatis ini -- beda
-    // dengan tombol manual openCashDrawerManually() yang WAJIB kasih feedback (Q8).
-    // Return value = apakah benar-benar terjadi upaya koneksi ke printer (dipakai checkout()
-    // untuk memutuskan perlu delay 500ms sebelum cetak struk atau tidak, sesuai saran Q7).
-    private suspend fun maybeAutoOpenDrawer(result: CheckoutResult): Boolean {
-        if (result.transaction.paymentMethod != PaymentMethod.CASH.name) return false
-        if (_isOpeningDrawer.value) {
-            Log.w(TAG, "Auto-buka laci dilewati: sedang ada proses buka-laci lain berjalan.")
-            return false
-        }
-
-        val printer = printerRepository.getDefault()
-        if (printer == null) {
-            Log.w(TAG, "Auto-buka laci dilewati: belum ada printer default yang diatur.")
-            return false
-        }
-
-        _isOpeningDrawer.value = true
-        return try {
-            when (val outcome = printerConnectionFactory.openCashDrawer(printer)) {
-                is CashDrawerResult.Success -> Unit
-                is CashDrawerResult.Failure ->
-                    Log.w(TAG, "Auto-buka laci gagal: ${outcome.message}")
-            }
-            true
-        } catch (e: Exception) {
-            Log.w(TAG, "Auto-buka laci gagal karena exception tak terduga: ${e.message}")
-            true
-        } finally {
-            _isOpeningDrawer.value = false
-        }
-    }
-
-    // BATCH H8 (Q1 Opsi C): tombol manual, SELALU bisa dipanggil kapan saja, tidak terikat
-    // transaksi apa pun. Q8: kasih feedback via Snackbar (_uiEvents) baik sukses maupun gagal,
-    // supaya kasir tahu hasil aksinya (beda dengan jalur otomatis yang silent per Q4).
+    // Tombol Buka Laci manual dari TopBar (Tidak terikat pada transaksi/struk)
     fun openCashDrawerManually() {
-        if (_isOpeningDrawer.value) return // guard anti-dobel-klik (Q6)
+        if (_isOpeningDrawer.value) return 
         viewModelScope.launch {
             _isOpeningDrawer.value = true
             try {
@@ -344,7 +326,8 @@ class PosViewModel(
         if (_printUiState.value is PrintUiState.Printing) return
         viewModelScope.launch {
             _printUiState.value = PrintUiState.Printing(result)
-            val outcome = printCoordinator.printReceiptAuto(result)
+            val openDrawer = _openDrawerOnPrint.value
+            val outcome = printCoordinator.printReceiptAuto(result, openDrawer)
             _printUiState.value = PrintUiState.Result(outcome, result)
         }
     }
@@ -356,7 +339,6 @@ class PosViewModel(
 
     companion object {
         private const val TAG = "PosViewModel"
-        private const val AUTO_DRAWER_TO_PRINT_GAP_MS = 500L
 
         fun computeTotals(
             items: List<CartItemEntity>,

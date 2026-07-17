@@ -106,7 +106,7 @@ object EscPosReceiptFormatter {
 
         // ---- 4. Total ----
         sb.append("\n") // Satu baris jarak eksklusif untuk Total sesuai desain
-        sb.append("[R]<b><font size='big'>TOTAL: ").append(transaction.total.toRupiah()).append("</font></b>\n")
+        sb.append("[C]<b><font size='wide'>TOTAL: ").append(transaction.total.toRupiah()).append("</font></b>\n")
         sb.append(divider(charsPerLine))
 
         // ---- 5. Grid Pembayaran Dinamis (Poin 3, 4, 5) ----
@@ -146,6 +146,8 @@ object EscPosReceiptFormatter {
         if (storeProfile.footerNote.isNotBlank()) {
             appendCenteredMultiline(sb, storeProfile.footerNote)
         }
+
+        sb.append("[L]\n")
 
         return listOfNotNull(logoMarkup, sb.toString())
     }

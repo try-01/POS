@@ -30,7 +30,7 @@ class CancellableBluetoothConnection(private val device: BluetoothDevice) : Devi
     override fun isConnected(): Boolean =
         socket?.isConnected == true && super.isConnected()
 
-    @SuppressLint("MissingPermission") 
+    @SuppressLint("MissingPermission") // dijaga pemanggil: cek hasPermissions() di resolveBluetooth()
     @Suppress("DEPRECATION")
     override fun connect(): DeviceConnection {
         if (isConnected()) return this
@@ -86,6 +86,8 @@ sealed class PrintResult {
     data class Failure(val printer: PrinterEntity, val message: String) : PrintResult()
 }
 
+// BATCH H8: sealed class TERPISAH dari TestPrintResult/PrintResult (sesuai keputusan arsitektur,
+// jangan disatukan meski strukturnya mirip -- konsisten filosofi "guard per-tujuan jangan dicampur").
 sealed class CashDrawerResult {
     object Success : CashDrawerResult()
     data class Failure(val message: String) : CashDrawerResult()
@@ -106,25 +108,43 @@ class PrinterConnectionFactory(
     private val usbHelper: UsbPrinterHelper
 ) {
     suspend fun testPrint(printer: PrinterEntity): TestPrintResult {
-        val outcome = executePrintJob(printer, false) { listOf(buildTestPrintMarkup(printer)) }
+        val outcome = executePrintJob(printer) { listOf(buildTestPrintMarkup(printer)) }
         return when (outcome) {
             is JobOutcome.Success -> TestPrintResult.Success
             is JobOutcome.Failure -> TestPrintResult.Failure(outcome.message)
         }
     }
-
     suspend fun printReceipt(
         printer: PrinterEntity,
-        openCashDrawer: Boolean = false,
         markupBuilder: (EscPosPrinter) -> List<String>
     ): PrintResult {
-        val outcome = executePrintJob(printer, openCashDrawer, markupBuilder)
+        val outcome = executePrintJob(printer, markupBuilder)
         return when (outcome) {
             is JobOutcome.Success -> PrintResult.Success(printer)
             is JobOutcome.Failure -> PrintResult.Failure(printer, outcome.message)
         }
     }
 
+    // BATCH H8: fungsi baru, TIDAK mengubah executePrintJob()/testPrint()/printReceipt() di atas.
+    // Sengaja TIDAK memakai executePrintJob() karena tujuannya beda: tidak butuh EscPosPrinter
+    // penuh (yang mensyaratkan DPI/paperWidth/charPerLine dan otomatis ikut cetak+potong kertas
+    // lewat printFormattedTextAndCut). Buka laci hanya perlu kirim 5 byte mentah
+    // (ESC p m t1 t2) via EscPosPrinterCommands langsung ke koneksi yang sudah tersambung.
+    //
+    // Reuse resolveConnection()+connectWithTimeout()+retry-loop supaya dapat manfaat timeout ~5
+    // detik & auto-retry 2x yang sama seperti test print/cetak struk (sesuai rencana teknis yang
+    // sudah didiskusikan).
+    //
+    // CATATAN ASUMSI (perlu diverifikasi via uji fisik H8a sebelum lanjut ke H8b/H8c):
+    // Saya mengasumsikan EscPosPrinterCommands di DantSu v3.4.0 punya method public connect()/
+    // disconnect() yang chainable (mengembalikan this), mengikuti pola openCashBox() yang sudah
+    // Anda konfirmasi sebelumnya. Karena connection yang sama (`ready.connection`) SUDAH
+    // disambungkan lebih dulu oleh connectWithTimeout() di bawah, pemanggilan commands.connect()
+    // di sini KEMUNGKINAN redundan/no-op (mengikuti pola isConnected()-check standar DeviceConnection
+    // seperti yang terlihat di CancellableBluetoothConnection.connect() kita sendiri) -- tapi saya
+    // TIDAK punya source TcpConnection/UsbConnection bawaan DantSu untuk memastikan 100% aman
+    // dipanggil dua kali. Risikonya rendah (dibungkus try/catch, gagal = CashDrawerResult.Failure,
+    // tidak crash), tapi INI WAJIB DIUJI FISIK dulu ke RPP02N sebelum kita wiring ke UI.
     suspend fun openCashDrawer(printer: PrinterEntity): CashDrawerResult {
         val resolution = resolveConnection(printer)
         val ready = when (resolution) {
@@ -163,7 +183,6 @@ class PrinterConnectionFactory(
 
     private suspend fun executePrintJob(
         printer: PrinterEntity,
-        openCashDrawer: Boolean = false,
         markupBuilder: (EscPosPrinter) -> List<String>
     ): JobOutcome {
         val resolution = resolveConnection(printer)
@@ -184,18 +203,6 @@ class PrinterConnectionFactory(
 
             return try {
                 val escPosPrinter = withContext(Dispatchers.IO) {
-                    // Jika ON: Buka laci tepat sebelum memulai data cetak (Satu koneksi aliran data)
-                    if (openCashDrawer) {
-                        try {
-                            val commands = EscPosPrinterCommands(ready.connection)
-                            commands.openCashBox()
-                            // Memberi JEDA 250 milidetik agar laci terbuka dengan sempurna 
-                            // sebelum data gambar struk masuk ke aliran printer yang sama
-                            Thread.sleep(250)
-                        } catch (e: Exception) {
-                            // Abaikan error laci dan paksa lanjut cetak
-                        }
-                    }
                     EscPosPrinter(
                         ready.connection,
                         DEFAULT_PRINTER_DPI,
@@ -203,19 +210,19 @@ class PrinterConnectionFactory(
                         printer.charPerLine
                     ).useEscAsteriskCommand(true)
                 }
-
-                val markups = markupBuilder(escPosPrinter)
-                withContext(Dispatchers.IO) {
-                    markups.forEachIndexed { index, markup ->
-                        if (index == markups.lastIndex) {
-                            escPosPrinter.printFormattedTextAndCut(markup)
-                        } else {
-                            escPosPrinter.printFormattedText(markup)
-                            delay(1500)
-                        }
-                    }
-                }
-                
+val markups = markupBuilder(escPosPrinter)
+withContext(Dispatchers.IO) {
+    markups.forEachIndexed { index, markup ->
+        if (index == markups.lastIndex) {
+            // Chunk terakhir: cetak dan potong kertas
+            escPosPrinter.printFormattedTextAndCut(markup)
+        } else {
+            // Chunk awal (Logo): cetak tanpa potong, lalu beri jeda RAM
+            escPosPrinter.printFormattedText(markup)
+            delay(1500) // JEDA KRUSIAL: Cegah buffer Kassen/RPP02N overflow
+        }
+    }
+}
                 withContext(Dispatchers.IO) {
                     escPosPrinter.disconnectPrinter()
                 }
@@ -344,7 +351,7 @@ class PrinterConnectionFactory(
     companion object {
         private const val DEFAULT_PRINTER_DPI = 203
         private const val CONNECT_TIMEOUT_MS = 5_000L
-        private const val RETRY_ATTEMPTS_TOTAL = 3
+        private const val RETRY_ATTEMPTS_TOTAL = 3 // 1 percobaan awal + 2 retry
         private const val RETRY_DELAY_MS = 1_500L
     }
 }

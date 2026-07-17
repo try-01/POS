@@ -122,6 +122,7 @@ import java.text.SimpleDateFormat
 import java.io.File
 import java.util.Date
 import java.util.Locale
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PosScreen(
@@ -140,8 +141,10 @@ fun PosScreen(
     val taxRate by viewModel.taxRate.collectAsStateWithLifecycle()
     val paid by viewModel.paid.collectAsStateWithLifecycle()
     val checkoutState by viewModel.checkoutState.collectAsStateWithLifecycle()
+    
     val printUiState by viewModel.printUiState.collectAsStateWithLifecycle()
     val isOpeningDrawer by viewModel.isOpeningDrawer.collectAsStateWithLifecycle()
+    val openDrawerOnPrint by viewModel.openDrawerOnPrint.collectAsStateWithLifecycle()
 
     val paymentMethod by viewModel.paymentMethod.collectAsStateWithLifecycle()
 
@@ -314,15 +317,17 @@ if (isWide) {
     }
 
     when (val state = checkoutState) {
-is CheckoutState.Success -> SuccessDialog(
-    result = state.result,
-    printUiState = printUiState.forTransaction(state.result.transaction.id),
-    onPrint = { viewModel.printReceipt(state.result) },
-    onExport = { onExportPdf(state.result) },
-    onSharePdfFile = onSharePdfFile,
-    onNavigateToSettings = onNavigateToSettings,
-    onDismiss = viewModel::resetCheckoutState
-)
+        is CheckoutState.Success -> SuccessDialog(
+            result = state.result,
+            printUiState = printUiState.forTransaction(state.result.transaction.id),
+            openDrawerOnPrint = openDrawerOnPrint,
+            onToggleOpenDrawer = viewModel::toggleOpenDrawerOnPrint,
+            onPrint = { viewModel.printReceipt(state.result) },
+            onExport = { onExportPdf(state.result) },
+            onSharePdfFile = onSharePdfFile,
+            onNavigateToSettings = onNavigateToSettings,
+            onDismiss = viewModel::resetCheckoutState
+        )
         is CheckoutState.Error -> AlertDialog(
             onDismissRequest = viewModel::resetCheckoutState,
             confirmButton = { TextButton(onClick = viewModel::resetCheckoutState) { Text("Tutup") } },
@@ -407,9 +412,6 @@ private fun ShiftIndicatorBar(
             )
         }
 
-        // BATCH H8 (Q1 Opsi C): tombol manual "Buka Laci" -- SELALU ada, kapan saja, tidak
-        // terikat transaksi apa pun. Ikon Icons.Rounded.PointOfSale (Q9, butuh dependency
-        // material-icons-extended yang sudah ditambahkan user di build.gradle.kts).
         Box(
             modifier = Modifier
                 .size(26.dp)
@@ -459,6 +461,7 @@ private fun formatElapsedSince(startedAt: Long): String {
     val minutes = totalMinutes % 60
     return if (hours > 0) "berjalan ${hours}j ${minutes}m" else "berjalan ${minutes}m"
 }
+
 @Composable
 private fun ManageShiftsDialog(
     shifts: List<ShiftEntity>,
@@ -866,6 +869,7 @@ private fun CartPane(
     var qtyEditItem by remember { mutableStateOf<CartItemEntity?>(null) }
     val showFull = !collapsible || expanded
     var showInsufficientPaymentDialog by remember { mutableStateOf(false) }
+    
     fun attemptCheckout() {
         if (paid in 1 until totals.total) {
             showInsufficientPaymentDialog = true
@@ -1127,6 +1131,7 @@ private fun CartPane(
         )
     }
 }
+
 @Composable
 private fun InsufficientPaymentDialog(
     paid: Long,
@@ -1502,6 +1507,7 @@ private fun MoneyField(
         }
     )
 }
+
 @Composable
 private fun DiscountField(
     type: DiscountType,
@@ -1778,6 +1784,8 @@ private fun QuantityEditDialog(
 private fun SuccessDialog(
     result: CheckoutResult,
     printUiState: PrintUiState,
+    openDrawerOnPrint: Boolean,
+    onToggleOpenDrawer: (Boolean) -> Unit,
     onPrint: () -> Unit,
     onExport: () -> Unit,
     onSharePdfFile: (File) -> Unit,
@@ -1811,6 +1819,23 @@ private fun SuccessDialog(
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Checkbox Toggle Laci
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onToggleOpenDrawer(!openDrawerOnPrint) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.Checkbox(
+                            checked = openDrawerOnPrint,
+                            onCheckedChange = onToggleOpenDrawer
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Buka laci saat mencetak", style = MaterialTheme.typography.bodyMedium)
+                    }
+
                     FilledTonalButton(
                         onClick = onPrint,
                         enabled = printUiState !is PrintUiState.Printing,
@@ -1844,6 +1869,7 @@ private fun SuccessDialog(
         }
     )
 }
+
 @Composable
 private fun PrintResultBanner(
     printUiState: PrintUiState,
