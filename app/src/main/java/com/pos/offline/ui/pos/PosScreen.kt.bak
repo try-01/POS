@@ -116,7 +116,7 @@ import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.ShiftSummary
 import androidx.compose.ui.window.DialogProperties
-limport com.pos.offline.ui.components.BarcodeScannerCamera
+import com.pos.offline.ui.components.BarcodeScannerCamera
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.discountInlineLabel
 import com.pos.offline.ui.components.formatPercentTrim
