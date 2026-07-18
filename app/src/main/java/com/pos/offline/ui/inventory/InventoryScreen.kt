@@ -1,5 +1,14 @@
 package com.pos.offline.ui.inventory
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.pos.offline.ui.components.BarcodeScannerCamera
+import com.pos.offline.util.CameraPermissionState
+import com.pos.offline.util.openAppSettings
+import com.pos.offline.util.rememberCameraPermissionState
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -540,8 +549,6 @@ private fun SortMenuButton(
 // ============================ FORM TAMBAH / EDIT ============================
 // Dialog dibiarkan memakai OutlinedTextField standar (tidak perlu sepadat list)
 // tapi spacing dipangkas sedikit agar tidak terlalu tinggi di layar kecil.
-
-@Composable
 @Composable
 private fun ProductFormDialog(
     state: ProductFormState,
@@ -572,12 +579,24 @@ private fun ProductFormDialog(
     val maxContentHeight = (configuration.screenHeightDp * 0.42f).dp
     val scrollState = rememberScrollState()
 
+    val context = LocalContext.current
+    
+    // CEK APAKAH PERANGKAT MEMILIKI KAMERA FISIK
+    val hasCamera = remember {
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+    }
+
     LaunchedEffect(barcode) {
         val trimmed = barcode.trim()
         if (trimmed.isBlank()) { barcodeConflict = null; return@LaunchedEffect }
         delay(400) // Debounce: Tunggu user selesai ngetik 0.4 detik
         barcodeConflict = checkBarcodeConflict(trimmed, state.id)
     }
+
+        // State Izin Kamera & Scanner (hanya relevan jika hasCamera = true)
+    val (permState, requestPermission) = rememberCameraPermissionState()
+    var showScanner by remember { mutableStateOf(false) }
+    var pendingOpenScanner by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -597,7 +616,7 @@ private fun ProductFormDialog(
                         label = { Text("Barcode", style = MaterialTheme.typography.bodySmall) },
                         singleLine = true,
                         isError = barcodeConflict != null,
-                        supportingText = if (barcodeConflict != null || permState == CameraPermissionState.PERMANENTLY_DENIED) {
+                        supportingText = if (barcodeConflict != null || (hasCamera && permState == CameraPermissionState.PERMANENTLY_DENIED)) {
                             {
                                 Text(
                                     barcodeConflict?.let { "Dipakai oleh: $it" } ?: "Izin kamera ditolak — aktifkan di Pengaturan",
@@ -616,14 +635,22 @@ private fun ProductFormDialog(
                                         Icon(Icons.Rounded.Close, contentDescription = "Hapus", modifier = Modifier.size(14.dp))
                                     }
                                 }
-                                IconButton(onClick = {
-                                    when (permState) {
-                                        CameraPermissionState.GRANTED -> showScanner = true
-                                        CameraPermissionState.PERMANENTLY_DENIED -> {}
-                                        else -> { pendingOpenScanner = true; requestPermission() }
+                                // TAMPILKAN IKON SCAN HANYA JIKA DEVICE PUNYA KAMERA
+                                if (hasCamera) {
+                                    IconButton(onClick = {
+                                        when (permState) {
+                                            CameraPermissionState.GRANTED -> showScanner = true
+                                            CameraPermissionState.PERMANENTLY_DENIED -> {
+                                                openAppSettings(context)
+                                            }
+                                            else -> {
+                                                pendingOpenScanner = true
+                                                requestPermission()
+                                            }
+                                        }
+                                    }, modifier = Modifier.size(24.dp)) {
+                                        Icon(Icons.Rounded.QrCodeScanner, contentDescription = "Scan", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
                                     }
-                                }, modifier = Modifier.size(24.dp)) {
-                                    Icon(Icons.Rounded.QrCodeScanner, contentDescription = "Scan", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
                                 }
                             }
                         }
@@ -666,6 +693,30 @@ private fun ProductFormDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
     )
+
+    // Dialog Full-Screen Scanner untuk Form Inventaris
+    if (showScanner) {
+        Dialog(
+            onDismissRequest = { showScanner = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                BarcodeScannerCamera(
+                    onBarcodeScanned = { code ->
+                        showScanner = false
+                        barcode = code // Otomatis isi field barcode
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+                IconButton(
+                    onClick = { showScanner = false },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = "Tutup")
+                }
+            }
+        }
+    }
 }
 
 @Composable

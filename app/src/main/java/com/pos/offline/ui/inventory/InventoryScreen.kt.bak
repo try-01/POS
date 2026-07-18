@@ -1,5 +1,13 @@
 package com.pos.offline.ui.inventory
 
+import android.Manifest
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.pos.offline.ui.components.BarcodeScannerCamera
+import com.pos.offline.util.CameraPermissionState
+import com.pos.offline.util.openAppSettings
+import com.pos.offline.util.rememberCameraPermissionState
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -192,7 +200,8 @@ Row(
         ProductFormDialog(
             state = state,
             onSave = viewModel::save,
-            onDismiss = viewModel::dismissForm
+            onDismiss = viewModel::dismissForm,
+            checkBarcodeConflict = viewModel::checkBarcodeConflict // <--- TAMBAHKAN BARIS INI
         )
     }
 
@@ -539,12 +548,12 @@ private fun SortMenuButton(
 // ============================ FORM TAMBAH / EDIT ============================
 // Dialog dibiarkan memakai OutlinedTextField standar (tidak perlu sepadat list)
 // tapi spacing dipangkas sedikit agar tidak terlalu tinggi di layar kecil.
-
 @Composable
 private fun ProductFormDialog(
     state: ProductFormState,
     onSave: (ProductFormState) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    checkBarcodeConflict: suspend (String, Long) -> String? // <--- PARAM BARU
 ) {
     var name by remember(state.id) { mutableStateOf(state.name) }
     var sku by remember(state.id) { mutableStateOf(state.sku) }
@@ -557,6 +566,9 @@ private fun ProductFormDialog(
     var cost by remember(state.id) {
         mutableStateOf(if (state.cost > 0) state.cost.toString() else "")
     }
+    var barcodeConflict by remember(state.id) {
+         mutableStateOf<String?>(null) 
+    }
 
     // Batas tinggi konten dihitung dinamis dari tinggi layar — krusial untuk
     // mode landscape & saat keyboard terbuka, di mana ruang vertikal sangat
@@ -565,6 +577,25 @@ private fun ProductFormDialog(
     val configuration = LocalConfiguration.current
     val maxContentHeight = (configuration.screenHeightDp * 0.42f).dp
     val scrollState = rememberScrollState()
+
+    val context = LocalContext.current
+    
+    // CEK APAKAH PERANGKAT MEMILIKI KAMERA FISIK
+    val hasCamera = remember {
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+    }
+
+    LaunchedEffect(barcode) {
+        val trimmed = barcode.trim()
+        if (trimmed.isBlank()) { barcodeConflict = null; return@LaunchedEffect }
+        delay(400) // Debounce: Tunggu user selesai ngetik 0.4 detik
+        barcodeConflict = checkBarcodeConflict(trimmed, state.id)
+    }
+
+        // State Izin Kamera & Scanner (hanya relevan jika hasCamera = true)
+    val (permState, requestPermission) = rememberCameraPermissionState()
+    var showScanner by remember { mutableStateOf(false) }
+    var pendingOpenScanner by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -579,24 +610,50 @@ private fun ProductFormDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Nama Produk *", style = MaterialTheme.typography.bodySmall) },
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = sku,
-                    onValueChange = { sku = it },
-                    label = { Text("SKU (opsional)", style = MaterialTheme.typography.bodySmall) },
-                    supportingText = { Text("Kosongkan untuk dibuat otomatis", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp)) },
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                        value = barcode,
+                        onValueChange = { barcode = it },
+                        label = { Text("Barcode", style = MaterialTheme.typography.bodySmall) },
+                        singleLine = true,
+                        isError = barcodeConflict != null,
+                        supportingText = if (barcodeConflict != null || (hasCamera && permState == CameraPermissionState.PERMANENTLY_DENIED)) {
+                            {
+                                Text(
+                                    barcodeConflict?.let { "Dipakai oleh: $it" } ?: "Izin kamera ditolak — aktifkan di Pengaturan",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (barcodeConflict != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        } else null,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1.2f),
+                        trailingIcon = {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 4.dp)) {
+                                if (barcode.isNotEmpty()) {
+                                    IconButton(onClick = { barcode = "" }, modifier = Modifier.size(24.dp)) {
+                                        Icon(Icons.Rounded.Close, contentDescription = "Hapus", modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                                // TAMPILKAN IKON SCAN HANYA JIKA DEVICE PUNYA KAMERA
+                                if (hasCamera) {
+                                    IconButton(onClick = {
+                                        when (permState) {
+                                            CameraPermissionState.GRANTED -> showScanner = true
+                                            CameraPermissionState.PERMANENTLY_DENIED -> {
+                                                openAppSettings(context)
+                                            }
+                                            else -> {
+                                                pendingOpenScanner = true
+                                                requestPermission()
+                                            }
+                                        }
+                                    }, modifier = Modifier.size(24.dp)) {
+                                        Icon(Icons.Rounded.QrCodeScanner, contentDescription = "Scan", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                            }
+                        }
+                    )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MoneyNumberField(price, { price = it }, "Harga Jual", Modifier.weight(1f))
                     MoneyNumberField(cost, { cost = it }, "Modal", Modifier.weight(1f))
@@ -620,19 +677,18 @@ private fun ProductFormDialog(
             }
         },
         confirmButton = {
-            Button(onClick = {
-                onSave(
-                    ProductFormState(
-                        id = state.id,
-                        name = name,
-                        sku = sku,
-                        price = price.toLongOrNull() ?: 0L,
-                        cost = cost.toLongOrNull() ?: 0L,
-                        stock = stock.toIntOrNull() ?: 0,
-                        createdAt = state.createdAt
+            Button(
+                enabled = barcodeConflict == null,
+                onClick = {
+                    onSave(
+                        ProductFormState(
+                            id = state.id, name = name, sku = sku, barcode = barcode,
+                            price = price.toLongOrNull() ?: 0L, cost = cost.toLongOrNull() ?: 0L,
+                            stock = stock.toIntOrNull() ?: 0, createdAt = state.createdAt
+                        )
                     )
-                )
-            }) { Text("Simpan") }
+                }
+            ) { Text("Simpan") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
     )
