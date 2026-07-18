@@ -30,7 +30,7 @@ jobs:
 
       # UBAH: Menggunakan assembleRelease untuk build produksi
       - name: Build APK (Parallel & Cached)
-        run: ./gradlew clean assembleRelease --parallel --build-cache --stacktrace
+        run: ./gradlew assembleRelease --parallel --build-cache --configuration-cache --stacktrace
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
