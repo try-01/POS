@@ -71,6 +71,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -558,6 +561,7 @@ private fun ProductFormDialog(
 ) {
     var name by remember(state.id) { mutableStateOf(state.name) }
     var sku by remember(state.id) { mutableStateOf(state.sku) }
+    var barcode by remember(state.id) { mutableStateOf(state.barcode) } 
     var price by remember(state.id) {
         mutableStateOf(if (state.price > 0) state.price.toString() else "")
     }
@@ -611,6 +615,27 @@ private fun ProductFormDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Nama Produk *", style = MaterialTheme.typography.bodySmall) },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = sku,
+                        onValueChange = { sku = it },
+                        label = { Text("SKU", style = MaterialTheme.typography.bodySmall) },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    OutlinedTextField(
                         value = barcode,
                         onValueChange = { barcode = it },
                         label = { Text("Barcode", style = MaterialTheme.typography.bodySmall) },
@@ -655,6 +680,7 @@ private fun ProductFormDialog(
                             }
                         }
                     )
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MoneyNumberField(price, { price = it }, "Harga Jual", Modifier.weight(1f))
                     MoneyNumberField(cost, { cost = it }, "Modal", Modifier.weight(1f))
