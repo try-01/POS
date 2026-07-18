@@ -33,7 +33,7 @@ fun BarcodeScannerCamera(
     modifier: Modifier = Modifier
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val executor = remember { Executors.newSingleThreadExecutor() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) } // Handler untuk pindah ke Main Thread
     
