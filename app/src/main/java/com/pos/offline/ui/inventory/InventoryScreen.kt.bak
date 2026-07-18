@@ -561,6 +561,7 @@ private fun ProductFormDialog(
 ) {
     var name by remember(state.id) { mutableStateOf(state.name) }
     var sku by remember(state.id) { mutableStateOf(state.sku) }
+    var barcode by remember(state.id) { mutableStateOf(state.barcode) } 
     var price by remember(state.id) {
         mutableStateOf(if (state.price > 0) state.price.toString() else "")
     }
@@ -708,9 +709,14 @@ private fun ProductFormDialog(
                 onClick = {
                     onSave(
                         ProductFormState(
-                            id = state.id, name = name, sku = sku, barcode = barcode,
-                            price = price.toLongOrNull() ?: 0L, cost = cost.toLongOrNull() ?: 0L,
-                            stock = stock.toIntOrNull() ?: 0, createdAt = state.createdAt
+                            id = state.id,
+                            name = name,
+                            sku = sku,
+                            barcode = barcode
+                            price = price.toLongOrNull() ?: 0L,
+                            cost = cost.toLongOrNull() ?: 0L,
+                            stock = stock.toIntOrNull() ?: 0,
+                            createdAt = state.createdAt
                         )
                     )
                 }

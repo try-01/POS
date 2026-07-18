@@ -709,9 +709,14 @@ private fun ProductFormDialog(
                 onClick = {
                     onSave(
                         ProductFormState(
-                            id = state.id, name = name, sku = sku, barcode = barcode,
-                            price = price.toLongOrNull() ?: 0L, cost = cost.toLongOrNull() ?: 0L,
-                            stock = stock.toIntOrNull() ?: 0, createdAt = state.createdAt
+                            id = state.id,
+                            name = name,
+                            sku = sku,
+                            barcode = barcode
+                            price = price.toLongOrNull() ?: 0L,
+                            cost = cost.toLongOrNull() ?: 0L,
+                            stock = stock.toIntOrNull() ?: 0,
+                            createdAt = state.createdAt
                         )
                     )
                 }
