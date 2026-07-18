@@ -2,6 +2,8 @@ package com.pos.offline
 
 import android.content.res.Configuration
 import android.os.Bundle
+import android.view.KeyEvent
+import androidx.activity.viewModels
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -78,6 +80,7 @@ import com.pos.offline.ui.settings.SettingsScreen
 import com.pos.offline.ui.settings.SettingsViewModel
 import com.pos.offline.ui.settings.StoreProfileViewModel
 import com.pos.offline.ui.theme.PosTheme
+import com.pos.offline.util.HardwareScannerInterceptor
 import kotlinx.coroutines.launch
 
 private enum class Dest(val label: String) {
@@ -85,6 +88,18 @@ private enum class Dest(val label: String) {
 }
 
 class MainActivity : ComponentActivity() {
+
+    // Ambil instance PosViewModel yang SAMA PERSIS dengan yang dipakai di Compose AppRoot()
+    private val posViewModel: PosViewModel by viewModels {
+        ServiceLocator.posViewModelFactory()
+    }
+
+    // Inisialisasi interceptor menggunakan trailing lambda.
+    // Parameter maxCharGapMs, minLength, dan maxLength akan menggunakan default value dari class Anda.
+    private val scannerInterceptor = HardwareScannerInterceptor { barcode ->
+        posViewModel.onBarcodeScanned(barcode)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -93,6 +108,11 @@ class MainActivity : ComponentActivity() {
                 AppRoot()
             }
         }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        scannerInterceptor.onKeyEvent(event)
+        return super.dispatchKeyEvent(event) // wajib, jangan pernah dihapus
     }
 }
 

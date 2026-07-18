@@ -16,11 +16,9 @@ import androidx.room.PrimaryKey
     tableName = "products",
     indices = [
         Index(value = ["sku"], unique = true), // SKU unik, pencarian cepat
-        Index(value = ["name"]),               // <--- Tambahkan koma ini
-        Index(value = ["barcode"], unique = true)
+        Index(value = ["name"])                // index nama untuk search LIKE
     ]
 )
-
 data class ProductEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,

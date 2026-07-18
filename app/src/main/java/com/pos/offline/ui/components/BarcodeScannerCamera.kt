@@ -1,0 +1,110 @@
+package com.pos.offline.ui.components
+
+import android.os.Handler
+import android.os.Looper
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.google.mlkit.vision.barcode.Barcode
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.common.InputImage
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+
+@OptIn(ExperimentalGetImage::class)
+@Composable
+fun BarcodeScannerCamera(
+    onBarcodeScanned: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val executor = remember { Executors.newSingleThreadExecutor() }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) } // Handler untuk pindah ke Main Thread
+    
+    val scanner = remember {
+        BarcodeScanning.getClient(
+            BarcodeScannerOptions.Builder()
+                .setBarcodeFormats(
+                    Barcode.FORMAT_EAN_13,
+                    Barcode.FORMAT_EAN_8,
+                    Barcode.FORMAT_UPC_A,
+                    Barcode.FORMAT_UPC_E,
+                    Barcode.FORMAT_CODE_128
+                )
+                .build()
+        )
+    }
+    val scanned = remember { AtomicBoolean(false) }
+    var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            cameraProvider?.unbindAll()
+            executor.shutdown()
+            scanner.close()
+        }
+    }
+
+    AndroidView(
+        modifier = modifier,
+        factory = { c ->
+            val previewView = PreviewView(c)
+            val providerFuture = ProcessCameraProvider.getInstance(c)
+            providerFuture.addListener({
+                val provider = providerFuture.get()
+                cameraProvider = provider
+                val preview = Preview.Builder().build().also {
+                    it.setSurfaceProvider(previewView.surfaceProvider)
+                }
+                val analysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+                analysis.setAnalyzer(executor) { proxy ->
+                    val mediaImage = proxy.image
+                    if (mediaImage == null || scanned.get()) {
+                        proxy.close()
+                        return@setAnalyzer
+                    }
+                    val input = InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
+                    scanner.process(input)
+                        .addOnSuccessListener { barcodes ->
+                            barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }?.rawValue?.let { code ->
+                                if (scanned.compareAndSet(false, true)) {
+                                    // PINDAH KE MAIN THREAD SEBELUM MENGIRIM BARCODE
+                                    mainHandler.post { onBarcodeScanned(code) }
+                                }
+                            }
+                        }
+                        .addOnCompleteListener { proxy.close() }
+                }
+                try {
+                    provider.unbindAll()
+                    provider.bindToLifecycle(
+                        lifecycleOwner,
+                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        preview,
+                        analysis
+                    )
+                } catch (e: Exception) {
+                    // Abaikan error binding
+                }
+            }, ContextCompat.getMainExecutor(c))
+            previewView
+        }
+    )
+}

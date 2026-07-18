@@ -29,8 +29,4 @@ class ProductRepository(private val productDao: ProductDao) {
 
     /** Arsipkan produk (soft-delete) — hilang dari katalog, data tetap utuh. */
     suspend fun softDelete(id: Long) = setActive(id, false)
-
-    suspend fun getProductByBarcode(barcode: String): ProductEntity? {
-        return productDao.getByBarcode(barcode)
-    }
 }

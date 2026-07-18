@@ -1,5 +1,6 @@
 package com.pos.offline.ui.pos
 
+import android.Manifest
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,6 +56,8 @@ import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -102,6 +105,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.local.entity.CartItemEntity
 import com.pos.offline.data.local.entity.CashierEntity
@@ -111,6 +115,10 @@ import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.ShiftSummary
+import androidx.compose.ui.window.DialogProperties
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import com.pos.offline.ui.components.BarcodeScannerCamera
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.discountInlineLabel
 import com.pos.offline.ui.components.formatPercentTrim
@@ -183,6 +191,18 @@ fun PosScreen(
         }
     }
 
+    // --- Barcode Scanner State ---
+    val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
+    var showScanner by remember { mutableStateOf(false) }
+    var pendingOpen by remember { mutableStateOf(false) }
+
+    LaunchedEffect(cameraPermissionState.status) {
+        if (pendingOpen && cameraPermissionState.status.isGranted) {
+            showScanner = true
+            pendingOpen = false
+        }
+    }
+
     var cartExpanded by remember { mutableStateOf(false) }
     LaunchedEffect(isCartEmpty) {
         cartExpanded = !isCartEmpty
@@ -210,83 +230,67 @@ fun PosScreen(
                     onOpenDrawerClick = viewModel::openCashDrawerManually
                 )
                 Spacer(Modifier.height(4.dp))
-                CompactSearchBar(
-                    query = query,
-                    onQueryChange = viewModel::search,
-                    modifier = Modifier.fillMaxWidth().height(36.dp)
-                )
+                
+                // Baris Pencarian + Tombol Scan
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CompactSearchBar(
+                        query = query,
+                        onQueryChange = viewModel::search,
+                        modifier = Modifier.weight(1f).height(36.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            if (cameraPermissionState.status.isGranted) {
+                                showScanner = true
+                            } else {
+                                pendingOpen = true
+                                cameraPermissionState.launchPermissionRequest()
+                            }
+                        },
+                        modifier = Modifier.height(36.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.QrCodeScanner, 
+                            contentDescription = "Scan Barcode", 
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("Scan")
+                    }
+                }
             }
         },
         contentWindowInsets = WindowInsets.statusBars
     ) { inner ->
         BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(inner)
-    ) {
-        val isWide = forceWideLayout || maxWidth >= 840.dp
-        val maxH = maxHeight
-
-        val density = LocalDensity.current
-        val imeVisible = WindowInsets.ime.getBottom(density) > 0
-
-if (isWide) {
-    Row(Modifier.fillMaxSize()) {
-        ProductPane(
-            modifier = Modifier.weight(1f).fillMaxHeight(),
-            products = products,
-            cartQtyByProductId = cartQtyByProductId,
-            onAdd = viewModel::addToCart
-        )
-        Spacer(Modifier.width(12.dp))
-        CartPane(
             modifier = Modifier
-                .fillMaxHeight()
-                .widthIn(min = 320.dp, max = 420.dp),
-            cart = cart,
-            totals = totals,
-            discountType = discountType,
-            discountValue = discountValue,
-            taxRate = taxRate,
-            paid = paid,
-            change = change,
-            paymentMethod = paymentMethod,
-            stockByProductId = stockByProductId,
-            onDiscountTypeToggle = viewModel::toggleDiscountType,
-            onDiscountValueChange = viewModel::setDiscountValue,
-            onTaxRateChange = viewModel::setTaxRate,
-            onPaidChange = viewModel::setPaid,
-            onPaymentMethodChange = viewModel::setPaymentMethod,
-            onSetQuantity = viewModel::setQuantityDirect,
-            onIncrease = viewModel::increaseQty,
-            onDecrease = viewModel::decreaseQty,
-            onRemove = viewModel::removeFromCart,
-            onClear = viewModel::clearCart,
-            onCheckout = viewModel::checkout,
-            canCheckout = !isCartEmpty && !isProcessing,
-            isProcessing = isProcessing
-        )
-    }
-} else {
-            Column(Modifier.fillMaxSize()) {
-                ProductPane(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    products = products,
-                    cartQtyByProductId = cartQtyByProductId,
-                    onAdd = viewModel::addToCart
-                )
-                Spacer(Modifier.height(8.dp))
-                CartPane(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight()
-                        .let { base ->
-                            when {
-                                !cartExpanded -> base
-                                imeVisible -> base
-                                else -> base.heightIn(max = maxH * 0.65f)
-                                }
-                        },
+                .fillMaxSize()
+                .padding(inner)
+        ) {
+            val isWide = forceWideLayout || maxWidth >= 840.dp
+            val maxH = maxHeight
+
+            val density = LocalDensity.current
+            val imeVisible = WindowInsets.ime.getBottom(density) > 0
+
+            if (isWide) {
+                Row(Modifier.fillMaxSize()) {
+                    ProductPane(
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        products = products,
+                        cartQtyByProductId = cartQtyByProductId,
+                        onAdd = viewModel::addToCart
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    CartPane(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .widthIn(min = 320.dp, max = 420.dp),
                         cart = cart,
                         totals = totals,
                         discountType = discountType,
@@ -308,11 +312,80 @@ if (isWide) {
                         onClear = viewModel::clearCart,
                         onCheckout = viewModel::checkout,
                         canCheckout = !isCartEmpty && !isProcessing,
-                        isProcessing = isProcessing,
-                        collapsible = true,
-                        expanded = cartExpanded,
-                        onToggleExpand = { cartExpanded = !cartExpanded }
+                        isProcessing = isProcessing
                     )
+                }
+            } else {
+                Column(Modifier.fillMaxSize()) {
+                    ProductPane(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        products = products,
+                        cartQtyByProductId = cartQtyByProductId,
+                        onAdd = viewModel::addToCart
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    CartPane(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight()
+                            .let { base ->
+                                when {
+                                    !cartExpanded -> base
+                                    imeVisible -> base
+                                    else -> base.heightIn(max = maxH * 0.65f)
+                                }
+                            },
+                            cart = cart,
+                            totals = totals,
+                            discountType = discountType,
+                            discountValue = discountValue,
+                            taxRate = taxRate,
+                            paid = paid,
+                            change = change,
+                            paymentMethod = paymentMethod,
+                            stockByProductId = stockByProductId,
+                            onDiscountTypeToggle = viewModel::toggleDiscountType,
+                            onDiscountValueChange = viewModel::setDiscountValue,
+                            onTaxRateChange = viewModel::setTaxRate,
+                            onPaidChange = viewModel::setPaid,
+                            onPaymentMethodChange = viewModel::setPaymentMethod,
+                            onSetQuantity = viewModel::setQuantityDirect,
+                            onIncrease = viewModel::increaseQty,
+                            onDecrease = viewModel::decreaseQty,
+                            onRemove = viewModel::removeFromCart,
+                            onClear = viewModel::clearCart,
+                            onCheckout = viewModel::checkout,
+                            canCheckout = !isCartEmpty && !isProcessing,
+                            isProcessing = isProcessing,
+                            collapsible = true,
+                            expanded = cartExpanded,
+                            onToggleExpand = { cartExpanded = !cartExpanded }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Dialog Barcode Scanner ---
+    if (showScanner) {
+        Dialog(
+            onDismissRequest = { showScanner = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                BarcodeScannerCamera(
+                    onBarcodeScanned = { code ->
+                        showScanner = false
+                        viewModel.onBarcodeScanned(code)
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+                IconButton(
+                    onClick = { showScanner = false },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = "Tutup")
                 }
             }
         }
@@ -885,7 +958,6 @@ private fun CartPane(
     var previousCartSize by remember { mutableStateOf(cart.size) }
     LaunchedEffect(cart.size) {
         if (cart.size > previousCartSize && cart.isNotEmpty()) {
-            // Scroll ke item terakhir yang baru ditambahkan
             listState.animateScrollToItem(cart.lastIndex)
         }
         previousCartSize = cart.size
@@ -942,10 +1014,10 @@ private fun CartPane(
             if (showFull) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
-                // 1. AREA DAFTAR ITEM (FIXED HEIGHT, TIDAK AKAN LONCAT)
+                // Box ini mengunci tinggi area daftar agar tidak melompat saat item bertambah
                 Box(
                     modifier = Modifier
-                        .weight(1f) // Mengambil sisa ruang yang tersisa
+                        .weight(1f) // weight(1f) tanpa fill=false akan mengunci tinggi secara rigid
                         .fillMaxWidth()
                 ) {
                     LazyColumn(
@@ -998,6 +1070,52 @@ private fun CartPane(
                                     modifier = Modifier.animateItem()
                                 )
                             }
+
+                            // Masukkan kembali Total & Tombol Bayar ke dalam LazyColumn
+                            // agar daftar item di atas mendapat ruang layar yang maksimal
+                            item(key = "cart_divider") {
+                                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                            }
+
+                            item(key = "cart_totals") {
+                                TotalsSummary(
+                                    totals = totals,
+                                    change = change,
+                                    discountType = discountType,
+                                    discountValue = discountValue,
+                                    taxRate = taxRate,
+                                    paid = paid,
+                                    paymentMethod = paymentMethod,
+                                    onDiscountTypeToggle = onDiscountTypeToggle,
+                                    onDiscountValueChange = onDiscountValueChange,
+                                    onTaxRateChange = onTaxRateChange,
+                                    onPaidChange = onPaidChange,
+                                    onPaymentMethodChange = onPaymentMethodChange
+                                )
+                            }
+
+                            item(key = "cart_checkout_button") {
+                                Spacer(Modifier.height(6.dp))
+                                Button(
+                                    onClick = ::attemptCheckout,
+                                    enabled = canCheckout,
+                                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    if (isProcessing) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            color = MaterialTheme.colorScheme.onPrimary,
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Bayar · ${totals.total.toRupiah()}")
+                                    }
+                                }
+                                Spacer(Modifier.height(4.dp))
+                            }
                         }
                     }
 
@@ -1018,44 +1136,6 @@ private fun CartPane(
                         )
                     }
                 }
-
-                // 2. AREA TOTAL & TOMBOL BAYAR (PINNED DI BAWAH, DI LUAR SCROLL)
-                HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                TotalsSummary(
-                    totals = totals,
-                    change = change,
-                    discountType = discountType,
-                    discountValue = discountValue,
-                    taxRate = taxRate,
-                    paid = paid,
-                    paymentMethod = paymentMethod,
-                    onDiscountTypeToggle = onDiscountTypeToggle,
-                    onDiscountValueChange = onDiscountValueChange,
-                    onTaxRateChange = onTaxRateChange,
-                    onPaidChange = onPaidChange,
-                    onPaymentMethodChange = onPaymentMethodChange
-                )
-
-                Spacer(Modifier.height(6.dp))
-                Button(
-                    onClick = ::attemptCheckout,
-                    enabled = canCheckout,
-                    modifier = Modifier.fillMaxWidth().height(42.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    if (isProcessing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Bayar · ${totals.total.toRupiah()}")
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
             } else {
                 Spacer(Modifier.height(4.dp))
                 Row(

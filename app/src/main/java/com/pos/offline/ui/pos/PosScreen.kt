@@ -1,5 +1,6 @@
 package com.pos.offline.ui.pos
 
+import android.Manifest
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,6 +56,8 @@ import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -102,6 +105,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.local.entity.CartItemEntity
 import com.pos.offline.data.local.entity.CashierEntity
@@ -111,6 +115,8 @@ import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.ShiftSummary
+import androidx.compose.ui.window.DialogProperties
+limport com.pos.offline.ui.components.BarcodeScannerCamera
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.discountInlineLabel
 import com.pos.offline.ui.components.formatPercentTrim
@@ -120,6 +126,9 @@ import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 import com.pos.offline.ui.receipt.PrintUiState
 import com.pos.offline.ui.receipt.forTransaction
 import com.pos.offline.util.ReceiptPrintOutcome
+import com.pos.offline.util.CameraPermissionState
+import com.pos.offline.util.openAppSettings
+import com.pos.offline.util.rememberCameraPermissionState
 import java.text.SimpleDateFormat
 import java.io.File
 import java.util.Date
@@ -134,6 +143,7 @@ fun PosScreen(
     onExportPdf: (CheckoutResult) -> Unit,
     forceWideLayout: Boolean = false
 ) {
+    val context = LocalContext.current
     val products by viewModel.products.collectAsStateWithLifecycle()
     val cart by viewModel.cart.collectAsStateWithLifecycle()
     val totals by viewModel.totals.collectAsStateWithLifecycle()
@@ -183,6 +193,31 @@ fun PosScreen(
         }
     }
 
+    // --- Barcode Scanner State (Menggunakan Util Custom) ---
+    val (permState, requestPermission) = rememberCameraPermissionState()
+    var showScanner by remember { mutableStateOf(false) }
+    var pendingOpen by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
+
+    // Pantau perubahan state izin
+    LaunchedEffect(permState) {
+        when (permState) {
+            CameraPermissionState.GRANTED -> {
+                if (pendingOpen) {
+                    showScanner = true
+                    pendingOpen = false
+                }
+            }
+            CameraPermissionState.PERMANENTLY_DENIED -> {
+                if (pendingOpen) {
+                    showSettingsDialog = true
+                    pendingOpen = false
+                }
+            }
+            else -> Unit
+        }
+    }
+
     var cartExpanded by remember { mutableStateOf(false) }
     LaunchedEffect(isCartEmpty) {
         cartExpanded = !isCartEmpty
@@ -210,83 +245,69 @@ fun PosScreen(
                     onOpenDrawerClick = viewModel::openCashDrawerManually
                 )
                 Spacer(Modifier.height(4.dp))
-                CompactSearchBar(
-                    query = query,
-                    onQueryChange = viewModel::search,
-                    modifier = Modifier.fillMaxWidth().height(36.dp)
-                )
+                
+                // Baris Pencarian + Tombol Scan
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CompactSearchBar(
+                        query = query,
+                        onQueryChange = viewModel::search,
+                        modifier = Modifier.weight(1f).height(36.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            when (permState) {
+                                CameraPermissionState.GRANTED -> showScanner = true
+                                CameraPermissionState.PERMANENTLY_DENIED -> showSettingsDialog = true
+                                else -> {
+                                    pendingOpen = true
+                                    requestPermission()
+                                }
+                            }
+                        },
+                        modifier = Modifier.height(36.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.QrCodeScanner, 
+                            contentDescription = "Scan Barcode", 
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("Scan")
+                    }
+                }
             }
         },
         contentWindowInsets = WindowInsets.statusBars
     ) { inner ->
         BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(inner)
-    ) {
-        val isWide = forceWideLayout || maxWidth >= 840.dp
-        val maxH = maxHeight
-
-        val density = LocalDensity.current
-        val imeVisible = WindowInsets.ime.getBottom(density) > 0
-
-if (isWide) {
-    Row(Modifier.fillMaxSize()) {
-        ProductPane(
-            modifier = Modifier.weight(1f).fillMaxHeight(),
-            products = products,
-            cartQtyByProductId = cartQtyByProductId,
-            onAdd = viewModel::addToCart
-        )
-        Spacer(Modifier.width(12.dp))
-        CartPane(
             modifier = Modifier
-                .fillMaxHeight()
-                .widthIn(min = 320.dp, max = 420.dp),
-            cart = cart,
-            totals = totals,
-            discountType = discountType,
-            discountValue = discountValue,
-            taxRate = taxRate,
-            paid = paid,
-            change = change,
-            paymentMethod = paymentMethod,
-            stockByProductId = stockByProductId,
-            onDiscountTypeToggle = viewModel::toggleDiscountType,
-            onDiscountValueChange = viewModel::setDiscountValue,
-            onTaxRateChange = viewModel::setTaxRate,
-            onPaidChange = viewModel::setPaid,
-            onPaymentMethodChange = viewModel::setPaymentMethod,
-            onSetQuantity = viewModel::setQuantityDirect,
-            onIncrease = viewModel::increaseQty,
-            onDecrease = viewModel::decreaseQty,
-            onRemove = viewModel::removeFromCart,
-            onClear = viewModel::clearCart,
-            onCheckout = viewModel::checkout,
-            canCheckout = !isCartEmpty && !isProcessing,
-            isProcessing = isProcessing
-        )
-    }
-} else {
-            Column(Modifier.fillMaxSize()) {
-                ProductPane(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    products = products,
-                    cartQtyByProductId = cartQtyByProductId,
-                    onAdd = viewModel::addToCart
-                )
-                Spacer(Modifier.height(8.dp))
-                CartPane(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight()
-                        .let { base ->
-                            when {
-                                !cartExpanded -> base
-                                imeVisible -> base
-                                else -> base.heightIn(max = maxH * 0.65f)
-                                }
-                        },
+                .fillMaxSize()
+                .padding(inner)
+        ) {
+            val isWide = forceWideLayout || maxWidth >= 840.dp
+            val maxH = maxHeight
+
+            val density = LocalDensity.current
+            val imeVisible = WindowInsets.ime.getBottom(density) > 0
+
+            if (isWide) {
+                Row(Modifier.fillMaxSize()) {
+                    ProductPane(
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        products = products,
+                        cartQtyByProductId = cartQtyByProductId,
+                        onAdd = viewModel::addToCart
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    CartPane(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .widthIn(min = 320.dp, max = 420.dp),
                         cart = cart,
                         totals = totals,
                         discountType = discountType,
@@ -308,14 +329,105 @@ if (isWide) {
                         onClear = viewModel::clearCart,
                         onCheckout = viewModel::checkout,
                         canCheckout = !isCartEmpty && !isProcessing,
-                        isProcessing = isProcessing,
-                        collapsible = true,
-                        expanded = cartExpanded,
-                        onToggleExpand = { cartExpanded = !cartExpanded }
+                        isProcessing = isProcessing
                     )
+                }
+            } else {
+                Column(Modifier.fillMaxSize()) {
+                    ProductPane(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        products = products,
+                        cartQtyByProductId = cartQtyByProductId,
+                        onAdd = viewModel::addToCart
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    CartPane(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight()
+                            .let { base ->
+                                when {
+                                    !cartExpanded -> base
+                                    imeVisible -> base
+                                    else -> base.heightIn(max = maxH * 0.65f)
+                                }
+                            },
+                            cart = cart,
+                            totals = totals,
+                            discountType = discountType,
+                            discountValue = discountValue,
+                            taxRate = taxRate,
+                            paid = paid,
+                            change = change,
+                            paymentMethod = paymentMethod,
+                            stockByProductId = stockByProductId,
+                            onDiscountTypeToggle = viewModel::toggleDiscountType,
+                            onDiscountValueChange = viewModel::setDiscountValue,
+                            onTaxRateChange = viewModel::setTaxRate,
+                            onPaidChange = viewModel::setPaid,
+                            onPaymentMethodChange = viewModel::setPaymentMethod,
+                            onSetQuantity = viewModel::setQuantityDirect,
+                            onIncrease = viewModel::increaseQty,
+                            onDecrease = viewModel::decreaseQty,
+                            onRemove = viewModel::removeFromCart,
+                            onClear = viewModel::clearCart,
+                            onCheckout = viewModel::checkout,
+                            canCheckout = !isCartEmpty && !isProcessing,
+                            isProcessing = isProcessing,
+                            collapsible = true,
+                            expanded = cartExpanded,
+                            onToggleExpand = { cartExpanded = !cartExpanded }
+                        )
+                    }
                 }
             }
         }
+    }
+
+    // --- Dialog Barcode Scanner ---
+    if (showScanner) {
+        Dialog(
+            onDismissRequest = { showScanner = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                BarcodeScannerCamera(
+                    onBarcodeScanned = { code ->
+                        showScanner = false
+                        viewModel.onBarcodeScanned(code)
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+                IconButton(
+                    onClick = { showScanner = false },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = "Tutup")
+                }
+            }
+        }
+    }
+
+    // --- Dialog Jika Izin Kamera Ditolak Permanen ---
+    if (showSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showSettingsDialog = false },
+            title = { Text("Izin Kamera Dibutuhkan") },
+            text = { Text("Aplikasi tidak dapat memindai barcode karena izin kamera ditolak secara permanen. Mohon aktifkan izin kamera melalui pengaturan aplikasi.") },
+            confirmButton = {
+                Button(onClick = {
+                    showSettingsDialog = false
+                    openAppSettings(context) // context dari LocalContext.current
+                }) {
+                    Text("Buka Pengaturan")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSettingsDialog = false }) {
+                    Text("Batal")
+                }
+            }
+        )
     }
 
     when (val state = checkoutState) {

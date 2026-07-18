@@ -125,6 +125,9 @@ dependencies {
     // ---- ML Kit Barcode Scanning (Bundled - Offline) ----
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
+    // ---- Accompanist Permissions (Untuk rememberPermissionState) ----
+    implementation("com.google.accompanist:accompanist-permissions:0.36.0")
+
     // ---- androidTest: uji migrasi Room + runner JUnit4 ----
     androidTestImplementation("androidx.room:room-testing:2.6.1") // MigrationTestHelper
     androidTestImplementation("androidx.test.ext:junit:1.2.1")     // AndroidJUnit4

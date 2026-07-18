@@ -161,9 +161,7 @@ class PosViewModel(
                 _uiEvents.emit(PosUiEvent.ShowMessage("Produk tidak ditemukan!"))
                 return@launch
             }
-            // Lanjutkan proses memasukkan ke keranjang
-            addToCart(product)
-            _uiEvents.emit(PosUiEvent.ShowMessage("${product.name} ditambahkan ke keranjang"))
+            // proses masukkan keranjang seperti rancangan awal
         }
     }
 
