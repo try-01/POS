@@ -156,12 +156,21 @@ private fun AppRoot() {
                     )
                 },
                 text = {
-                    Text(
-                        "Shift kasir atas nama ${shift.cashierName} masih berjalan. " +
-                            "Untuk keakuratan laporan keuangan dan laci kas (rekonsiliasi uang fisik), " +
-                            "sangat disarankan untuk menutup shift terlebih dahulu di tab Kasir.",
-                        fontSize = 13.sp
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "Shift kasir atas nama ${shift.cashierName} masih berjalan. " +
+                                "Untuk keakuratan laporan keuangan dan laci kas (rekonsiliasi uang fisik), " +
+                                "sangat disarankan untuk menutup shift terlebih dahulu di tab Kasir.",
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            "Catatan: Jika Anda memilih 'Tetap Keluar', sesi shift akan tetap aktif menggantung " +
+                                "dan harus ditutup secara normal saat aplikasi dibuka kembali.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 },
                 confirmButton = {
                     Button(

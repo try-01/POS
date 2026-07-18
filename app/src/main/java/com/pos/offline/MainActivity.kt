@@ -8,9 +8,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -22,14 +19,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -51,6 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -251,15 +247,13 @@ private fun AppRoot() {
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     if (isLandscape) {
-        // Poin Perbaikan Landscape: systemBarsPadding() dipasang di Root Row
-        // agar seluruh konten dan menu sama-sama terhindar dari tombol sistem.
+        // Mode Landscape tetap menggunakan Row manual (Sudah berfungsi baik)
         Row(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .systemBarsPadding()
         ) {
-            // Konten utama berada di kiri, memenuhi sisa ruang
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -281,29 +275,28 @@ private fun AppRoot() {
                     isLandscape = true
                 )
             }
-            
-            // SideNavRail dikembalikan ke posisi KANAN
             SideNavRail(selected = dest, onSelect = { dest = it })
         }
     } else {
-        // Hitung tinggi System Navigation Bar (Gesture Bar)
-        val navBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-        
-        val contentBottomPadding by animateDpAsState(
-            targetValue = if (imeVisible) 0.dp else (56.dp + navBarHeight),
-            animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
-            label = "contentBottomPadding"
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-        ) {
+        // Mode Portrait kini menggunakan Scaffold bawaan untuk manajemen BottomBar
+        // Ini menjamin tidak ada celah padding antara konten dan BottomNavBar
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = MaterialTheme.colorScheme.background,
+            bottomBar = {
+                AnimatedVisibility(
+                    visible = !imeVisible,
+                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                ) {
+                    BottomNavBar(selected = dest, onSelect = { dest = it })
+                }
+            }
+        ) { innerPadding ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = contentBottomPadding)
+                    .padding(innerPadding)
                     .imePadding()
             ) {
                 ScreenContent(
@@ -320,15 +313,6 @@ private fun AppRoot() {
                     onRequestExit = { showExitDialog = true },
                     isLandscape = false
                 )
-            }
-
-            AnimatedVisibility(
-                visible = !imeVisible,
-                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-                modifier = Modifier.align(Alignment.BottomCenter)
-            ) {
-                BottomNavBar(selected = dest, onSelect = { dest = it })
             }
         }
     }
