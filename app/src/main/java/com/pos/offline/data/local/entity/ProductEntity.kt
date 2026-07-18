@@ -26,7 +26,7 @@ data class ProductEntity(
     val id: Long = 0,
     val name: String,
     val sku: String,
-    val barcode:String?=null,
+    val barcode: String? = null,
     val price: Long,            // Harga jual (Rupiah). Long = presisi uang.
     // Harga modal/beli (Rupiah). Ditambahkan di v2 (lihat MIGRATION_1_2).
     // defaultValue "0" wajib agar default konsisten antara fresh-install & migrasi.
