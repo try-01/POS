@@ -744,7 +744,7 @@ private fun ProductFormDialog(
                     onClick = { showScanner = false },
                     modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
                 ) {
-                    Icon(Icons.Default.Close, contentDescription = "Tutup")
+                    Icon(Icons.Rounded.Close, contentDescription = "Tutup")
                 }
             }
         }

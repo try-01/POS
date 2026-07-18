@@ -680,6 +680,7 @@ private fun ProductFormDialog(
                             }
                         }
                     )
+                }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MoneyNumberField(price, { price = it }, "Harga Jual", Modifier.weight(1f))
@@ -712,7 +713,7 @@ private fun ProductFormDialog(
                             id = state.id,
                             name = name,
                             sku = sku,
-                            barcode = barcode
+                            barcode = barcode,
                             price = price.toLongOrNull() ?: 0L,
                             cost = cost.toLongOrNull() ?: 0L,
                             stock = stock.toIntOrNull() ?: 0,
