@@ -77,5 +77,5 @@ interface ProductDao {
     suspend fun setActive(id: Long, active: Boolean, now: Long)
     
     @Query("SELECT * FROM products WHERE barcode=:barcode AND active=1 LIMIT 1")
-    suspend fun getByBarcode(barcode:String):ProductEntity?
+    suspend fun suspend fun getByBarcode(barcode: String): ProductEntity?
 }
