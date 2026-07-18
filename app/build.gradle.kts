@@ -115,8 +115,8 @@ dependencies {
     // bawah ini kalau ada versi lebih baru. Formatnya tetap sama.
     implementation("com.github.DantSu:ESCPOS-ThermalPrinter-Android:3.4.0")
 
-        // ---- CameraX (Untuk Barcode Scanner) ----
-    val cameraxVersion = "1.4.1" // Versi stabil terkini (1.6.1 belum dirilis publik)
+    // ---- CameraX (Untuk Barcode Scanner) ----
+    val cameraxVersion = "1.4.1"
     implementation("androidx.camera:camera-core:${cameraxVersion}")
     implementation("androidx.camera:camera-camera2:${cameraxVersion}")
     implementation("androidx.camera:camera-lifecycle:${cameraxVersion}")
