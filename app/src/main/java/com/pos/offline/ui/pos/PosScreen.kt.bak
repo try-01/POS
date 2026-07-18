@@ -116,9 +116,7 @@ import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.ShiftSummary
 import androidx.compose.ui.window.DialogProperties
-import com.google.accompanist.permissions.isGranted
-import com.google.accompanist.permissions.rememberPermissionState
-import com.pos.offline.ui.components.BarcodeScannerCamera
+limport com.pos.offline.ui.components.BarcodeScannerCamera
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.discountInlineLabel
 import com.pos.offline.ui.components.formatPercentTrim
@@ -128,6 +126,9 @@ import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 import com.pos.offline.ui.receipt.PrintUiState
 import com.pos.offline.ui.receipt.forTransaction
 import com.pos.offline.util.ReceiptPrintOutcome
+import com.pos.offline.util.CameraPermissionState
+import com.pos.offline.util.openAppSettings
+import com.pos.offline.util.rememberCameraPermissionState
 import java.text.SimpleDateFormat
 import java.io.File
 import java.util.Date
@@ -142,6 +143,7 @@ fun PosScreen(
     onExportPdf: (CheckoutResult) -> Unit,
     forceWideLayout: Boolean = false
 ) {
+    val context = LocalContext.current
     val products by viewModel.products.collectAsStateWithLifecycle()
     val cart by viewModel.cart.collectAsStateWithLifecycle()
     val totals by viewModel.totals.collectAsStateWithLifecycle()
@@ -191,15 +193,28 @@ fun PosScreen(
         }
     }
 
-    // --- Barcode Scanner State ---
-    val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
+    // --- Barcode Scanner State (Menggunakan Util Custom) ---
+    val (permState, requestPermission) = rememberCameraPermissionState()
     var showScanner by remember { mutableStateOf(false) }
     var pendingOpen by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(cameraPermissionState.status) {
-        if (pendingOpen && cameraPermissionState.status.isGranted) {
-            showScanner = true
-            pendingOpen = false
+    // Pantau perubahan state izin
+    LaunchedEffect(permState) {
+        when (permState) {
+            CameraPermissionState.GRANTED -> {
+                if (pendingOpen) {
+                    showScanner = true
+                    pendingOpen = false
+                }
+            }
+            CameraPermissionState.PERMANENTLY_DENIED -> {
+                if (pendingOpen) {
+                    showSettingsDialog = true
+                    pendingOpen = false
+                }
+            }
+            else -> Unit
         }
     }
 
@@ -244,11 +259,13 @@ fun PosScreen(
                     Spacer(Modifier.width(8.dp))
                     OutlinedButton(
                         onClick = {
-                            if (cameraPermissionState.status.isGranted) {
-                                showScanner = true
-                            } else {
-                                pendingOpen = true
-                                cameraPermissionState.launchPermissionRequest()
+                            when (permState) {
+                                CameraPermissionState.GRANTED -> showScanner = true
+                                CameraPermissionState.PERMANENTLY_DENIED -> showSettingsDialog = true
+                                else -> {
+                                    pendingOpen = true
+                                    requestPermission()
+                                }
                             }
                         },
                         modifier = Modifier.height(36.dp),
@@ -389,6 +406,28 @@ fun PosScreen(
                 }
             }
         }
+    }
+
+    // --- Dialog Jika Izin Kamera Ditolak Permanen ---
+    if (showSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showSettingsDialog = false },
+            title = { Text("Izin Kamera Dibutuhkan") },
+            text = { Text("Aplikasi tidak dapat memindai barcode karena izin kamera ditolak secara permanen. Mohon aktifkan izin kamera melalui pengaturan aplikasi.") },
+            confirmButton = {
+                Button(onClick = {
+                    showSettingsDialog = false
+                    openAppSettings(context) // context dari LocalContext.current
+                }) {
+                    Text("Buka Pengaturan")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSettingsDialog = false }) {
+                    Text("Batal")
+                }
+            }
+        )
     }
 
     when (val state = checkoutState) {

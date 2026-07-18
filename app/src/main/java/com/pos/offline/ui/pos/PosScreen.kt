@@ -382,7 +382,6 @@ fun PosScreen(
                 }
             }
         }
-    }
 
     // --- Dialog Barcode Scanner ---
     if (showScanner) {
