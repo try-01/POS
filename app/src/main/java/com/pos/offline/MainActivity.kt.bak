@@ -326,7 +326,12 @@ private fun AppRoot() {
             exit = fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 16.dp, bottom = 16.dp)
+                // FIX: bottom 16dp → 8dp — digeser sedikit ke bawah agar tidak tumpang
+                // tindih dengan teks "Total: Rp..." pada CartPane yang di-collapse di
+                // PosScreen. Nilai 8dp ini SAMA PERSIS dengan padding bottom tombol
+                // "Tambah Produk" di InventoryScreen.kt — supaya kedua tombol selalu
+                // sejajar secara vertikal di semua layar (Kasir/Inventaris/Laporan/Pengaturan).
+                .padding(start = 16.dp, bottom = 8.dp)
                 .navigationBarsPadding()
         ) {
             ExpandableMenuFab(
@@ -344,6 +349,10 @@ private fun AppRoot() {
  * Ditempatkan dengan Alignment.BottomStart di pemanggil → saat AnimatedVisibility
  * menambah tinggi Column (menu terbuka), sisi BAWAH tetap diam (anchor di nav bar),
  * sisi ATAS yang tumbuh — sehingga terasa seperti "expand ke atas".
+ *
+ * FIX: ukuran tombol utama disamakan (40dp) dengan SmallFloatingActionButton
+ * "Tambah Produk" di InventoryScreen.kt, agar konsisten secara visual di seluruh
+ * aplikasi (sebelumnya 52dp, terasa lebih besar dari FAB lain).
  */
 @Composable
 private fun ExpandableMenuFab(
@@ -354,7 +363,7 @@ private fun ExpandableMenuFab(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         AnimatedVisibility(
             visible = expanded,
@@ -363,7 +372,7 @@ private fun ExpandableMenuFab(
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Dest.entries.forEach { item ->
                     MiniMenuItem(
@@ -374,9 +383,10 @@ private fun ExpandableMenuFab(
                 }
             }
         }
-        // Tombol utama (toggle buka/tutup)
+        // Tombol utama (toggle buka/tutup) — 40dp, SAMA dengan SmallFloatingActionButton
+        // bawaan Material3 (dipakai juga untuk "Tambah Produk" di InventoryScreen).
         Surface(
-            modifier = Modifier.size(52.dp).shadow(6.dp, CircleShape),
+            modifier = Modifier.size(40.dp).shadow(6.dp, CircleShape),
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primary,
             onClick = onToggle
@@ -386,7 +396,7 @@ private fun ExpandableMenuFab(
                     imageVector = if (expanded) Icons.Rounded.Close else Icons.Rounded.Menu,
                     contentDescription = if (expanded) "Tutup menu" else "Buka menu",
                     tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
@@ -395,8 +405,9 @@ private fun ExpandableMenuFab(
 
 @Composable
 private fun MiniMenuItem(dest: Dest, isSelected: Boolean, onClick: () -> Unit) {
+    // FIX: 44dp → 36dp, mengecil proporsional mengikuti tombol utama yang kini 40dp.
     Surface(
-        modifier = Modifier.size(44.dp).shadow(4.dp, CircleShape),
+        modifier = Modifier.size(36.dp).shadow(4.dp, CircleShape),
         shape = CircleShape,
         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
         onClick = onClick
@@ -406,7 +417,7 @@ private fun MiniMenuItem(dest: Dest, isSelected: Boolean, onClick: () -> Unit) {
                 imageVector = dest.icon(),
                 contentDescription = dest.label,
                 tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
     }

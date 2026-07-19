@@ -56,6 +56,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -134,8 +137,35 @@ private fun AppRoot() {
     val pagerState = rememberPagerState(initialPage = 0) { Dest.entries.size }
     val currentDest = Dest.entries[pagerState.currentPage]
 
+    // Alpha untuk fade transisi ringan saat LONCAT ke halaman jauh (non-tetangga).
+    // Tetap 1f (tak terlihat efeknya) untuk swipe manual & navigasi ke halaman
+    // bertetangga — animasi geser Pager bawaan sudah cukup mulus untuk kasus itu.
+    val pageAlpha = remember { Animatable(1f) }
+    var isJumping by remember { mutableStateOf(false) }
+
     fun goTo(dest: Dest) {
-        scope.launch { pagerState.animateScrollToPage(dest.ordinal) }
+        val current = pagerState.currentPage
+        val target = dest.ordinal
+        if (current == target) return
+        scope.launch {
+            if (kotlin.math.abs(target - current) <= 1) {
+                // Halaman bertetangga: geseran animasi biasa, sudah natural & ringan.
+                pagerState.animateScrollToPage(target)
+            } else {
+                // FIX LAG: sebelumnya animateScrollToPage() menggeser MELEWATI semua
+                // halaman di antaranya secara fisik (mis. Kasir -> Inventaris -> Laporan
+                // -> Pengaturan), memaksa halaman perantara ikut ter-compose sementara
+                // (state ViewModel & LazyColumn yang berat) → terasa lag "digeser cepat".
+                // Sekarang: loncat LANGSUNG dengan scrollToPage() (instan, TIDAK merender
+                // halaman perantara sama sekali), dibungkus fade tipis biar tidak
+                // terasa "dipotong kasar".
+                isJumping = true
+                pageAlpha.animateTo(0f, animationSpec = tween(90))
+                pagerState.scrollToPage(target)
+                pageAlpha.animateTo(1f, animationSpec = tween(140))
+                isJumping = false
+            }
+        }
     }
 
     // Memantau status shift aktif secara dinamis dari DB
@@ -256,8 +286,9 @@ private fun AppRoot() {
             state = pagerState,
             modifier = Modifier
                 .fillMaxSize()
-                .imePadding(),
-            userScrollEnabled = !menuExpanded && !isCartExpanded && !imeVisible
+                .imePadding()
+                .graphicsLayer { alpha = pageAlpha.value }, // fade ringan saat loncat halaman jauh
+            userScrollEnabled = !menuExpanded && !isCartExpanded && !imeVisible && !isJumping
         ) { page ->
             val dest = Dest.entries[page]
             when (dest) {
