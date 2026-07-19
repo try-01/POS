@@ -407,6 +407,7 @@ private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .navigationBarsPadding() // TAMBAHKAN INI: Angkat tepat di atas tombol sistem
             .padding(horizontal = 24.dp, vertical = 16.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -423,7 +424,6 @@ private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
                 val interactionSource = remember { MutableInteractionSource() }
                 val isPressed by interactionSource.collectIsPressedAsState()
                 
-                // Animasi tekan (scale down)
                 val scale by animateFloatAsState(
                     targetValue = if (isPressed) 0.9f else 1f,
                     animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
@@ -436,7 +436,7 @@ private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
                         .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
                         .clickable(
                             interactionSource = interactionSource,
-                            indication = null // Hapus ripple default, pakai scale saja
+                            indication = null
                         ) { onSelect(item) }
                         .scale(scale)
                         .padding(horizontal = if (isSelected) 16.dp else 12.dp, vertical = 8.dp)
@@ -451,7 +451,6 @@ private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
                                else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(22.dp)
                     )
-                    // Teks hanya muncul saat terpilih
                     AnimatedVisibility(visible = isSelected) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Spacer(Modifier.width(6.dp))
@@ -474,7 +473,8 @@ private fun SideNavRail(selected: Dest, onSelect: (Dest) -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxHeight()
-            .padding(vertical = 24.dp, horizontal = 16.dp),
+            .width(72.dp) // TAMBAHKAN INI: Lebar tetap agar tidak ada celah kosong di kanan-kirinya
+            .padding(vertical = 24.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(

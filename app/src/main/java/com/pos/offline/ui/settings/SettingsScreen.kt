@@ -157,10 +157,11 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(horizontal = 12.dp) // Hapus vertical 8.dp
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            Spacer(Modifier.height(8.dp)) // Tambahkan spacer di atas saja
             SectionLabel("Cadangkan & Pulihkan")
 
             GlassCard(

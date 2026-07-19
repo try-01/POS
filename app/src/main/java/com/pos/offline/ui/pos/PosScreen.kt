@@ -142,7 +142,9 @@ fun PosScreen(
     onNavigateToSettings: () -> Unit,
     onSharePdfFile: (File) -> Unit,
     onExportPdf: (CheckoutResult) -> Unit,
-    forceWideLayout: Boolean = false
+    forceWideLayout: Boolean = false,
+    isCartExpanded: Boolean = false, // TAMBAHKAN
+    onCartExpandedChange: (Boolean) -> Unit = {} // TAMBAHKAN
 ) {
     val context = LocalContext.current
     val products by viewModel.products.collectAsStateWithLifecycle()
@@ -219,10 +221,10 @@ fun PosScreen(
         }
     }
 
-    var cartExpanded by remember { mutableStateOf(false) }
-    LaunchedEffect(isCartEmpty) {
-        cartExpanded = !isCartEmpty
-    }
+//    var cartExpanded by remember { mutableStateOf(false) }
+//    LaunchedEffect(isCartEmpty) {
+//        cartExpanded = !isCartEmpty
+//    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -376,8 +378,8 @@ fun PosScreen(
                             canCheckout = !isCartEmpty && !isProcessing,
                             isProcessing = isProcessing,
                             collapsible = true,
-                            expanded = cartExpanded,
-                            onToggleExpand = { cartExpanded = !cartExpanded }
+                            expanded = isCartExpanded,
+                            onToggleExpand = { onCartExpandedChange(!isCartExpanded) }
                         )
                     }
                 }
