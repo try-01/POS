@@ -33,7 +33,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -154,8 +153,6 @@ fun PosScreen(
     val cart by viewModel.cart.collectAsStateWithLifecycle()
     val totals by viewModel.totals.collectAsStateWithLifecycle()
     val query by viewModel.searchQuery.collectAsStateWithLifecycle()
-    val categories by viewModel.categories.collectAsStateWithLifecycle()
-    val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
     val discountType by viewModel.discountType.collectAsStateWithLifecycle()
     val discountValue by viewModel.discountValue.collectAsStateWithLifecycle()
     val taxRate by viewModel.taxRate.collectAsStateWithLifecycle()
@@ -287,17 +284,6 @@ fun PosScreen(
                         Spacer(Modifier.width(4.dp))
                         Text("Scan")
                     }
-                }
-
-                // BARU: chip filter kategori — hanya tampil kalau ada kategori terdaftar,
-                // supaya tidak makan ruang saat fitur ini belum dipakai.
-                if (categories.isNotEmpty()) {
-                    Spacer(Modifier.height(6.dp))
-                    CategoryChipsRow(
-                        categories = categories,
-                        selected = selectedCategory,
-                        onSelect = viewModel::selectCategory
-                    )
                 }
             }
         },
@@ -933,15 +919,6 @@ private fun ProductCard(product: ProductEntity, remainingStock: Int, onAdd: () -
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
-            if (product.category.isNotBlank()) {
-                Text(
-                    text = product.category,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                    color = MaterialTheme.colorScheme.tertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -2121,53 +2098,4 @@ private fun CompactSearchBar(
             }
         }
     )
-}
-
-/**
- * Baris chip kategori — bisa digeser horizontal ([LazyRow]) kalau kategori
- * banyak. Chip "Semua" selalu ada di posisi pertama untuk membatalkan filter.
- * Tinggi 28dp sengaja dibuat kecil ("tidak makan area lain") — konsisten
- * dengan filosofi kepadatan visual PosScreen/InventoryScreen lainnya.
- */
-@Composable
-private fun CategoryChipsRow(
-    categories: List<String>,
-    selected: String?,
-    onSelect: (String?) -> Unit
-) {
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        item(key = "__all__") {
-            CategoryChip(label = "Semua", selected = selected == null, onClick = { onSelect(null) })
-        }
-        items(items = categories, key = { it }) { cat ->
-            CategoryChip(label = cat, selected = selected == cat, onClick = { onSelect(cat) })
-        }
-    }
-}
-
-@Composable
-private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .height(28.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
 }

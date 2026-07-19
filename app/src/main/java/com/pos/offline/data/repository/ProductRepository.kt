@@ -37,4 +37,6 @@ class ProductRepository(private val productDao: ProductDao) {
     suspend fun getProductByBarcodeAny(barcode: String): ProductEntity? {
         return productDao.getByBarcodeAny(barcode)
     }
+
+    fun observeCategories(): Flow<List<String>> = productDao.observeDistinctCategories()
 }

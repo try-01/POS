@@ -90,48 +90,11 @@ class PosViewModel(
     private val _paymentMethod = MutableStateFlow(PaymentMethod.CASH)
     val paymentMethod: StateFlow<PaymentMethod> = _paymentMethod.asStateFlow()
 
-    // Hasil pencarian mentah dari DB (belum difilter kategori).
-    private val searchResults: StateFlow<List<ProductEntity>> = _searchQuery
+    val products: StateFlow<List<ProductEntity>> = _searchQuery
         .debounce(180)
         .distinctUntilChanged()
         .flatMapLatest { productRepository.search(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    private val _selectedCategory = MutableStateFlow<String?>(null) // null = "Semua"
-    val selectedCategory: StateFlow<String?> = _selectedCategory.asStateFlow()
-
-    /** Kategori unik dari SEMUA produk aktif (lepas dari query pencarian saat ini)
-     *  — dipakai chip filter di PosScreen. Tetap stabil walau user sedang mengetik
-     *  di kotak pencarian. */
-    val categories: StateFlow<List<String>> = productRepository.observeCategories()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    // Katalog yang ditampilkan = hasil pencarian DIFILTER kategori terpilih.
-    // Filter in-memory (bukan query DB baru) karena searchResults sudah di RAM —
-    // konsisten dengan pola sorting in-memory di InventoryViewModel.
-    val products: StateFlow<List<ProductEntity>> = combine(
-        searchResults, _selectedCategory
-    ) { list, category ->
-        if (category == null) list else list.filter { it.category == category }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    fun selectCategory(category: String?) {
-        _selectedCategory.value = category
-    }
-
-    init {
-        // Kalau kategori yang sedang difilter ternyata sudah tidak ada lagi produknya
-        // (mis. produk terakhir di kategori itu diedit/dihapus), otomatis kembali ke
-        // "Semua" — supaya katalog tidak diam-diam kosong tanpa penjelasan ke kasir.
-        viewModelScope.launch {
-            categories.collect { list ->
-                val current = _selectedCategory.value
-                if (current != null && current !in list) {
-                    _selectedCategory.value = null
-                }
-            }
-        }
-    }
 
     val cart: StateFlow<List<CartItemEntity>> = cartRepository.cartItems
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

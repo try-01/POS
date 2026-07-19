@@ -33,4 +33,8 @@ class ProductRepository(private val productDao: ProductDao) {
     suspend fun getProductByBarcode(barcode: String): ProductEntity? {
         return productDao.getByBarcode(barcode)
     }
+    
+    suspend fun getProductByBarcodeAny(barcode: String): ProductEntity? {
+        return productDao.getByBarcodeAny(barcode)
+    }
 }

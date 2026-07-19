@@ -77,6 +77,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.rounded.QrCodeScanner
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -115,6 +117,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
     val products by viewModel.products.collectAsStateWithLifecycle()
     val query by viewModel.searchQuery.collectAsStateWithLifecycle()
     val form by viewModel.form.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
     val pendingDelete by viewModel.pendingDelete.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -227,6 +230,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
     form?.let { state ->
         ProductFormDialog(
             state = state,
+            categories = categories, // BARU
             onSave = viewModel::save,
             onDismiss = viewModel::dismissForm,
             checkBarcodeConflict = viewModel::checkBarcodeConflict,
@@ -305,6 +309,11 @@ private fun ProductRow(
                         )
                     }
                 }
+
+                if (product.category.isNotBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    CategoryBadge(category = product.category)
+                }
             }
             Spacer(Modifier.width(8.dp))
             CompactIconAction(
@@ -315,6 +324,21 @@ private fun ProductRow(
                 onClick = onEdit
             )
         }
+    }
+}
+
+@Composable
+private fun CategoryBadge(category: String) {
+    Surface(color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
+        Text(
+            text = category,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+            color = MaterialTheme.colorScheme.tertiary,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -498,14 +522,16 @@ private fun SortMenuButton(
 @Composable
 private fun ProductFormDialog(
     state: ProductFormState,
+    categories: List<String>, // BARU
     onSave: (ProductFormState) -> Unit,
     onDismiss: () -> Unit,
     checkBarcodeConflict: suspend (String, Long) -> String?,
-    onDeleteRequest: () -> Unit // BARU (poin 4): dipanggil saat tombol "Hapus" merah ditekan
+    onDeleteRequest: () -> Unit
 ) {
     var name by remember(state.id) { mutableStateOf(state.name) }
     var sku by remember(state.id) { mutableStateOf(state.sku) }
     var barcode by remember(state.id) { mutableStateOf(state.barcode ?: "") }
+    var category by remember(state.id) { mutableStateOf(state.category) }
     var price by remember(state.id) {
         mutableStateOf(if (state.price > 0) state.price.toString() else "")
     }
@@ -632,6 +658,12 @@ private fun ProductFormDialog(
                     )
                 }
 
+                CategoryField(
+                    value = category,
+                    suggestions = categories,
+                    onValueChange = { category = it }
+                )
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MoneyNumberField(price, { price = it }, "Harga Jual", Modifier.weight(1f))
                     MoneyNumberField(cost, { cost = it }, "Modal", Modifier.weight(1f))
@@ -682,6 +714,7 @@ private fun ProductFormDialog(
                                 name = name,
                                 sku = sku,
                                 barcode = barcode.trim(),
+                                category = category.trim(),
                                 price = price.toLongOrNull() ?: 0L,
                                 cost = cost.toLongOrNull() ?: 0L,
                                 stock = stock.toIntOrNull() ?: 0,
@@ -769,6 +802,67 @@ private fun NumberField(
         shape = RoundedCornerShape(10.dp),
         modifier = modifier
     )
+}
+
+/**
+ * Field kategori dengan autocomplete sederhana — mengetik menyaring daftar
+ * kategori yang SUDAH PERNAH dipakai dan menampilkannya sebagai dropdown untuk
+ * dipilih. Murni bantuan konsistensi penamaan (mencegah "Minuman" vs "minuman"
+ * tercatat sebagai kategori berbeda) — pengguna tetap bebas mengetik kategori
+ * BARU yang belum ada; field ini tidak memvalidasi/memblokir apa pun.
+ */
+@Composable
+private fun CategoryField(
+    value: String,
+    suggestions: List<String>,
+    onValueChange: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val filtered = remember(value, suggestions) {
+        if (value.isBlank()) suggestions
+        else suggestions.filter { it.contains(value, ignoreCase = true) }
+    }
+    Box(Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {
+                onValueChange(it)
+                expanded = suggestions.isNotEmpty()
+            },
+            label = { Text("Kategori (opsional)", style = MaterialTheme.typography.bodySmall) },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+            shape = RoundedCornerShape(10.dp),
+            trailingIcon = {
+                if (suggestions.isNotEmpty()) {
+                    IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(24.dp)) {
+                        Icon(
+                            Icons.Rounded.KeyboardArrowDown,
+                            contentDescription = "Pilih kategori",
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { if (it.isFocused) expanded = suggestions.isNotEmpty() }
+        )
+        DropdownMenu(
+            expanded = expanded && filtered.isNotEmpty(),
+            onDismissRequest = { expanded = false }
+        ) {
+            filtered.forEach { cat ->
+                DropdownMenuItem(
+                    text = { Text(cat, fontSize = 13.sp) },
+                    onClick = {
+                        onValueChange(cat)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
 }
 
 /**

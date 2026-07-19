@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -123,90 +124,102 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
         viewModel.messages.collect { msg -> snackbarHostState.showSnackbar(msg) }
     }
 
-    Scaffold(
-        topBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(horizontal = 12.dp)
-            ) {
-                Row(
+        // Dibungkus Box agar FAB "Tambah Produk" bisa diposisikan MANUAL (bukan lewat
+    // slot floatingActionButton bawaan Scaffold, yang punya jarak internal 16dp
+    // baku & tidak bisa diatur presisi) — supaya bisa disamakan PERSIS (bottom 8dp)
+    // dengan tombol menu mengambang di MainActivity. Hasilnya kedua tombol akan
+    // selalu sejajar secara vertikal, terlepas layar mana yang sedang aktif.
+    Box(Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .statusBarsPadding()
+                        .padding(horizontal = 12.dp)
                 ) {
-                    Icon(
-                        Icons.Rounded.Inventory2,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "Inventaris",
-                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (products.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.Inventory2,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(6.dp))
                         Text(
-                            "${products.size} produk",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            "Inventaris",
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
                         )
+                        if (products.isNotEmpty()) {
+                            Text(
+                                "${products.size} produk",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CompactInventorySearchBar(
+                            query = query,
+                            onQueryChange = viewModel::search,
+                            modifier = Modifier.weight(1f).height(34.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        SortMenuButton(current = sortOption, onSelect = viewModel::setSortOption)
                     }
                 }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    CompactInventorySearchBar(
-                        query = query,
-                        onQueryChange = viewModel::search,
-                        modifier = Modifier.weight(1f).height(34.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    SortMenuButton(current = sortOption, onSelect = viewModel::setSortOption)
-                }
-            }
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        floatingActionButton = {
-            SmallFloatingActionButton(onClick = viewModel::startAdd) {
-                Icon(Icons.Rounded.Add, contentDescription = "Tambah Produk", modifier = Modifier.size(20.dp))
-            }
-        },
-        // Full edge-to-edge (poin 1): sertakan navigationBars juga (bukan cuma statusBars),
-        // supaya FAB "Tambah Produk" tidak tertimpa gesture bar sistem — sebelumnya ruang ini
-        // "gratis" didapat dari padding(bottom = 80.dp) di MainActivity lama yang sudah dihapus.
-        contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars)
-    ) { inner ->
-        Column(Modifier.fillMaxSize().padding(inner)) {
-            if (products.isEmpty()) {
-                EmptyInventory(hasQuery = query.isNotEmpty())
-            } else {
-                LazyColumn(
-                    // bottom 96dp: clearance dari FAB "Tambah Produk" (kanan-bawah) DAN dari
-                    // FAB menu mengambang baru di MainActivity (kiri-bawah) — poin 1 & 3.
-                    contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    items(
-                        items = products,
-                        key = { it.id },
-                        contentType = { "product" }
-                    ) { product ->
-                        ProductRow(
-                            product = product,
-                            onEdit = { viewModel.startEdit(product) }
-                        )
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            // FIX: floatingActionButton dihapus dari sini, dipindah jadi overlay manual
+            // di bawah (lihat SmallFloatingActionButton setelah Scaffold ini) — supaya
+            // posisinya bisa disinkronkan presisi dengan tombol menu di MainActivity.
+            contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars)
+        ) { inner ->
+            Column(Modifier.fillMaxSize().padding(inner)) {
+                if (products.isEmpty()) {
+                    EmptyInventory(hasQuery = query.isNotEmpty())
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 96.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(
+                            items = products,
+                            key = { it.id },
+                            contentType = { "product" }
+                        ) { product ->
+                            ProductRow(
+                                product = product,
+                                onEdit = { viewModel.startEdit(product) }
+                            )
+                        }
                     }
                 }
             }
+        }
+
+        // FIX: posisi manual, bottom = 8dp — SAMA PERSIS dengan tombol menu mengambang
+        // di MainActivity.kt, agar kedua tombol selalu sejajar vertikal di semua layar.
+        SmallFloatingActionButton(
+            onClick = viewModel::startAdd,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 8.dp)
+                .navigationBarsPadding()
+        ) {
+            Icon(Icons.Rounded.Add, contentDescription = "Tambah Produk", modifier = Modifier.size(20.dp))
         }
     }
 

@@ -144,27 +144,24 @@ private fun AppRoot() {
     var isJumping by remember { mutableStateOf(false) }
 
     fun goTo(dest: Dest) {
-        val current = pagerState.currentPage
         val target = dest.ordinal
-        if (current == target) return
+        if (pagerState.currentPage == target) return
+        // FIX: sebelumnya hanya halaman berjarak >=2 yang loncat instan; halaman
+        // bertetangga (mis. Kasir->Inventaris, Inventaris->Laporan, Laporan->
+        // Pengaturan) masih pakai animateScrollToPage() biasa. Ternyata Inventaris
+        // & Laporan sendiri cukup berat untuk di-compose (LazyColumn data asli dari
+        // DB + Canvas chart tren pendapatan), jadi walau jaraknya cuma 1 halaman,
+        // geseran fisiknya tetap terasa berat. Sekarang SEMUA navigasi via tombol
+        // menu (jarak berapa pun) diseragamkan: loncat instan (scrollToPage, tidak
+        // merender halaman perantara sama sekali) dibungkus fade tipis — konsisten
+        // & mulus di seluruh kombinasi menu. Swipe manual dengan jari TIDAK terkena
+        // perubahan ini, tetap pakai animasi geser natural Pager.
         scope.launch {
-            if (kotlin.math.abs(target - current) <= 1) {
-                // Halaman bertetangga: geseran animasi biasa, sudah natural & ringan.
-                pagerState.animateScrollToPage(target)
-            } else {
-                // FIX LAG: sebelumnya animateScrollToPage() menggeser MELEWATI semua
-                // halaman di antaranya secara fisik (mis. Kasir -> Inventaris -> Laporan
-                // -> Pengaturan), memaksa halaman perantara ikut ter-compose sementara
-                // (state ViewModel & LazyColumn yang berat) → terasa lag "digeser cepat".
-                // Sekarang: loncat LANGSUNG dengan scrollToPage() (instan, TIDAK merender
-                // halaman perantara sama sekali), dibungkus fade tipis biar tidak
-                // terasa "dipotong kasar".
-                isJumping = true
-                pageAlpha.animateTo(0f, animationSpec = tween(90))
-                pagerState.scrollToPage(target)
-                pageAlpha.animateTo(1f, animationSpec = tween(140))
-                isJumping = false
-            }
+            isJumping = true
+            pageAlpha.animateTo(0f, animationSpec = tween(90))
+            pagerState.scrollToPage(target)
+            pageAlpha.animateTo(1f, animationSpec = tween(140))
+            isJumping = false
         }
     }
 

@@ -81,4 +81,16 @@ interface ProductDao {
 
     @Query("SELECT * FROM products WHERE barcode = :barcode LIMIT 1")
     suspend fun getByBarcodeAny(barcode: String): ProductEntity?
+
+     /** Kategori unik dari produk AKTIF (untuk chip filter di Kasir & autocomplete
+     *  di form Inventaris). String kosong ("tanpa kategori") sengaja dikecualikan
+     *  agar tidak muncul sebagai chip/opsi kosong yang membingungkan. */
+    @Query(
+        """
+        SELECT DISTINCT category FROM products
+        WHERE active = 1 AND category != ''
+        ORDER BY category ASC
+        """
+    )
+    fun observeDistinctCategories(): Flow<List<String>>
 }

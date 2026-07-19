@@ -24,7 +24,6 @@ data class ProductFormState(
     val name: String = "",
     val sku: String = "",
     val barcode: String = "",
-    val category: String = "",
     val price: Long = 0L,
     val cost: Long = 0L,
     val stock: Int = 0,
@@ -75,11 +74,6 @@ class InventoryViewModel(
         list.sortedWith(sort.comparator)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** Daftar kategori unik yang sudah pernah dipakai — sugesti autocomplete di
-     *  form tambah/edit produk (mencegah fragmentasi nama akibat typo). */
-    val categories: StateFlow<List<String>> = productRepository.observeCategories()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
     private val _form = MutableStateFlow<ProductFormState?>(null)
     val form: StateFlow<ProductFormState?> = _form.asStateFlow()
 
@@ -100,7 +94,6 @@ class InventoryViewModel(
             name = product.name,
             sku = product.sku,
             barcode = product.barcode ?: "", // FIX: sebelumnya barcode tidak disalin, selalu tampil kosong saat edit
-            category = product.category,
             price = product.price,
             cost = product.cost,
             stock = product.stock,
@@ -117,16 +110,16 @@ class InventoryViewModel(
         if (state.stock < 0) { notify("Stok tidak boleh negatif."); return@launch }
 
         val sku = state.sku.trim().ifBlank { "SKU-${System.currentTimeMillis()}" }
+        // FIX: barcode kosong disimpan sebagai null (bukan ""), karena kolom `barcode`
+        // punya unique index — dua produk dengan barcode "" akan bentrok index unik.
         val barcode = state.barcode.trim().ifBlank { null }
-        val category = state.category.trim() // BARU
         val now = System.currentTimeMillis()
 
         val entity = ProductEntity(
             id = state.id,
             name = name,
             sku = sku,
-            barcode = barcode,
-            category = category, // BARU
+            barcode = barcode, // FIX: sebelumnya field ini tidak disertakan sama sekali → barcode tidak pernah tersimpan
             price = state.price,
             cost = state.cost,
             stock = state.stock,
@@ -140,6 +133,8 @@ class InventoryViewModel(
             notify(if (state.isNew) "Produk ditambahkan." else "Produk diperbarui.")
             _form.value = null
         } catch (e: SQLiteConstraintException) {
+            // FIX: pesan generik sebelumnya menyebut "SKU" walau constraint yang gagal
+            // bisa saja dari barcode (keduanya unique). Dibuat lebih netral.
             notify("Gagal menyimpan: SKU atau Barcode sudah dipakai produk lain.")
         } catch (e: Exception) {
             notify("Gagal menyimpan: ${e.message ?: "kesalahan tak dikenal"}.")

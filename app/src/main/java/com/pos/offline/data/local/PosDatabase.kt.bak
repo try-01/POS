@@ -27,6 +27,7 @@ import com.pos.offline.data.local.entity.TransactionItemEntity
 private data class SeedProduct(
     val name: String, val sku: String, val price: Long, val cost: Long
 )
+
 @Database(
     entities = [
         ProductEntity::class,
@@ -40,7 +41,7 @@ private data class SeedProduct(
         PrinterEntity::class,
         StoreProfileEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 abstract class PosDatabase : RoomDatabase() {
