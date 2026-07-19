@@ -1,5 +1,8 @@
 package com.pos.offline.ui.inventory
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.compose.ui.window.Dialog
@@ -652,13 +655,7 @@ private fun ProductFormDialog(
                         singleLine = true,
                         isError = barcodeConflict != null,
                         supportingText = if (barcodeConflict != null) {
-                            {
-                                Text(
-                                    "Dipakai oleh: $it",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
+                            { Text("Dipakai oleh: $barcodeConflict", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) }
                         } else null,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                         shape = RoundedCornerShape(10.dp),
@@ -674,9 +671,8 @@ private fun ProductFormDialog(
                                     IconButton(onClick = {
                                         when (permState) {
                                             CameraPermissionState.GRANTED -> showScanner = true
-                                            CameraPermissionState.PERMANENTLY_DENIED -> {
-                                                // Jangan request lagi, langsung tampilkan dialog
-                                                showPermanentlyDeniedDialog = true
+                                            CameraPermissionState.SHOW_RATIONALE, CameraPermissionState.PERMANENTLY_DENIED -> {
+                                                showPermissionDeniedDialog = true
                                             }
                                             else -> {
                                                 pendingOpenScanner = true
@@ -734,26 +730,35 @@ private fun ProductFormDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
     )
 
-    // Dialog Kustom untuk Izin Ditolak Permanen
-    if (showPermanentlyDeniedDialog) {
+    if (showPermissionDeniedDialog) {
+        val permanentlyDenied = permState == CameraPermissionState.PERMANENTLY_DENIED
         AlertDialog(
-            onDismissRequest = { showPermanentlyDeniedDialog = false },
-            title = { Text("Izin Kamera Dibutuhkan") },
+            onDismissRequest = { showPermissionDeniedDialog = false },
+            title = { Text(if (permanentlyDenied) "Izin Kamera Diblokir" else "Izin Kamera Diperlukan", style = MaterialTheme.typography.titleMedium) },
             text = {
-                Text("Aplikasi memerlukan akses kamera untuk memindai barcode produk secara langsung di inventaris. Karena izin sebelumnya ditolak, Anda perlu mengaktifkannya secara manual melalui Pengaturan Aplikasi.")
+                Text(
+                    if (permanentlyDenied) "Akses kamera untuk scan barcode ditolak permanen. Aktifkan manual lewat Pengaturan aplikasi."
+                    else "Akses kamera dibutuhkan untuk memindai barcode produk secara langsung.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
             },
             confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { showPermanentlyDeniedDialog = false }) {
-                        Text("Tutup")
+                Button(onClick = {
+                    showPermissionDeniedDialog = false
+                    pendingOpenScanner = true // Set agar scanner auto-buka begitu izin didapat
+                    if (permanentlyDenied) {
+                        try {
+                            context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", context.packageName, null)
+                            })
+                        } catch (e: Exception) { /* device non-standar, jarang terjadi */ }
+                    } else {
+                        requestPermission()
                     }
-                    Button(onClick = {
-                        showPermanentlyDeniedDialog = false
-                        openAppSettings(context)
-                    }) {
-                        Text("Buka Pengaturan")
-                    }
-                }
+                }) { Text(if (permanentlyDenied) "Buka Pengaturan" else "Izinkan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionDeniedDialog = false }) { Text("Tutup") }
             }
         )
     }
