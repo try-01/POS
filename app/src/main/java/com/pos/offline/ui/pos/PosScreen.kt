@@ -350,7 +350,7 @@ fun PosScreen(
                             .wrapContentHeight()
                             .let { base ->
                                 when {
-                                    !cartExpanded -> base
+                                    !isCartExpanded -> base
                                     imeVisible -> base
                                     else -> base.heightIn(max = maxH * 0.65f)
                                 }

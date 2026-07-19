@@ -1,5 +1,7 @@
 package com.pos.offline
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.layout.asPaddingValues
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
@@ -276,8 +278,15 @@ private fun AppRoot() {
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+    // Hoist state cartExpanded ke Root agar BottomNavBar bisa merespons
+    var isCartExpanded by remember { mutableStateOf(false) }
+    LaunchedEffect(dest) {
+        if (dest != Dest.POS) isCartExpanded = false
+    }
+
+    val hideBottomNav = !isLandscape && dest == Dest.POS && isCartExpanded
+
     if (isLandscape) {
-        // Mode Landscape tetap menggunakan Row manual (Sudah berfungsi baik)
         Row(
             modifier = Modifier
                 .fillMaxSize()
@@ -302,28 +311,66 @@ private fun AppRoot() {
                     scope = scope,
                     onNavigateToSettings = { dest = Dest.SETTINGS },
                     onRequestExit = { showExitDialog = true },
-                    isLandscape = true
+                    isLandscape = true,
+                    isCartExpanded = false,
+                    onCartExpandedChange = {}
                 )
             }
             SideNavRail(selected = dest, onSelect = { dest = it })
         }
     } else {
-        // Mode Portrait kini menggunakan Scaffold bawaan untuk manajemen BottomBar
-        // Ini menjamin tidak ada celah padding antara konten dan BottomNavBar
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            containerColor = MaterialTheme.colorScheme.background,
-            contentWindowInsets = WindowInsets(0),
-            bottomBar = {
-                AnimatedVisibility(
-                    visible = !imeVisible,
-                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
-                ) {
-                    BottomNavBar(selected = dest, onSelect = { dest = it })
-                }
+        // Hitung tinggi fisik sistem navigation bar (gesture bar)
+        val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        
+        // BottomNavBar kita fix di tinggi 80.dp. Saat visible, konten butuh padding 80.dp + navBarInset.
+        // Saat keyboard/cart expand, padding 0.dp (hanya imePadding yang aktif).
+        val contentBottomPadding by animateDpAsState(
+            targetValue = if (imeVisible || hideBottomNav) 0.dp else (80.dp + navBarInset),
+            animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+            label = "contentBottomPadding"
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            // Layer 1: Konten Utama
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = contentBottomPadding) // Berakhir tepat di atas BottomNav
+                    .imePadding()
+            ) {
+                ScreenContent(
+                    dest = dest,
+                    posViewModel = posViewModel,
+                    inventoryViewModel = inventoryViewModel,
+                    reportViewModel = reportViewModel,
+                    settingsViewModel = settingsViewModel,
+                    printerViewModel = printerViewModel,
+                    storeProfileViewModel = storeProfileViewModel,
+                    context = context,
+                    scope = scope,
+                    onNavigateToSettings = { dest = Dest.SETTINGS },
+                    onRequestExit = { showExitDialog = true },
+                    isLandscape = false,
+                    isCartExpanded = isCartExpanded,
+                    onCartExpandedChange = { isCartExpanded = it }
+                )
             }
-        ) { innerPadding ->
+
+            // Layer 2: BottomNavBar Melayang
+            AnimatedVisibility(
+                visible = !imeVisible && !hideBottomNav,
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                BottomNavBar(selected = dest, onSelect = { dest = it })
+            }
+        }
+    } { innerPadding ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -347,7 +394,6 @@ private fun AppRoot() {
             }
         }
     }
-}
 
 @Composable
 private fun ScreenContent(
@@ -362,7 +408,9 @@ private fun ScreenContent(
     scope: kotlinx.coroutines.CoroutineScope,
     onNavigateToSettings: () -> Unit,
     onRequestExit: () -> Unit,
-    isLandscape: Boolean
+    isLandscape: Boolean,
+    isCartExpanded: Boolean, // TAMBAHKAN
+    onCartExpandedChange: (Boolean) -> Unit // TAMBAHKAN
 ) {
     when (dest) {
         Dest.POS -> PosScreen(
@@ -375,7 +423,9 @@ private fun ScreenContent(
             onExportPdf = { result ->
                 val file = ReceiptManager.exportToPdf(context, result)
                 Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
-            }
+            },
+            isCartExpanded = isCartExpanded, // TAMBAHKAN
+            onCartExpandedChange = onCartExpandedChange // TAMBAHKAN
         )
         Dest.INVENTORY -> InventoryScreen(viewModel = inventoryViewModel)
         Dest.REPORT -> ReportScreen(
@@ -407,8 +457,8 @@ private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .navigationBarsPadding() // TAMBAHKAN INI: Angkat tepat di atas tombol sistem
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .height(80.dp) // TINGGI FIX AGAR TIDAK ADA CELAH DENGAN KONTEN ATASNYA
+            .navigationBarsPadding(), // Menempel tepat di atas gesture bar sistem
         contentAlignment = Alignment.Center
     ) {
         Row(

@@ -2,6 +2,8 @@ package com.pos.offline
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.navigationBars
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
@@ -360,7 +362,6 @@ private fun AppRoot() {
                 )
             }
 
-            // Layer 2: BottomNavBar Melayang
             AnimatedVisibility(
                 visible = !imeVisible && !hideBottomNav,
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
@@ -369,31 +370,9 @@ private fun AppRoot() {
             ) {
                 BottomNavBar(selected = dest, onSelect = { dest = it })
             }
-        }
-    } { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .imePadding()
-            ) {
-                ScreenContent(
-                    dest = dest,
-                    posViewModel = posViewModel,
-                    inventoryViewModel = inventoryViewModel,
-                    reportViewModel = reportViewModel,
-                    settingsViewModel = settingsViewModel,
-                    printerViewModel = printerViewModel,
-                    storeProfileViewModel = storeProfileViewModel,
-                    context = context,
-                    scope = scope,
-                    onNavigateToSettings = { dest = Dest.SETTINGS },
-                    onRequestExit = { showExitDialog = true },
-                    isLandscape = false
-                )
-            }
-        }
-    }
+        } // Penutup Box (Layer 1)
+    } // Penutup else (Mode Portrait)
+} // Penutup fungsi AppRoot()
 
 @Composable
 private fun ScreenContent(

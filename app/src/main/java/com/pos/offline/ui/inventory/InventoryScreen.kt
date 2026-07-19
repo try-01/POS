@@ -1,5 +1,8 @@
 package com.pos.offline.ui.inventory
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.compose.ui.window.Dialog
@@ -550,18 +553,16 @@ private fun SortMenuButton(
 }
 
 // ============================ FORM TAMBAH / EDIT ============================
-// Dialog dibiarkan memakai OutlinedTextField standar (tidak perlu sepadat list)
-// tapi spacing dipangkas sedikit agar tidak terlalu tinggi di layar kecil.
 @Composable
 private fun ProductFormDialog(
     state: ProductFormState,
     onSave: (ProductFormState) -> Unit,
     onDismiss: () -> Unit,
-    checkBarcodeConflict: suspend (String, Long) -> String? // <--- PARAM BARU
+    checkBarcodeConflict: suspend (String, Long) -> String?
 ) {
     var name by remember(state.id) { mutableStateOf(state.name) }
     var sku by remember(state.id) { mutableStateOf(state.sku) }
-    var barcode by remember(state.id) { mutableStateOf(state.barcode) } 
+    var barcode by remember(state.id) { mutableStateOf(state.barcode ?: "") }
     var price by remember(state.id) {
         mutableStateOf(if (state.price > 0) state.price.toString() else "")
     }
@@ -571,36 +572,48 @@ private fun ProductFormDialog(
     var cost by remember(state.id) {
         mutableStateOf(if (state.cost > 0) state.cost.toString() else "")
     }
-    var barcodeConflict by remember(state.id) {
-         mutableStateOf<String?>(null) 
-    }
 
-    // Batas tinggi konten dihitung dinamis dari tinggi layar — krusial untuk
-    // mode landscape & saat keyboard terbuka, di mana ruang vertikal sangat
-    // terbatas. Tanpa ini, Column akan overflow dan Compose MEMOTONGNYA
-    // secara diam-diam (bukan crash, tapi field jadi tak terlihat/terjangkau).
-    val configuration = LocalConfiguration.current
-    val maxContentHeight = (configuration.screenHeightDp * 0.42f).dp
-    val scrollState = rememberScrollState()
-
-    val context = LocalContext.current
+    var barcodeConflict by remember(state.id) { mutableStateOf<String?>(null) }
     
-    // CEK APAKAH PERANGKAT MEMILIKI KAMERA FISIK
+    val context = LocalContext.current
     val hasCamera = remember {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
     }
 
-    LaunchedEffect(barcode) {
-        val trimmed = barcode.trim()
-        if (trimmed.isBlank()) { barcodeConflict = null; return@LaunchedEffect }
-        delay(400) // Debounce: Tunggu user selesai ngetik 0.4 detik
-        barcodeConflict = checkBarcodeConflict(trimmed, state.id)
-    }
-
-        // State Izin Kamera & Scanner (hanya relevan jika hasCamera = true)
     val (permState, requestPermission) = rememberCameraPermissionState()
     var showScanner by remember { mutableStateOf(false) }
     var pendingOpenScanner by remember { mutableStateOf(false) }
+    
+    // State untuk Dialog Ditolak Permanen
+    var showPermanentlyDeniedDialog by remember { mutableStateOf(false) }
+
+    val configuration = LocalConfiguration.current
+    val maxContentHeight = (configuration.screenHeightDp * 0.42f).dp
+    val scrollState = rememberScrollState()
+
+    LaunchedEffect(barcode) {
+        val trimmed = barcode.trim()
+        if (trimmed.isBlank()) { barcodeConflict = null; return@LaunchedEffect }
+        delay(400)
+        barcodeConflict = checkBarcodeConflict(trimmed, state.id)
+    }
+
+    // Pantau perubahan izin kamera (hanya untuk kasus pending open dari first request)
+    LaunchedEffect(permState) {
+        if (pendingOpenScanner) {
+            when (permState) {
+                CameraPermissionState.GRANTED -> {
+                    showScanner = true
+                    pendingOpenScanner = false
+                }
+                CameraPermissionState.PERMANENTLY_DENIED -> {
+                    showPermanentlyDeniedDialog = true
+                    pendingOpenScanner = false
+                }
+                else -> Unit
+            }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -641,14 +654,8 @@ private fun ProductFormDialog(
                         label = { Text("Barcode", style = MaterialTheme.typography.bodySmall) },
                         singleLine = true,
                         isError = barcodeConflict != null,
-                        supportingText = if (barcodeConflict != null || (hasCamera && permState == CameraPermissionState.PERMANENTLY_DENIED)) {
-                            {
-                                Text(
-                                    barcodeConflict?.let { "Dipakai oleh: $it" } ?: "Izin kamera ditolak — aktifkan di Pengaturan",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (barcodeConflict != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline
-                                )
-                            }
+                        supportingText = if (barcodeConflict != null) {
+                            { Text("Dipakai oleh: $barcodeConflict", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) }
                         } else null,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                         shape = RoundedCornerShape(10.dp),
@@ -660,13 +667,12 @@ private fun ProductFormDialog(
                                         Icon(Icons.Rounded.Close, contentDescription = "Hapus", modifier = Modifier.size(14.dp))
                                     }
                                 }
-                                // TAMPILKAN IKON SCAN HANYA JIKA DEVICE PUNYA KAMERA
                                 if (hasCamera) {
                                     IconButton(onClick = {
                                         when (permState) {
                                             CameraPermissionState.GRANTED -> showScanner = true
-                                            CameraPermissionState.PERMANENTLY_DENIED -> {
-                                                openAppSettings(context)
+                                            CameraPermissionState.SHOW_RATIONALE, CameraPermissionState.PERMANENTLY_DENIED -> {
+                                                showPermissionDeniedDialog = true
                                             }
                                             else -> {
                                                 pendingOpenScanner = true
@@ -681,7 +687,7 @@ private fun ProductFormDialog(
                         }
                     )
                 }
-
+                
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MoneyNumberField(price, { price = it }, "Harga Jual", Modifier.weight(1f))
                     MoneyNumberField(cost, { cost = it }, "Modal", Modifier.weight(1f))
@@ -699,8 +705,6 @@ private fun ProductFormDialog(
                         modifier = Modifier.weight(1f)
                     )
                 }
-                // Spacer kecil di akhir agar field terakhir tidak "menempel" persis
-                // di tepi bawah area scroll saat digulir penuh.
                 Spacer(Modifier.height(2.dp))
             }
         },
@@ -713,7 +717,7 @@ private fun ProductFormDialog(
                             id = state.id,
                             name = name,
                             sku = sku,
-                            barcode = barcode,
+                            barcode = barcode.trim().ifBlank { null },
                             price = price.toLongOrNull() ?: 0L,
                             cost = cost.toLongOrNull() ?: 0L,
                             stock = stock.toIntOrNull() ?: 0,
@@ -726,6 +730,39 @@ private fun ProductFormDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
     )
 
+    if (showPermissionDeniedDialog) {
+        val permanentlyDenied = permState == CameraPermissionState.PERMANENTLY_DENIED
+        AlertDialog(
+            onDismissRequest = { showPermissionDeniedDialog = false },
+            title = { Text(if (permanentlyDenied) "Izin Kamera Diblokir" else "Izin Kamera Diperlukan", style = MaterialTheme.typography.titleMedium) },
+            text = {
+                Text(
+                    if (permanentlyDenied) "Akses kamera untuk scan barcode ditolak permanen. Aktifkan manual lewat Pengaturan aplikasi."
+                    else "Akses kamera dibutuhkan untuk memindai barcode produk secara langsung.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showPermissionDeniedDialog = false
+                    pendingOpenScanner = true // Set agar scanner auto-buka begitu izin didapat
+                    if (permanentlyDenied) {
+                        try {
+                            context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", context.packageName, null)
+                            })
+                        } catch (e: Exception) { /* device non-standar, jarang terjadi */ }
+                    } else {
+                        requestPermission()
+                    }
+                }) { Text(if (permanentlyDenied) "Buka Pengaturan" else "Izinkan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionDeniedDialog = false }) { Text("Tutup") }
+            }
+        )
+    }
+
     // Dialog Full-Screen Scanner untuk Form Inventaris
     if (showScanner) {
         Dialog(
@@ -736,7 +773,7 @@ private fun ProductFormDialog(
                 BarcodeScannerCamera(
                     onBarcodeScanned = { code ->
                         showScanner = false
-                        barcode = code // Otomatis isi field barcode
+                        barcode = code
                     },
                     modifier = Modifier.fillMaxSize()
                 )
