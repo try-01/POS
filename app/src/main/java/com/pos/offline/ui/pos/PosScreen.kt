@@ -1,6 +1,5 @@
 package com.pos.offline.ui.pos
 
-import android.Manifest
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,7 +58,6 @@ import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material.icons.rounded.Warning
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -89,7 +87,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -109,7 +106,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.local.entity.CartItemEntity
 import com.pos.offline.data.local.entity.CashierEntity
@@ -119,7 +115,6 @@ import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.ShiftSummary
-import androidx.compose.ui.window.DialogProperties
 import com.pos.offline.ui.components.BarcodeScannerCamera
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.discountInlineLabel
@@ -130,9 +125,7 @@ import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 import com.pos.offline.ui.receipt.PrintUiState
 import com.pos.offline.ui.receipt.forTransaction
 import com.pos.offline.util.ReceiptPrintOutcome
-import com.pos.offline.util.CameraPermissionState
-import com.pos.offline.util.openAppSettings
-import com.pos.offline.util.rememberCameraPermissionState
+import com.pos.offline.ui.components.rememberBarcodeScanner
 import java.text.SimpleDateFormat
 import java.io.File
 import java.util.Date
@@ -146,10 +139,9 @@ fun PosScreen(
     onSharePdfFile: (File) -> Unit,
     onExportPdf: (CheckoutResult) -> Unit,
     forceWideLayout: Boolean = false,
-    isCartExpanded: Boolean = false, // TAMBAHKAN
-    onCartExpandedChange: (Boolean) -> Unit = {} // TAMBAHKAN
+    isCartExpanded: Boolean = false,
+    onCartExpandedChange: (Boolean) -> Unit = {}
 ) {
-    val context = LocalContext.current
     val products by viewModel.products.collectAsStateWithLifecycle()
     val cart by viewModel.cart.collectAsStateWithLifecycle()
     val totals by viewModel.totals.collectAsStateWithLifecycle()
@@ -161,7 +153,7 @@ fun PosScreen(
     val taxRate by viewModel.taxRate.collectAsStateWithLifecycle()
     val paid by viewModel.paid.collectAsStateWithLifecycle()
     val checkoutState by viewModel.checkoutState.collectAsStateWithLifecycle()
-    
+
     val printUiState by viewModel.printUiState.collectAsStateWithLifecycle()
     val isOpeningDrawer by viewModel.isOpeningDrawer.collectAsStateWithLifecycle()
     val openDrawerOnPrint by viewModel.openDrawerOnPrint.collectAsStateWithLifecycle()
@@ -201,35 +193,7 @@ fun PosScreen(
         }
     }
 
-    // --- Barcode Scanner State (Menggunakan Util Custom) ---
-    val (permState, requestPermission) = rememberCameraPermissionState()
-    var showScanner by remember { mutableStateOf(false) }
-    var pendingOpen by remember { mutableStateOf(false) }
-    var showSettingsDialog by remember { mutableStateOf(false) }
-
-    // Pantau perubahan state izin
-    LaunchedEffect(permState) {
-        when (permState) {
-            CameraPermissionState.GRANTED -> {
-                if (pendingOpen) {
-                    showScanner = true
-                    pendingOpen = false
-                }
-            }
-            CameraPermissionState.PERMANENTLY_DENIED -> {
-                if (pendingOpen) {
-                    showSettingsDialog = true
-                    pendingOpen = false
-                }
-            }
-            else -> Unit
-        }
-    }
-
-//    var cartExpanded by remember { mutableStateOf(false) }
-//    LaunchedEffect(isCartEmpty) {
-//        cartExpanded = !isCartEmpty
-//    }
+    val launchScanner = rememberBarcodeScanner(onScanned = viewModel::onBarcodeScanned)
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -253,8 +217,7 @@ fun PosScreen(
                     onOpenDrawerClick = viewModel::openCashDrawerManually
                 )
                 Spacer(Modifier.height(4.dp))
-                
-                // Baris Pencarian + Tombol Scan
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -266,22 +229,13 @@ fun PosScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     OutlinedButton(
-                        onClick = {
-                            when (permState) {
-                                CameraPermissionState.GRANTED -> showScanner = true
-                                CameraPermissionState.PERMANENTLY_DENIED -> showSettingsDialog = true
-                                else -> {
-                                    pendingOpen = true
-                                    requestPermission()
-                                }
-                            }
-                        },
+                        onClick = launchScanner,
                         modifier = Modifier.height(36.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp)
                     ) {
                         Icon(
-                            Icons.Rounded.QrCodeScanner, 
-                            contentDescription = "Scan Barcode", 
+                            Icons.Rounded.QrCodeScanner,
+                            contentDescription = "Scan Barcode",
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(4.dp))
@@ -289,8 +243,6 @@ fun PosScreen(
                     }
                 }
 
-                // BARU: chip filter kategori — hanya tampil kalau ada kategori terdaftar,
-                // supaya tidak makan ruang saat fitur ini belum dipakai.
                 if (categories.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
                     CategoryChipsRow(
@@ -301,10 +253,6 @@ fun PosScreen(
                 }
             }
         },
-        // FIX: sebelumnya hanya statusBars → navigation bar sistem tidak pernah
-        // diperhitungkan. Sekarang MainActivity full edge-to-edge (tanpa BottomNavBar/
-        // SideNavRail lama yang dulu "gratis" menyediakan ruang ini), jadi PosScreen
-        // wajib menjaga sendiri clearance dari navigation bar di sisi manapun ia berada.
         contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars)
     ) { inner ->
         BoxWithConstraints(
@@ -406,52 +354,6 @@ fun PosScreen(
             }
         }
 
-    // --- Dialog Barcode Scanner ---
-    if (showScanner) {
-        Dialog(
-            onDismissRequest = { showScanner = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Box(Modifier.fillMaxSize()) {
-                BarcodeScannerCamera(
-                    onBarcodeScanned = { code ->
-                        showScanner = false
-                        viewModel.onBarcodeScanned(code)
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-                IconButton(
-                    onClick = { showScanner = false },
-                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
-                ) {
-                    Icon(Icons.Default.Close, contentDescription = "Tutup")
-                }
-            }
-        }
-    }
-
-    // --- Dialog Jika Izin Kamera Ditolak Permanen ---
-    if (showSettingsDialog) {
-        AlertDialog(
-            onDismissRequest = { showSettingsDialog = false },
-            title = { Text("Izin Kamera Dibutuhkan") },
-            text = { Text("Aplikasi tidak dapat memindai barcode karena izin kamera ditolak secara permanen. Mohon aktifkan izin kamera melalui pengaturan aplikasi.") },
-            confirmButton = {
-                Button(onClick = {
-                    showSettingsDialog = false
-                    openAppSettings(context) // context dari LocalContext.current
-                }) {
-                    Text("Buka Pengaturan")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSettingsDialog = false }) {
-                    Text("Batal")
-                }
-            }
-        )
-    }
-
     when (val state = checkoutState) {
         is CheckoutState.Success -> SuccessDialog(
             result = state.result,
@@ -507,7 +409,6 @@ fun PosScreen(
     }
 }
 
-// ============================ INDIKATOR & DIALOG SHIFT ============================
 
 @Composable
 private fun ShiftIndicatorBar(
@@ -877,7 +778,6 @@ private fun EndShiftDialog(
     )
 }
 
-// ============================ PANEL KATALOG ============================
 
 @Composable
 private fun ProductPane(
@@ -889,10 +789,6 @@ private fun ProductPane(
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 104.dp),
         modifier = modifier.padding(horizontal = 12.dp),
-        // FIX: 16dp → 96dp. Memberi clearance dari tombol menu mengambang (FAB) baru
-        // di pojok kiri-bawah MainActivity, yang selalu menimpa pojok ini baik di
-        // portrait (di atas CartPane yang collapsed) maupun landscape (ProductPane
-        // ada di kiri layar, tepat di belakang FAB).
         contentPadding = PaddingValues(bottom = 96.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -982,7 +878,6 @@ private fun ProductCard(product: ProductEntity, remainingStock: Int, onAdd: () -
     }
 }
 
-// ============================ PANEL KERANJANG ============================
 
 @Composable
 @Suppress("LongParameterList")
@@ -1088,7 +983,6 @@ private fun CartPane(
             if (showFull) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
-                // Box ini mengunci tinggi area daftar agar tidak melompat saat item bertambah
                 Box(
                     modifier = Modifier
                         .weight(1f) // weight(1f) tanpa fill=false akan mengunci tinggi secara rigid
@@ -1145,8 +1039,6 @@ private fun CartPane(
                                 )
                             }
 
-                            // Masukkan kembali Total & Tombol Bayar ke dalam LazyColumn
-                            // agar daftar item di atas mendapat ruang layar yang maksimal
                             item(key = "cart_divider") {
                                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                             }
@@ -1215,9 +1107,6 @@ private fun CartPane(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        // FIX: clearance dari tombol menu mengambang (FAB) pojok kiri-bawah.
-                        // Cabang ini HANYA dieksekusi saat portrait & cart di-collapse —
-                        // saat itulah FAB tampil tepat menimpa area ini kalau tanpa padding.
                         .padding(start = 84.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1840,7 +1729,6 @@ private fun DecimalField(
     )
 }
 
-// ============================ DIALOG SUKSES ============================
 
 @Composable
 private fun QuantityEditDialog(
@@ -1984,7 +1872,6 @@ private fun SuccessDialog(
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Checkbox Toggle Laci
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2123,12 +2010,6 @@ private fun CompactSearchBar(
     )
 }
 
-/**
- * Baris chip kategori — bisa digeser horizontal ([LazyRow]) kalau kategori
- * banyak. Chip "Semua" selalu ada di posisi pertama untuk membatalkan filter.
- * Tinggi 28dp sengaja dibuat kecil ("tidak makan area lain") — konsisten
- * dengan filosofi kepadatan visual PosScreen/InventoryScreen lainnya.
- */
 @Composable
 private fun CategoryChipsRow(
     categories: List<String>,

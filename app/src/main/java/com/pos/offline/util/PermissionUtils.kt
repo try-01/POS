@@ -14,20 +14,12 @@ object PermissionUtils {
     private const val PREFS_NAME = "permission_prefs"
     private const val KEY_BLUETOOTH_REQUESTED = "bluetooth_permission_requested"
 
-    /** Status hasil pengecekan izin Bluetooth, dipakai UI untuk memutuskan
-     *  aksi yang tepat -- KARENA memanggil launcher.launch() saat kondisi
-     *  sebenarnya [PermanentlyDenied] akan percuma (sistem tidak menampilkan
-     *  dialog apa pun, hanya "flicker" activity permission yang langsung
-     *  menutup diri sendiri). Lihat catatan bug H3b untuk detail. */
     sealed class BluetoothPermissionState {
         object Granted : BluetoothPermissionState()
         object CanRequest : BluetoothPermissionState()
         object PermanentlyDenied : BluetoothPermissionState()
     }
 
-    /** Daftar permission Bluetooth yang WAJIB diminta lewat runtime request,
-     *  sesuai level API perangkat. Array kosong di API < 31 (tidak ada yang
-     *  perlu diminta runtime -- sudah berstatus normal-permission). */
     fun requiredBluetoothPermissions(): Array<String> =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
@@ -41,15 +33,6 @@ object PermissionUtils {
                 PackageManager.PERMISSION_GRANTED
         }
 
-    /**
-     * Tandai bahwa dialog request permission Bluetooth SUDAH PERNAH
-     * ditampilkan (apa pun hasilnya). Disimpan manual di SharedPreferences
-     * karena Android TIDAK menyediakan API untuk membedakan "belum pernah
-     * ditanya" vs "ditolak permanen" -- keduanya sama-sama membuat
-     * shouldShowRequestPermissionRationale() == false. Tanpa flag ini, kita
-     * tidak bisa membedakan kapan aman memanggil launch() lagi vs kapan
-     * harus mengarahkan user ke Pengaturan Aplikasi.
-     */
     fun markBluetoothPermissionRequested(context: Context) {
         prefs(context).edit().putBoolean(KEY_BLUETOOTH_REQUESTED, true).apply()
     }
@@ -57,19 +40,6 @@ object PermissionUtils {
     fun wasBluetoothPermissionRequestedBefore(context: Context): Boolean =
         prefs(context).getBoolean(KEY_BLUETOOTH_REQUESTED, false)
 
-    /**
-     * Tentukan status permission Bluetooth saat ini secara lengkap.
-     *
-     * Catatan penting: sebagian OEM (termasuk Xiaomi HyperOS, dikonfirmasi
-     * oleh user di Android 16/HyperOS 3) bisa menandai permission grup
-     * "Nearby devices" sebagai tidak-boleh-ditanya-lagi HANYA SETELAH SATU
-     * kali penolakan, tanpa user pernah mencentang "Jangan tanya lagi" --
-     * berbeda dari perilaku standar AOSP (biasanya butuh 2x penolakan).
-     * Fungsi ini TIDAK bergantung pada asumsi jumlah penolakan tertentu --
-     * ia murni mengikuti apa kata shouldShowRequestPermissionRationale()
-     * dikombinasikan dengan flag "sudah pernah ditanya", sehingga otomatis
-     * benar di semua OEM/versi Android tanpa perlu hardcode kebijakan OEM.
-     */
     fun currentBluetoothPermissionState(context: Context): BluetoothPermissionState {
         if (hasBluetoothPermissions(context)) return BluetoothPermissionState.Granted
 

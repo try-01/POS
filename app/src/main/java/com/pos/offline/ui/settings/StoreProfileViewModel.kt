@@ -16,13 +16,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** Data form edit profil toko. Custom equals()/hashCode() (pola sama seperti
- *  StoreProfileEntity) diperlukan karena data class dengan properti
- *  ByteArray secara default membandingkan REFERENSI, bukan ISI -- Kotlin
- *  compiler bahkan memberi warning eksplisit soal ini. Tanpa perbaikan ini,
- *  StateFlow bisa menganggap dua form state dengan logo identik sebagai
- *  "berbeda" (tidak fatal, hanya recomposition berlebih), tapi lebih benar
- *  untuk diperbaiki dari awal mengikuti pola yang sudah ada di entity. */
 data class StoreProfileFormState(
     val storeName: String = "",
     val address: String = "",
@@ -61,9 +54,6 @@ class StoreProfileViewModel(
     private val logoImageProcessor: LogoImageProcessor
 ) : ViewModel() {
 
-    /** Dipakai untuk ringkasan di SettingsScreen (nama toko, status
-     *  auto-print, thumbnail logo) DAN sebagai sumber data awal saat form
-     *  edit dibuka -- lihat [loadFormFromCurrentProfile]. */
     val profile: StateFlow<StoreProfileEntity> = storeProfileRepository.profile
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StoreProfileEntity())
 
@@ -73,9 +63,6 @@ class StoreProfileViewModel(
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
-    /** Muat ulang form dari data tersimpan terakhir -- dipanggil setiap
-     *  dialog profil toko dibuka, supaya form selalu mencerminkan data
-     *  terbaru (bukan bekas edit sesi sebelumnya yang belum disimpan). */
     fun loadFormFromCurrentProfile() {
         val current = profile.value
         _uiState.value = StoreProfileUiState(

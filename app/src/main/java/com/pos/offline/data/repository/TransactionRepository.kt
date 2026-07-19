@@ -22,23 +22,11 @@ data class CheckoutResult(
 
 class InsufficientStockException(val productName: String) : RuntimeException()
 
-/**
- * Hasil operasi [TransactionRepository.voidTransaction] — sealed class
- * (bukan exception) karena kegagalan validasi (shift tertutup, sudah
- * di-void, dsb) adalah alur normal yang harus ditampilkan sebagai pesan
- * ke kasir, bukan crash.
- */
 sealed class VoidOutcome {
-    /**
-     * @param restoredStockCount jumlah baris item yang stoknya berhasil dikembalikan
-     * @param skippedStockCount jumlah baris item yang DILEWATI (data lama,
-     *   `productId` null — tidak bisa ditebak aman lewat nama produk saja)
-     */
     data class Success(val restoredStockCount: Int, val skippedStockCount: Int) : VoidOutcome()
     data object AlreadyVoided : VoidOutcome()
     data object NotFound : VoidOutcome()
 
-    /** Shift dari transaksi ini sudah ditutup — Void diblokir (aturan final). */
     data object ShiftClosed : VoidOutcome()
 }
 
@@ -60,31 +48,6 @@ class TransactionRepository(
     fun transactionsByShift(shiftId: Long): Flow<List<TransactionEntity>> =
         transactionDao.observeByShift(shiftId)
 
-    /**
-     * Proses checkout.
-     *
-     * URUTAN KALKULASI (penting, sesuai aturan PPN Indonesia):
-     *  1) subtotal (bruto) = Σ (hargaSatuan × qty) seluruh item.
-     *  2) diskon dikonversi dari [discountType]+[discountValue] mentah ke
-     *     nominal Rupiah (dibulatkan round-half-up via [roundToRupiah]),
-     *     lalu dibatasi maksimal sebesar subtotal (tidak boleh negatif).
-     *  3) DPP (Dasar Pengenaan Pajak) = subtotal − diskon.
-     *  4) pajak = DPP × taxRate, dibulatkan round-half-up.
-     *  5) total = DPP + pajak.
-     *  6) kembalian = max(0, paid − total); jika kurang bayar, change = 0.
-     *
-     * [discountType] & [discountValue] MURNI disimpan sebagai snapshot audit
-     * ("apa yang diketik kasir") pada [TransactionEntity] — TIDAK dipakai
-     * ulang untuk kalkulasi apa pun setelah ini; `discount` (nominal final)
-     * tetap satu-satunya sumber kebenaran untuk laporan/shift.
-     *
-     * BATCH 3C: setiap item struk kini menyimpan snapshot `unitCost` (harga
-     * modal produk SAAT transaksi ini terjadi) — dasar kalkulasi Laba Kotor
-     * per shift di [ShiftRepository.getShiftSummary].
-     *
-     * BATCH D: setiap item struk kini juga menyimpan `productId` — dasar
-     * reversal stok otomatis saat [voidTransaction] dipanggil nanti.
-     */
     suspend fun checkout(
         cart: List<CartItemEntity>,
         discountType: DiscountType,
@@ -164,21 +127,6 @@ class TransactionRepository(
         return CheckoutResult(tx, items)
     }
 
-    /**
-     * BATCH D: batalkan (void/soft-delete) sebuah transaksi.
-     *
-     * Aturan (final, disepakati sebelumnya):
-     *  - Transaksi TANPA shift (`shiftId == null`) SELALU boleh di-void
-     *    kapan saja — tidak terikat rekonsiliasi shift manapun.
-     *  - Transaksi DENGAN shift hanya boleh di-void SELAMA shift tsb masih
-     *    terbuka (`endedAt == null`). Begitu shift ditutup, transaksi
-     *    "terkunci" — mencegah "Selisih" yang sudah dicatat kasir saat tutup
-     *    shift jadi tidak match lagi secara retroaktif.
-     *  - Reversal stok: HANYA untuk item yang punya `productId` (transaksi
-     *    baru, pasca migrasi v6). Item lama (`productId == null`) DILEWATI
-     *    apa adanya (dilaporkan via [VoidOutcome.Success.skippedStockCount])
-     *    — tidak pernah ditebak lewat `productName` yang berisiko salah.
-     */
     suspend fun voidTransaction(invoiceId: String): VoidOutcome {
         val tx = transactionDao.getById(invoiceId) ?: return VoidOutcome.NotFound
         if (tx.isVoid) return VoidOutcome.AlreadyVoided

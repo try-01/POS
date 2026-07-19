@@ -5,18 +5,6 @@ import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 
-/**
- * VisualTransformation yang menampilkan separator ribuan ("100000" -> "100.000")
- * tanpa mengubah nilai asli yang disimpan di state.
- *
- * Dipindahkan ke lokasi shared (dari PosScreen.kt) agar bisa dipakai ulang oleh
- * InventoryScreen.kt tanpa duplikasi logika — satu sumber kebenaran untuk
- * format uang di seluruh aplikasi.
- *
- * Pemetaan offset dibangun dari array (bukan rumus aritmatika manual) supaya
- * tidak ada celah off-by-one yang bisa menghasilkan indeks negatif/di luar
- * jangkauan — penyebab crash saat jumlah digit kelipatan 3.
- */
 object ThousandsSeparatorTransformation : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val original = text.text

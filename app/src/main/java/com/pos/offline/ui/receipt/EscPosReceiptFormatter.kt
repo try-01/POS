@@ -15,10 +15,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * Formatter MURNI: hanya menghasilkan [String] markup ESC/POS (syntax DantSu)
- * dari data transaksi + profil toko.
- */
 object EscPosReceiptFormatter {
 
     private const val MAX_IMAGE_HEIGHT_PX = 256
@@ -46,8 +42,6 @@ object EscPosReceiptFormatter {
         val sb = StringBuilder()
         val charsPerLine = printer.printerNbrCharactersPerLine
 
-        // ---- 1. Header Toko ----
-        // Poin 1: Jika nama toko atau alamat kosong, otomatis skip (tidak ada baris kosong)
         val storeName = sanitize(storeProfile.storeName).trim()
         if (storeName.isNotEmpty()) {
             sb.append("[C]<b><font size='big'>").append(storeName).append("</font></b>\n")
@@ -57,11 +51,8 @@ object EscPosReceiptFormatter {
             appendCenteredMultiline(sb, storeProfile.address)
         }
 
-        // Pembatas
         sb.append(divider(charsPerLine))
 
-        // ---- 2. Info Transaksi (Tanggal, No Inv, Kasir, Shift) ----
-        // Poin 2: Info dicetak sejajar kiri & kanan
         val dateFormatter = SimpleDateFormat(dateFormatterPattern, Locale.forLanguageTag("id-ID"))
         val dateStr = dateFormatter.format(Date(transaction.createdAt))
         val invStr = sanitize(transaction.id)
@@ -90,34 +81,26 @@ object EscPosReceiptFormatter {
 
         sb.append(divider(charsPerLine))
 
-        // ---- 3. Daftar Item ----
         items.forEach { item ->
             val name = sanitize(item.productName).trim().ifEmpty { "(Tanpa nama)" }
-            // Jika QTY > 1, pecah ke baris kedua agar tulisan Qty & Harga tidak nabrak Nama Produk
             if (item.quantity > 1) {
                 sb.append("[L]<b>").append(name).append("</b>\n")
                 sb.append("[L]  ").append(item.quantity).append(" x ").append(item.unitPrice.toRupiah())
                   .append("[R]").append(item.lineTotal.toRupiah()).append("\n")
             } else {
-                // Jika QTY = 1, buat sebaris untuk menghemat kertas
                 sb.append("[L]<b>").append(name).append("</b>[R]").append(item.lineTotal.toRupiah()).append("\n")
             }
         }
 
-        // ---- 4. Total ----
         sb.append("\n") // Satu baris jarak eksklusif untuk Total sesuai desain
         sb.append("[C]<b><font size='wide'>TOTAL: ").append(transaction.total.toRupiah()).append("</font></b>\n")
         sb.append(divider(charsPerLine))
 
-        // ---- 5. Grid Pembayaran Dinamis (Poin 3, 4, 5) ----
-        // List dikumpulkan, lalu dicetak secara berpasangan [Kiri, Kanan]
         val gridItems = mutableListOf<Pair<String, String>>()
         
-        // Label pembayaran disesuaikan dengan transaksinya (Misal: Tunai / QRIS)
         val payLabel = paymentMethodLabel(transaction.paymentMethod)
         gridItems.add(Pair(payLabel, transaction.paidAmount.toRupiah()))
 
-        // Jika 0, item ini tidak akan di-push ke list (Otomatis tidak dicetak)
         if (transaction.change > 0) {
             gridItems.add(Pair("Kembali", transaction.change.toRupiah()))
         }
@@ -128,21 +111,18 @@ object EscPosReceiptFormatter {
             gridItems.add(Pair("Pajak", transaction.tax.toRupiah()))
         }
 
-        // Pecah list menjadi per-2 data (kiri dan kanan)
         val chunks = gridItems.chunked(2)
         for (chunk in chunks) {
             if (chunk.size == 2) {
                 sb.append("[L]").append(chunk[0].first).append(": ").append(chunk[0].second)
                 sb.append("[R]").append(chunk[1].first).append(": ").append(chunk[1].second).append("\n")
             } else {
-                // Skenario ganjil (sisa 1): cetak di kiri saja lalu langsung turun ke garis putus-putus
                 sb.append("[L]").append(chunk[0].first).append(": ").append(chunk[0].second).append("\n")
             }
         }
 
         sb.append(divider(charsPerLine))
 
-        // ---- 6. Footer (Poin 1) ----
         if (storeProfile.footerNote.isNotBlank()) {
             appendCenteredMultiline(sb, storeProfile.footerNote)
         }
@@ -154,7 +134,6 @@ object EscPosReceiptFormatter {
 
     private fun divider(charsPerLine: Int): String {
         val safeLength = charsPerLine.coerceAtLeast(1)
-        // Memakai karakter "-" agar sesuai dengan desain
         return "[C]" + "-".repeat(safeLength) + "\n"
     }
 

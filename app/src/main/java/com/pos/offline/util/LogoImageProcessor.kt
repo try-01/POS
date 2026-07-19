@@ -12,14 +12,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
-/**
- * Memproses gambar logo yang dipilih user dari galeri/berkas menjadi
- * ByteArray siap simpan di [StoreProfileEntity.logoBytes] -- di-resize
- * (bounding box maksimal 300px, aspect ratio dipertahankan, TIDAK dipaksa
- * persegi), diubah ke grayscale, dikompresi sebagai PNG (bukan JPEG --
- * sengaja lossless supaya kualitas tetap baik saat di-dithering ulang jadi
- * bitmap monokrom murni untuk printer thermal di Batch H5 nanti).
- */
 class LogoImageProcessor(private val appContext: Context) {
 
     suspend fun process(uri: Uri): ByteArray? = withContext(Dispatchers.IO) {
@@ -35,24 +27,17 @@ class LogoImageProcessor(private val appContext: Context) {
         }
     }
 
-    /** Baca dimensi asli dulu (inJustDecodeBounds) sebelum decode penuh --
-     *  menghindari OutOfMemoryError untuk foto beresolusi sangat besar dari
-     *  kamera/galeri (bisa puluhan megapixel) sebelum sempat di-downscale
-     *  ke ~300px. */
 private fun decodeBitmapSafely(uri: Uri): Bitmap? {
     val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     
-    // 1. Buka stream HANYA untuk mengecek ukuran (pisahkan pengecekan null-nya)
     val boundsStream = appContext.contentResolver.openInputStream(uri) ?: return null
     boundsStream.use { stream ->
         BitmapFactory.decodeStream(stream, null, boundsOptions)
     } // Tidak perlu ?: return null di sini, karena decodeStream memang pasti null
 
-    // 2. Hitung skala kompresi
     val sampleSize = calculateInSampleSize(boundsOptions, MAX_DIMENSION * 2, MAX_DIMENSION * 2)
     val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
     
-    // 3. Buka stream BARU untuk benar-benar me-load gambar menjadi Bitmap
     val decodeStream = appContext.contentResolver.openInputStream(uri) ?: return null
     return decodeStream.use { stream ->
         BitmapFactory.decodeStream(stream, null, decodeOptions)

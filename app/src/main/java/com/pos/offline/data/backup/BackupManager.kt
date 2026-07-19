@@ -12,13 +12,11 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 
-/** Hasil operasi ekspor database. */
 sealed class BackupOutcome {
     object Success : BackupOutcome()
     data class Error(val throwable: Throwable) : BackupOutcome()
 }
 
-/** Hasil operasi impor/restore database. */
 sealed class RestoreOutcome {
     object Success : RestoreOutcome()
     data class InvalidFile(val reason: String) : RestoreOutcome()
@@ -32,9 +30,6 @@ object BackupManager {
 
     private const val DB_NAME = "pos.db"
 
-    /** Nama file default saat dialog "Simpan sebagai" (SAF) muncul — juga
-     *  dipakai sebagai nama file saat dibagikan (share), supaya penerima
-     *  (mis. lewat WhatsApp) melihat nama yang jelas & unik, bukan "pos.db". */
     fun suggestedBackupFileName(): String {
         val ts = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
             .format(java.util.Date())
@@ -75,8 +70,6 @@ object BackupManager {
         withContext(Dispatchers.IO) {
             val tempFile = File(context.cacheDir, "restore_candidate.db")
             try {
-                // 1) Salin ke cache dulu — jangan pernah sentuh db aktif
-                //    sebelum yakin file ini valid.
                 val resolver = context.contentResolver
                 val input = resolver.openInputStream(sourceUri)
                     ?: return@withContext RestoreOutcome.Error(
@@ -86,14 +79,12 @@ object BackupManager {
                     FileOutputStream(tempFile).use { out -> inp.copyTo(out) }
                 }
 
-                // 2) Validasi
                 val invalidReason = validateCandidate(context, tempFile)
                 if (invalidReason != null) {
                     tempFile.delete()
                     return@withContext RestoreOutcome.InvalidFile(invalidReason)
                 }
 
-                // 3) Lolos validasi -> tutup koneksi aktif & timpa file
                 PosDatabase.closeActiveInstance()
 
                 val targetDb = context.getDatabasePath(DB_NAME)
@@ -105,11 +96,6 @@ object BackupManager {
                 }
                 tempFile.delete()
 
-                // Catatan: kalau file yang direstore berskema LEBIH LAMA dari
-                // versi aplikasi saat ini (mis. backup v7 dipulihkan ke app v8),
-                // proses migrasi (MIGRATION_x_y yang relevan) akan otomatis
-                // dijalankan Room begitu PosDatabase.getInstance() dipanggil
-                // ulang setelah restartApp() -- tidak perlu ditangani manual di sini.
 
                 RestoreOutcome.Success
             } catch (t: Throwable) {
@@ -118,21 +104,6 @@ object BackupManager {
             }
         }
 
-    /**
-     * Validasi kandidat file backup.
-     *
-     * PENTING (bugfix): sebelumnya kompatibilitas dicek murni lewat
-     * kesamaan `identity_hash` antara kandidat vs db aktif. Itu keliru --
-     * `identity_hash` berubah SETIAP kali skema Room naik versi (mis. v7 ke
-     * v8 di Batch H1), padahal backup versi skema lebih lama tetap valid
-     * untuk direstore karena akan otomatis dimigrasikan Room lewat
-     * `Migrations.ALL` saat database dibuka kembali. Yang benar-benar perlu
-     * dicek adalah `PRAGMA user_version` (nomor versi skema):
-     * - kandidat > versi app aktif -> tolak (file dari app yang lebih baru).
-     * - kandidat < versi app aktif -> boleh, akan dimigrasikan otomatis.
-     * - kandidat == versi app aktif -> baru masuk akal bandingkan
-     *   `identity_hash` sbg jaminan ekstra strukturnya benar-benar identik.
-     */
     private fun validateCandidate(context: Context, candidate: File): String? {
         if (!hasSqliteHeader(candidate)) {
             return "File yang dipilih bukan berkas database SQLite yang valid."
@@ -173,9 +144,6 @@ object BackupManager {
                         "(kemungkinan bukan dari aplikasi ini)."
                 }
             }
-            // candidateVersion < activeVersion -> backup dari skema versi lebih lama,
-            // TETAP DIBOLEHKAN: migrasi otomatis akan menyesuaikan skemanya begitu
-            // Room membuka kembali database ini setelah restore.
         }
 
         return null
@@ -189,8 +157,6 @@ object BackupManager {
         return header.contentEquals(magic)
     }
 
-    /** Membaca `PRAGMA user_version` -- ini nomor versi skema Room
-     *  ([androidx.room.Database.version]) yang tersimpan di file itu sendiri. */
     private fun readUserVersion(path: String): Int {
         val db = SQLiteDatabase.openDatabase(path, null, SQLiteDatabase.OPEN_READONLY)
         return db.use { it.version }

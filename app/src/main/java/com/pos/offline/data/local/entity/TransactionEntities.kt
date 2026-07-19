@@ -33,22 +33,12 @@ data class TransactionEntity(
     @ColumnInfo(defaultValue = "'COMPLETED'")
     val status: String = TransactionStatus.COMPLETED.name,
 
-    /** Timestamp epoch millis saat transaksi dibatalkan; null jika belum pernah di-void. */
     val voidedAt: Long? = null,
     val voidReason: String? = null,
 
-    /**
-     * FK logis ke ReturnEntity.id (tanpa @ForeignKey, ikut pola TransactionItemEntity).
-     * null = belum pernah diretur. Sekali terisi, PERMANEN — "sekali retur = final",
-     * tombol "Retur Item" di UI disembunyikan selamanya untuk transaksi ini.
-     * Ditambahkan di v7 (lihat MIGRATION_6_7). Kolom ini SENGAJA di tabel `transactions`
-     * (bukan cuma dilihat dari keberadaan record di tabel `returns`) supaya Room Flow
-     * daftar transaksi otomatis ter-refresh reaktif saat retur baru saja diproses.
-     */
     val returnId: Long? = null
 )
 
-/** Shortcut baca: true jika transaksi ini berstatus VOID (dibatalkan). Ada di TransactionStatus.kt */
 
 @Entity(
     tableName = "transaction_items",
@@ -68,6 +58,5 @@ data class TransactionItemEntity(
     val productId: Long? = null
 )
 
-/** Shortcut baca: true jika transaksi ini sudah pernah diretur (final, tidak bisa diretur lagi). */
 val TransactionEntity.hasReturn: Boolean
     get() = returnId != null

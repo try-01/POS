@@ -60,11 +60,9 @@ fun StoreProfileDialog(
     viewModel: StoreProfileViewModel,
     onDismiss: () -> Unit
 ) {
-    // FIX PERFORMA: Menggunakan lifecycle-aware state collection (menghemat memori & baterai)
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val form = uiState.formState
 
-    // FIX UX: Menjadikan viewModel sebagai key agar siklus hidup Effect lebih aman
     LaunchedEffect(viewModel) {
         viewModel.loadFormFromCurrentProfile()
     }
@@ -94,7 +92,6 @@ fun StoreProfileDialog(
                         fontWeight = FontWeight.Bold
                     )
                     IconButton(onClick = onDismiss) {
-                        // FIX ERROR: Memanggil icon via route lengkap receiver Icons.Rounded
                         Icon(Icons.Rounded.Close, contentDescription = "Tutup")
                     }
                 }
@@ -108,7 +105,6 @@ fun StoreProfileDialog(
                         .imePadding(), // FIX UX: Mencegah textfield tertutup oleh keyboard
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    // ---- Logo ----
                     Text("Logo Toko", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(contentAlignment = Alignment.Center) {
@@ -140,7 +136,6 @@ fun StoreProfileDialog(
                                 onClick = { pickImageLauncher.launch("image/*") },
                                 enabled = !uiState.isProcessingLogo
                             ) {
-                                // FIX ERROR & BENTROK NAMA: Memanggil Icons.Rounded.Image tanpa alias ImageIcon
                                 Icon(Icons.Rounded.Image, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
                                 Text(if (form.logoBytes == null) "Pilih Logo" else "Ganti Logo", fontSize = 12.sp)
@@ -170,7 +165,6 @@ fun StoreProfileDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    // ---- Info Toko ----
                     OutlinedTextField(
                         value = form.storeName,
                         onValueChange = viewModel::updateStoreName,
@@ -194,7 +188,6 @@ fun StoreProfileDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // ---- Auto Print ----
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -237,9 +230,6 @@ fun StoreProfileDialog(
     }
 }
 
-/** Preview logo dari ByteArray -- dipakai juga di SettingsScreen untuk
- * thumbnail ringkasan, karena itu TIDAK private. Dekode ulang dari
- * ByteArray tiap kali [logoBytes] berubah (di-cache via remember key). */
 @Composable
 fun LogoPreview(logoBytes: ByteArray?, modifier: Modifier = Modifier) {
     val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = logoBytes) {
@@ -254,7 +244,6 @@ fun LogoPreview(logoBytes: ByteArray?, modifier: Modifier = Modifier) {
         }
     }
 
-    // FIX SMART CAST: Menggunakan ?.let dan ?: run sebagai pengganti if-else
     bitmap?.let { nonNullBitmap ->
         Image(
             bitmap = nonNullBitmap, // Sekarang menggunakan nonNullBitmap yang dijamin tidak null
@@ -263,7 +252,6 @@ fun LogoPreview(logoBytes: ByteArray?, modifier: Modifier = Modifier) {
             modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant)
         )
     } ?: run {
-        // Blok ini dieksekusi jika bitmap bernilai null
         Box(
             modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center

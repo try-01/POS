@@ -27,9 +27,6 @@ data class ProductEntity(
     val active: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
-    // BARU: kategori bebas teks. Non-null + default "" (bukan nullable seperti
-    // barcode) — kategori bukan identifier unik, jadi tidak perlu null-check
-    // berulang di Kotlin; "" dianggap "tanpa kategori" di seluruh UI/filter.
     @ColumnInfo(name = "category", defaultValue = "''")
     val category: String = ""
 )

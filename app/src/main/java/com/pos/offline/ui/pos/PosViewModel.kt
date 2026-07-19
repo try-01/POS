@@ -90,7 +90,6 @@ class PosViewModel(
     private val _paymentMethod = MutableStateFlow(PaymentMethod.CASH)
     val paymentMethod: StateFlow<PaymentMethod> = _paymentMethod.asStateFlow()
 
-    // Hasil pencarian mentah dari DB (belum difilter kategori).
     private val searchResults: StateFlow<List<ProductEntity>> = _searchQuery
         .debounce(180)
         .distinctUntilChanged()
@@ -100,15 +99,9 @@ class PosViewModel(
     private val _selectedCategory = MutableStateFlow<String?>(null) // null = "Semua"
     val selectedCategory: StateFlow<String?> = _selectedCategory.asStateFlow()
 
-    /** Kategori unik dari SEMUA produk aktif (lepas dari query pencarian saat ini)
-     *  — dipakai chip filter di PosScreen. Tetap stabil walau user sedang mengetik
-     *  di kotak pencarian. */
     val categories: StateFlow<List<String>> = productRepository.observeCategories()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Katalog yang ditampilkan = hasil pencarian DIFILTER kategori terpilih.
-    // Filter in-memory (bukan query DB baru) karena searchResults sudah di RAM —
-    // konsisten dengan pola sorting in-memory di InventoryViewModel.
     val products: StateFlow<List<ProductEntity>> = combine(
         searchResults, _selectedCategory
     ) { list, category ->
@@ -120,9 +113,6 @@ class PosViewModel(
     }
 
     init {
-        // Kalau kategori yang sedang difilter ternyata sudah tidak ada lagi produknya
-        // (mis. produk terakhir di kategori itu diedit/dihapus), otomatis kembali ke
-        // "Semua" — supaya katalog tidak diam-diam kosong tanpa penjelasan ke kasir.
         viewModelScope.launch {
             categories.collect { list ->
                 val current = _selectedCategory.value
@@ -154,7 +144,6 @@ class PosViewModel(
     private val _isOpeningDrawer = MutableStateFlow(false)
     val isOpeningDrawer: StateFlow<Boolean> = _isOpeningDrawer.asStateFlow()
 
-    // BATCH H8: State untuk Toggle Buka Laci (Default OFF)
     private val _openDrawerOnPrint = MutableStateFlow(false)
     val openDrawerOnPrint: StateFlow<Boolean> = _openDrawerOnPrint.asStateFlow()
 
@@ -185,7 +174,21 @@ class PosViewModel(
     private var lastScannedBarcode: String = ""
     private var lastScannedTimestamp: Long = 0L
     private val scanCooldownMs = 600L // saring burst kamera, gak block scan sengaja
-    fun onBarcodeScanned(barcode: String) {
+
+    private fun sanitizeScannedCode(raw: String): String? {
+        val cleaned = raw.trim().filter { c -> c.isLetterOrDigit() || c in "-_./: #" }.take(128)
+        return cleaned.ifBlank { null }
+    }
+
+    fun onBarcodeScanned(raw: String) {
+        val barcode = sanitizeScannedCode(raw)
+        if (barcode == null) {
+            viewModelScope.launch {
+                _uiEvents.emit(PosUiEvent.ShowMessage("Gagal memindai kode. Coba pindai ulang."))
+            }
+            return
+        }
+
         val now = System.currentTimeMillis()
         if (barcode == lastScannedBarcode && (now - lastScannedTimestamp) < scanCooldownMs) {
             return
@@ -198,7 +201,6 @@ class PosViewModel(
                 _uiEvents.emit(PosUiEvent.ShowMessage("Produk tidak ditemukan!"))
                 return@launch
             }
-            // Lanjutkan proses memasukkan ke keranjang
             addToCart(product)
             _uiEvents.emit(PosUiEvent.ShowMessage("${product.name} ditambahkan ke keranjang"))
         }
@@ -356,7 +358,6 @@ class PosViewModel(
         }
     }
 
-    // Tombol Buka Laci manual dari TopBar (Tidak terikat pada transaksi/struk)
     fun openCashDrawerManually() {
         if (_isOpeningDrawer.value) return 
         viewModelScope.launch {

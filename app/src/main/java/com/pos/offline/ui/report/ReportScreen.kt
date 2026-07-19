@@ -107,51 +107,6 @@ import com.pos.offline.util.toRupiah
 import kotlinx.coroutines.delay
 import java.time.Instant
 
-/**
- * Layar Laporan Harian — kepadatan visual disamakan dengan PosScreen &
- * InventoryScreen (font kecil, padding ringkas) agar lebih banyak informasi
- * muat di layar ponsel tanpa scroll berlebihan.
- *
- * BATCH C: setiap baris transaksi bisa diketuk untuk membuka
- * [TransactionDetailDialog] — rincian lengkap read-only.
- *
- * BATCH D: transaksi berstatus VOID ditampilkan dengan badge "DIBATALKAN"
- * di daftar & detail; dialog detail menyediakan tombol "Batalkan Transaksi"
- * (hanya untuk yang masih COMPLETED) + dialog konfirmasi 2-langkah.
- * Hasil Void ditampilkan sebagai BANNER INLINE di dalam dialog (bukan
- * Snackbar) — `AlertDialog` adalah window Android terpisah yang menutupi
- * `SnackbarHost` milik `Scaffold` (window utama).
- *
- * BATCH (cetak ulang): dialog detail transaksi punya 3 aksi cetak-ulang
- * (Cetak Bluetooth / Ekspor PDF / Bagikan) — reuse
- * [onPrintBluetooth]/[onExportPdf]/[onShare] yang di-inject dari
- * [com.pos.offline.MainActivity], feedback via Toast.
- *
- * BATCH G (Fitur 2): bagian ATAS layar (navigator tanggal, ringkasan
- * pendapatan, kurva tren) SELALU tampil terlepas tab aktif. Bagian BAWAH
- * berganti lewat tab "Transaksi"/"Shift":
- *  - Tab "Transaksi": daftar riwayat transaksi (perilaku lama, tidak berubah).
- *  - Tab "Shift": breakdown Tunai/QRIS untuk tanggal terpilih + "Retur Hari
- *    Ini" (Batch E4) + "Riwayat Tutup Shift" (shift yang ditutup pada
- *    tanggal itu) — klik baris untuk lihat detail read-only.
- *
- * BATCH E3: [TransactionDetailDialog] kini punya badge "SUDAH DIRETUR" +
- * tombol "Retur Item" (berdampingan dengan "Batalkan Transaksi", dipindah
- * dari slot `dismissButton` ke dalam konten karena `AlertDialog` cuma
- * punya 2 slot tombol bawaan). Dialog baru [ReturnItemDialog] menampilkan
- * checklist item + stepper qty + checkbox "Kembalikan ke stok?" per baris +
- * nominal pengembalian (sugesti bisa di-override manual) + metode refund.
- *
- * BATCH E4: section "Retur Hari Ini" di tab Shift ([ReturnSummarySection] +
- * daftar [ReturnRow]) — REAKTIF mengikuti tanggal terpilih yang sama dengan
- * [report]/[closedShifts]. Klik baris membuka [ReturnDetailDialog] read-only
- * (item, status restock per item, metode, catatan) + tombol lompat ke
- * transaksi asal.
- *
- * Hanya SATU dialog yang tampil bergantian (detail transaksi / konfirmasi
- * Void / Retur / detail shift historis / detail retur) — pola sudah ada
- * sejak Batch D untuk Void, sekarang diperluas ke semua dialog baru.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportScreen(
@@ -179,9 +134,6 @@ fun ReportScreen(
     var voidBanner by remember { mutableStateOf<ReportMessage?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Routing pesan Void/Retur-sukses: kalau dialog detail SEDANG TERBUKA
-    // saat pesan tiba, tampilkan sebagai banner di dalam dialog (window-nya
-    // sendiri). Kalau dialog sudah tertutup, pakai Snackbar biasa di window utama.
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg ->
             if (selectedTransaction != null) {
@@ -192,7 +144,6 @@ fun ReportScreen(
         }
     }
 
-    // Banner otomatis hilang setelah 3 detik.
     LaunchedEffect(voidBanner) {
         if (voidBanner != null) {
             delay(3000)
@@ -203,44 +154,43 @@ fun ReportScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 12.dp)
             ) {
-                Icon(
-                    Icons.AutoMirrored.Rounded.ReceiptLong,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "Laporan Harian",
-                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
-                    fontWeight = FontWeight.SemiBold
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.ReceiptLong,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Laporan Harian",
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         },
-        // FIX: sebelumnya hanya statusBars → navigation bar sistem tidak pernah
-        // diperhitungkan. MainActivity sekarang full edge-to-edge (tanpa ruang
-        // 80dp tetap dari BottomNavBar/SideNavRail lama), jadi ReportScreen wajib
-        // menjaga sendiri clearance dari navigation bar di sisi manapun ia berada.
         contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars)
     ) { inner ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(inner),
-            // FIX: bottom 6dp → 96dp. Memberi clearance dari tombol menu mengambang
-            // (FAB) baru di pojok kiri-bawah MainActivity — item terakhir di tab
-            // manapun (Transaksi/Shift) tidak lagi berisiko tertutup FAB atau gesture bar.
             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp).let {
                 PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp)
             },
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // ---------- Navigator tanggal ----------
             item(key = "date_navigator") {
                 DateNavigator(
                     label = selectedDate.format(ReportViewModel.dateFmt),
@@ -251,13 +201,10 @@ fun ReportScreen(
                 )
             }
 
-            // ---------- Ringkasan (SELALU tampil, terlepas tab) ----------
             item(key = "summary") { SummarySection(report = report) }
 
             if (report.transactionCount > 0) {
                 item(key = "chart") {
-                    // BATCH D: hanya transaksi COMPLETED yang masuk kurva —
-                    // konsisten dengan totalRevenue yang jadi skala sumbu Y.
                     RevenueTrendChart(
                         date = report.date,
                         transactions = report.transactions.filterNot { it.isVoid },
@@ -267,7 +214,6 @@ fun ReportScreen(
                 }
             }
 
-            // ---------- BATCH G: Tab switcher (bagian bawah berganti) ----------
             item(key = "tab_switcher") {
                 ReportTabSwitcher(selected = selectedTab, onSelect = viewModel::selectTab)
             }
@@ -275,8 +221,6 @@ fun ReportScreen(
             when (selectedTab) {
                 ReportTab.TRANSACTIONS -> {
                     item(key = "list_header") {
-                        // BATCH D: jumlah di judul = SEMUA baris (termasuk VOID) —
-                        // literal jumlah yang tampil di daftar di bawahnya.
                         Text(
                             "Daftar Transaksi (${report.transactions.size})",
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
@@ -302,7 +246,6 @@ fun ReportScreen(
                 }
 
                 ReportTab.SHIFTS -> {
-                    // BATCH G: breakdown Tunai/QRIS untuk tanggal terpilih.
                     item(key = "payment_breakdown") {
                         PaymentBreakdownSection(
                             cashRevenue = report.cashRevenue,
@@ -310,7 +253,6 @@ fun ReportScreen(
                         )
                     }
 
-                    // BATCH E4: breakdown refund Tunai/QRIS + daftar retur.
                     item(key = "return_summary") {
                         ReturnSummarySection(
                             cashRefundTotal = returnSummary.cashRefundTotal,
@@ -368,9 +310,6 @@ fun ReportScreen(
         }
     }
 
-    // BATCH E3: hanya SATU dialog yang tampil pada satu waktu — detail
-    // transaksi disembunyikan sementara kalau konfirmasi Void ATAU dialog
-    // Retur sedang terbuka (pola sama dgn `pendingVoidConfirm` sejak Batch D).
     if (selectedTransaction != null && !pendingVoidConfirm && !showReturnDialog) {
         val current = selectedTransaction!!
 TransactionDetailDialog(
@@ -423,7 +362,6 @@ pendingPrintTarget?.let { target ->
         )
     }
 
-    // BATCH G: dialog detail shift historis (read-only).
     selectedShiftDetail?.let { detail ->
         ClosedShiftDetailDialog(
             detail = detail,
@@ -431,8 +369,6 @@ pendingPrintTarget?.let { target ->
         )
     }
 
-    // BATCH E4: dialog detail retur (read-only) — bisa lompat ke transaksi
-    // asal, yang menutup dialog ini dan membuka TransactionDetailDialog.
     selectedReturnDetail?.let { detail ->
         ReturnDetailDialog(
             detail = detail,
@@ -445,7 +381,6 @@ pendingPrintTarget?.let { target ->
     }
 }
 
-// ============================ NAVIGATOR TANGGAL ============================
 
 @Composable
 private fun DateNavigator(
@@ -499,7 +434,6 @@ private fun DateNavigator(
                     onClick = onNext
                 )
             }
-            // Tombol lompat ke hari ini muncul hanya saat tidak sedang di hari ini.
             if (!isToday) {
                 Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.Center) {
                     TodayPillButton(onClick = onToday)
@@ -509,8 +443,6 @@ private fun DateNavigator(
     }
 }
 
-/** Tombol navigasi bundar kompak (30dp) — pengganti IconButton standar (48dp)
- *  yang enforce minimum touch target lebih besar dari yang dibutuhkan di sini. */
 @Composable
 private fun CompactNavIcon(
     icon: ImageVector,
@@ -535,7 +467,6 @@ private fun CompactNavIcon(
     }
 }
 
-/** Pill kecil "Ke Hari Ini" — pengganti TextButton standar yang lebih besar. */
 @Composable
 private fun TodayPillButton(onClick: () -> Unit) {
     Row(
@@ -562,12 +493,10 @@ private fun TodayPillButton(onClick: () -> Unit) {
     }
 }
 
-// ============================ RINGKASAN ============================
 
 @Composable
 private fun SummarySection(report: DailyReport) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Kartu utama: total pendapatan (glassmorphism sebagai titik fokus).
         GlassCard(
             modifier = Modifier.fillMaxWidth(),
             cornerRadius = 16.dp,
@@ -598,7 +527,6 @@ private fun SummarySection(report: DailyReport) {
             }
         }
 
-        // Dua kartu statistik pendukung — GlassCard agar konsisten dgn kartu utama & ProductCard Kasir.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatCard(
                 modifier = Modifier.weight(1f),
@@ -655,9 +583,7 @@ private fun StatCard(
     }
 }
 
-// ============================ KURVA TREN PENDAPATAN (GAYA BURSA) ============================
 
-/** Format ringkas angka Rupiah untuk label sumbu (mis. 1.500.000 -> "Rp1,5jt"). */
 private fun Long.toCompactRupiah(): String {
     fun trim(d: Double): String {
         val rounded = Math.round(d * 10) / 10.0
@@ -672,15 +598,6 @@ private fun Long.toCompactRupiah(): String {
     }
 }
 
-/**
- * Kurva pendapatan kumulatif sepanjang hari — mirip "equity curve" pada
- * grafik bursa saham/kripto. Garis naik bertahap (step) setiap ada transaksi,
- * lalu datar hingga transaksi berikutnya.
- *
- * BATCH D: [transactions] yang diterima WAJIB sudah difilter COMPLETED
- * oleh pemanggil (lihat [ReportScreen]) — komponen ini tidak melakukan
- * filter sendiri, murni penggambaran.
- */
 @Composable
 private fun RevenueTrendChart(
     date: LocalDate,
@@ -698,12 +615,9 @@ private fun RevenueTrendChart(
     val dayStartMillis = remember(date) { date.atStartOfDay(zone).toInstant().toEpochMilli() }
     val dayEndMillis = remember(date) { date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() }
 
-    // Jam & nilai puncak — tetap dihitung dari data per-jam untuk keterangan ringkas di atas chart.
     val peakHour = remember(hourly) { hourly.indices.maxByOrNull { hourly[it] } ?: 0 }
     val peakValue = remember(hourly) { hourly.getOrElse(peakHour) { 0L } }
 
-    // Titik kumulatif: (waktu, total pendapatan berjalan). Diawali (00:00, 0),
-    // naik setiap transaksi sesuai waktu aslinya, diakhiri (24:00, totalRevenue).
     val points = remember(transactions, dayStartMillis, dayEndMillis) {
         val sorted = transactions.sortedBy { it.createdAt }
         val list = mutableListOf(dayStartMillis to 0L)
@@ -754,7 +668,6 @@ private fun RevenueTrendChart(
                     .fillMaxWidth()
                     .height(160.dp)
             ) {
-                // Reservasi ruang untuk label sumbu Y (kiri) & sumbu X (bawah).
                 val leftAxisWidth = 40.dp.toPx()
                 val bottomAxisHeight = 16.dp.toPx()
                 val plotLeft = leftAxisWidth
@@ -765,7 +678,6 @@ private fun RevenueTrendChart(
                 val plotHeight = plotBottom - plotTop
                 val maxRevenue = totalRevenue.coerceAtLeast(1L)
 
-                // ---- Fungsi koordinat TUNGGAL, dipakai untuk grid, label, DAN garis data ----
                 fun xFor(time: Long): Float {
                     val ratio = (time - dayStartMillis).toFloat() / (dayEndMillis - dayStartMillis).toFloat()
                     return plotLeft + ratio.coerceIn(0f, 1f) * plotWidth
@@ -775,7 +687,6 @@ private fun RevenueTrendChart(
                     return plotBottom - ratio.coerceIn(0f, 1f) * plotHeight
                 }
 
-                // ---- Grid horizontal + label sumbu Y (skala pendapatan) ----
                 val ySteps = 4
                 for (i in 0..ySteps) {
                     val ratio = i / ySteps.toFloat()
@@ -788,7 +699,6 @@ private fun RevenueTrendChart(
                     )
                 }
 
-                // ---- Grid vertikal + label sumbu X (waktu, presisi sama dgn garis data) ----
                 listOf(0, 6, 12, 18, 24).forEach { hour ->
                     val time = (dayStartMillis + hour.toLong() * 3_600_000L).coerceAtMost(dayEndMillis)
                     val x = xFor(time)
@@ -806,7 +716,6 @@ private fun RevenueTrendChart(
                     )
                 }
 
-                // ---- Garis tren + area (step-line, gaya kurva ekuitas) ----
                 if (points.size >= 2) {
                     val linePath = Path()
                     val areaPath = Path()
@@ -838,7 +747,6 @@ private fun RevenueTrendChart(
                     )
                     drawPath(path = linePath, color = primary, style = Stroke(width = 2.dp.toPx()))
 
-                    // Titik penanda tiap transaksi asli (bukan titik awal/akhir buatan).
                     for (i in 1 until points.size - 1) {
                         val (time, value) = points[i]
                         drawCircle(color = primary, radius = 2.5.dp.toPx(), center = Offset(xFor(time), yFor(value)))
@@ -849,7 +757,6 @@ private fun RevenueTrendChart(
     }
 }
 
-// ============================ TAB SWITCHER (BATCH G) ============================
 
 @Composable
 private fun ReportTabSwitcher(
@@ -904,7 +811,6 @@ private fun ReportTabChip(
     }
 }
 
-// ============================ BREAKDOWN METODE BAYAR (BATCH G) ============================
 
 @Composable
 private fun PaymentBreakdownSection(cashRevenue: Long, qrisRevenue: Long) {
@@ -931,7 +837,6 @@ private fun PaymentBreakdownSection(cashRevenue: Long, qrisRevenue: Long) {
     }
 }
 
-// ============================ RETUR HARI INI (BATCH E4) ============================
 
 @Composable
 private fun ReturnSummarySection(cashRefundTotal: Long, qrisRefundTotal: Long) {
@@ -958,13 +863,6 @@ private fun ReturnSummarySection(cashRefundTotal: Long, qrisRefundTotal: Long) {
     }
 }
 
-/**
- * Baris ringkas satu retur — SEMUA field yang ditampilkan diambil langsung
- * dari [ReturnEntity] (tanpa query tambahan per baris) untuk menghindari
- * masalah N+1 query di dalam LazyColumn. Rincian item (butuh query
- * `return_items` terpisah) ditampilkan di [ReturnDetailDialog] saat baris
- * ini diklik.
- */
 @Composable
 private fun ReturnRow(ret: ReturnEntity, onClick: () -> Unit) {
     GlassCard(
@@ -1040,13 +938,6 @@ private fun EmptyReturns() {
     }
 }
 
-/**
- * Dialog detail retur — READ-ONLY, dimuat dari [ReturnDetail] (header +
- * item, hasil [com.pos.offline.data.repository.ReturnRepository.getDetail]).
- * Menampilkan status restock PER ITEM (3 kondisi: dikembalikan / tidak
- * dikembalikan / produk sudah dihapus dari master data) untuk transparansi
- * penuh ke kasir, plus tombol lompat ke transaksi asal.
- */
 @Composable
 private fun ReturnDetailDialog(
     detail: ReturnDetail,
@@ -1167,7 +1058,6 @@ private fun RestockBadge(restocked: Boolean, hasProduct: Boolean) {
     )
 }
 
-// ============================ BARIS TRANSAKSI ============================
 
 @Composable
 private fun TransactionRow(tx: TransactionEntity, onClick: () -> Unit) {
@@ -1181,7 +1071,6 @@ private fun TransactionRow(tx: TransactionEntity, onClick: () -> Unit) {
         onClick = onClick
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Waktu transaksi (HH:mm).
             Text(
                 ReportViewModel.timeFmt.format(Instant.ofEpochMilli(tx.createdAt)),
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
@@ -1226,7 +1115,6 @@ private fun TransactionRow(tx: TransactionEntity, onClick: () -> Unit) {
     }
 }
 
-/** Badge kecil "DIBATALKAN" — dipakai di daftar & dialog detail. */
 @Composable
 private fun VoidBadge() {
     Surface(
@@ -1243,7 +1131,6 @@ private fun VoidBadge() {
     }
 }
 
-/** BATCH E3: Badge kecil "SUDAH DIRETUR" — mirip [VoidBadge], warna beda (tertiary). */
 @Composable
 private fun ReturnedBadge() {
     Surface(
@@ -1260,7 +1147,6 @@ private fun ReturnedBadge() {
     }
 }
 
-// ============================ AKSI CETAK ULANG ============================
 
 @Composable
 private fun ReceiptActionsRow(
@@ -1328,16 +1214,7 @@ private fun ReceiptActionButton(
     }
 }
 
-// ============================ DETAIL TRANSAKSI ============================
 
-/**
- * BATCH E3: [onReturnClick] & tombol "Batalkan Transaksi" kini ditaruh
- * berdampingan di dalam KONTEN dialog (bukan slot `dismissButton` bawaan
- * `AlertDialog`) — karena `AlertDialog` cuma punya 2 slot tombol
- * (`confirmButton`/`dismissButton`), sementara kita butuh sampai 3 aksi:
- * "Tutup" + "Retur Item" (kondisional) + "Batalkan Transaksi" (kondisional).
- * `confirmButton` sekarang murni "Tutup".
- */
 @Composable
 private fun TransactionDetailDialog(
     result: CheckoutResult,
@@ -1573,20 +1450,7 @@ private fun VoidConfirmDialog(
     )
 }
 
-// ============================ DIALOG RETUR ITEM (BATCH E3) ============================
 
-/**
- * State UI per baris item di dialog Retur — MURNI di memori Composable,
- * lingkup hidupnya persis sama dengan dialog terbuka (dibuat ulang dari
- * [com.pos.offline.data.local.entity.TransactionItemEntity] asli setiap kali
- * dialog dibuka, dibuang saat ditutup) — konsisten dengan pola
- * `pendingVoidConfirm`/`QuantityEditDialog` yang sudah ada di file ini.
- *
- * [restocked] default `true` HANYA jika [productId] tersedia — item dari
- * data transaksi lama (pra-migrasi, `productId == null`) otomatis `false`
- * & checkbox-nya dinonaktifkan di UI, karena efek stok memang selalu
- * dilewati aman untuk kasus ini (sama seperti reversal Void).
- */
 private data class ReturnRowState(
     val transactionItemId: Long,
     val productId: Long?,
@@ -1622,25 +1486,17 @@ private fun ReturnItemDialog(
         )
     }
 
-    // Sugesti nominal = Σ (harga asli × qty diretur), TANPA prorata diskon/pajak
-    // (keputusan arsitektur final). Dihitung ulang tiap recomposition — murah
-    // karena jumlah baris kecil, menghindari jebakan `remember`/`derivedStateOf`
-    // tanpa key yang bisa "nyangkut" ke closure transaksi sebelumnya.
     val suggestedRefund = rows.filter { it.included }.sumOf { it.unitPrice * it.quantity.toLong() }
 
     var refundAmountEdited by remember(tx.id) { mutableStateOf(false) }
     var refundAmountText by remember(tx.id) { mutableStateOf("") }
 
-    // "Suggest-until-override": nominal ikut sugesti otomatis SELAMA pengguna
-    // belum pernah mengetik manual di field-nya sendiri.
     LaunchedEffect(suggestedRefund) {
         if (!refundAmountEdited) {
             refundAmountText = if (suggestedRefund <= 0L) "" else suggestedRefund.toString()
         }
     }
 
-    // Default metode refund ikut metode transaksi asal; fallback ke Tunai
-    // untuk TRANSFER/OTHER (edge-case data lama) karena dropdown cuma 2 opsi.
     var refundMethod by remember(tx.id) {
         mutableStateOf(
             if (tx.paymentMethod == PaymentMethod.QRIS.name) PaymentMethod.QRIS else PaymentMethod.CASH
@@ -1961,7 +1817,6 @@ private fun RefundAmountField(
     )
 }
 
-// ============================ RIWAYAT TUTUP SHIFT (BATCH G) ============================
 
 @Composable
 private fun ClosedShiftRow(shift: ShiftEntity, onClick: () -> Unit) {
@@ -2029,14 +1884,6 @@ private fun ClosedShiftRow(shift: ShiftEntity, onClick: () -> Unit) {
     }
 }
 
-/**
- * Dialog detail shift historis — READ-ONLY. Layout ini MENIRU persis
- * struktur `EndShiftDialog` di PosScreen (judul blok, urutan baris, logika
- * warna Selisih) — tidak bisa reuse composable-nya secara literal karena
- * `private` di file berbeda, jadi ditulis ulang sebagai composable baru
- * dengan gaya identik, TANPA input (mengambil nilai yang SUDAH TERSIMPAN
- * dari saat shift itu ditutup dulu).
- */
 @Composable
 private fun ClosedShiftDetailDialog(
     detail: ClosedShiftDetail,

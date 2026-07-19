@@ -17,9 +17,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // Batch H2: sumber library DantSu ESCPOS-ThermalPrinter-Android
-        // (Bluetooth + TCP/WiFi + USB dalam satu library, dipublikasikan
-        // via JitPack, bukan Maven Central).
         maven { url = uri("https://jitpack.io") }
     }
 }

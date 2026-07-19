@@ -64,13 +64,6 @@ interface ShiftDao {
     )
     suspend fun totalCostForShift(shiftId: Long): Long
 
-    /**
-     * Total refund TUNAI yang dikaitkan ke shift ini (shiftId di ReturnEntity =
-     * shift yang AKTIF SAAT RETUR TERJADI, bukan shift transaksi asal) — dasar
-     * pengurang estimasi kas di laci saat Tutup Shift (Batch E).
-     * Query lintas tabel `returns` langsung, konsisten dengan pola
-     * cashRevenueForShift/totalCostForShift di atas yang juga query tabel lain.
-     */
     @Query(
         """
         SELECT COALESCE(SUM(refundAmount), 0) FROM returns

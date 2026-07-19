@@ -107,7 +107,6 @@ object ReceiptManager {
 
         var y = margin + 14f
         for (line in lines) {
-            // pageWidth (Int) untuk PageInfo; drawLine butuh Float → konversi.
             drawLine(canvas, line, pageWidth.toFloat(), margin, y)
             y += lineHeight
         }
@@ -178,12 +177,6 @@ object ReceiptManager {
         return Intent.createChooser(sendIntent, "Bagikan Struk")
     }
 
-    /**
-     * BARU (H7): bagikan file PDF yang SUDAH dibuat (mis. hasil fallback [PrintCoordinator]
-     * saat semua printer thermal gagal) via Intent share. Terpisah dari [buildShareIntent] yang
-     * merender ulang jadi PNG dari [CheckoutResult] — di sini kita hanya membungkus [File] PDF
-     * yang sudah ada apa adanya, TIDAK generate ulang.
-     */
     fun buildPdfShareIntent(context: Context, file: File): Intent {
         val authority = "${context.packageName}.fileprovider"
         val uri = FileProvider.getUriForFile(context, authority, file)

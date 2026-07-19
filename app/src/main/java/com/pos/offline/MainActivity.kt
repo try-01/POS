@@ -92,7 +92,6 @@ private enum class Dest(val label: String) {
 }
 
 class MainActivity : ComponentActivity() {
-    // Ambil instance PosViewModel yang SAMA PERSIS dengan yang dipakai di Compose AppRoot()
     private val posViewModel: PosViewModel by viewModels {
         ServiceLocator.posViewModelFactory()
     }
@@ -133,29 +132,15 @@ private fun AppRoot() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // ---- Pager: pengganti BottomNavBar/SideNavRail lama ----
     val pagerState = rememberPagerState(initialPage = 0) { Dest.entries.size }
     val currentDest = Dest.entries[pagerState.currentPage]
 
-    // Alpha untuk fade transisi ringan saat LONCAT ke halaman jauh (non-tetangga).
-    // Tetap 1f (tak terlihat efeknya) untuk swipe manual & navigasi ke halaman
-    // bertetangga — animasi geser Pager bawaan sudah cukup mulus untuk kasus itu.
     val pageAlpha = remember { Animatable(1f) }
     var isJumping by remember { mutableStateOf(false) }
 
     fun goTo(dest: Dest) {
         val target = dest.ordinal
         if (pagerState.currentPage == target) return
-        // FIX: sebelumnya hanya halaman berjarak >=2 yang loncat instan; halaman
-        // bertetangga (mis. Kasir->Inventaris, Inventaris->Laporan, Laporan->
-        // Pengaturan) masih pakai animateScrollToPage() biasa. Ternyata Inventaris
-        // & Laporan sendiri cukup berat untuk di-compose (LazyColumn data asli dari
-        // DB + Canvas chart tren pendapatan), jadi walau jaraknya cuma 1 halaman,
-        // geseran fisiknya tetap terasa berat. Sekarang SEMUA navigasi via tombol
-        // menu (jarak berapa pun) diseragamkan: loncat instan (scrollToPage, tidak
-        // merender halaman perantara sama sekali) dibungkus fade tipis — konsisten
-        // & mulus di seluruh kombinasi menu. Swipe manual dengan jari TIDAK terkena
-        // perubahan ini, tetap pakai animasi geser natural Pager.
         scope.launch {
             isJumping = true
             pageAlpha.animateTo(0f, animationSpec = tween(90))
@@ -165,16 +150,12 @@ private fun AppRoot() {
         }
     }
 
-    // Memantau status shift aktif secara dinamis dari DB
     val openShift by posViewModel.openShift.collectAsStateWithLifecycle()
     var showExitDialog by rememberSaveable { mutableStateOf(false) }
 
-    // Intercept Back 1: kalau tidak di Kasir, kembalikan ke Kasir dulu
     BackHandler(enabled = currentDest != Dest.POS) { goTo(Dest.POS) }
-    // Intercept Back 2: kalau sudah di Kasir & dialog belum muncul, tampilkan dialog keluar
     BackHandler(enabled = currentDest == Dest.POS && !showExitDialog) { showExitDialog = true }
 
-    // ---- Dialog konfirmasi keluar (logika identik dengan versi lama) ----
     if (showExitDialog) {
         val shift = openShift
         if (shift != null) {
@@ -268,8 +249,6 @@ private fun AppRoot() {
         menuExpanded = false // pindah halaman (swipe/tap menu) otomatis menutup expand FAB
     }
 
-    // FAB disembunyikan saat keyboard tampil, atau saat cart POS di-expand penuh (khusus portrait,
-    // sama seperti perilaku hideBottomNav pada kode lama).
     val hideFab = imeVisible || (!isLandscape && currentDest == Dest.POS && isCartExpanded)
 
     Box(
@@ -277,8 +256,6 @@ private fun AppRoot() {
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // ---- Konten utama: full edge-to-edge. Tiap layar mengatur inset-nya sendiri
-        //      (statusBarsPadding di header/top, navigationBars + clearance FAB di bawah). ----
         HorizontalPager(
             state = pagerState,
             modifier = Modifier
@@ -300,8 +277,6 @@ private fun AppRoot() {
                         val file = ReceiptManager.exportToPdf(context, result)
                         Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
                     },
-                    // Konsep "expand cart" hanya relevan di portrait (layout bottom-sheet).
-                    // Di landscape, cart selalu tampil sebagai panel samping → dikunci false.
                     isCartExpanded = if (isLandscape) false else isCartExpanded,
                     onCartExpandedChange = if (isLandscape) ({}) else ({ v: Boolean -> isCartExpanded = v })
                 )
@@ -329,7 +304,6 @@ private fun AppRoot() {
             }
         }
 
-        // ---- Scrim: tap di luar FAB untuk menutup menu ----
         AnimatedVisibility(
             visible = menuExpanded,
             enter = fadeIn(),
@@ -347,18 +321,12 @@ private fun AppRoot() {
             )
         }
 
-        // ---- Tombol menu mengambang, pojok kiri bawah, tepat di atas nav bar sistem ----
         AnimatedVisibility(
             visible = !hideFab,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                // FIX: bottom 16dp → 8dp — digeser sedikit ke bawah agar tidak tumpang
-                // tindih dengan teks "Total: Rp..." pada CartPane yang di-collapse di
-                // PosScreen. Nilai 8dp ini SAMA PERSIS dengan padding bottom tombol
-                // "Tambah Produk" di InventoryScreen.kt — supaya kedua tombol selalu
-                // sejajar secara vertikal di semua layar (Kasir/Inventaris/Laporan/Pengaturan).
                 .padding(start = 16.dp, bottom = 8.dp)
                 .navigationBarsPadding()
         ) {
@@ -372,16 +340,6 @@ private fun AppRoot() {
     }
 }
 
-/**
- * Tombol menu mengambang yang bisa di-expand ke atas.
- * Ditempatkan dengan Alignment.BottomStart di pemanggil → saat AnimatedVisibility
- * menambah tinggi Column (menu terbuka), sisi BAWAH tetap diam (anchor di nav bar),
- * sisi ATAS yang tumbuh — sehingga terasa seperti "expand ke atas".
- *
- * FIX: ukuran tombol utama disamakan (40dp) dengan SmallFloatingActionButton
- * "Tambah Produk" di InventoryScreen.kt, agar konsisten secara visual di seluruh
- * aplikasi (sebelumnya 52dp, terasa lebih besar dari FAB lain).
- */
 @Composable
 private fun ExpandableMenuFab(
     expanded: Boolean,
@@ -411,8 +369,6 @@ private fun ExpandableMenuFab(
                 }
             }
         }
-        // Tombol utama (toggle buka/tutup) — 40dp, SAMA dengan SmallFloatingActionButton
-        // bawaan Material3 (dipakai juga untuk "Tambah Produk" di InventoryScreen).
         Surface(
             modifier = Modifier.size(40.dp).shadow(6.dp, CircleShape),
             shape = CircleShape,
@@ -433,7 +389,6 @@ private fun ExpandableMenuFab(
 
 @Composable
 private fun MiniMenuItem(dest: Dest, isSelected: Boolean, onClick: () -> Unit) {
-    // FIX: 44dp → 36dp, mengecil proporsional mengikuti tombol utama yang kini 40dp.
     Surface(
         modifier = Modifier.size(36.dp).shadow(4.dp, CircleShape),
         shape = CircleShape,

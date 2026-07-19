@@ -22,7 +22,6 @@ interface CashierDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(cashier: CashierEntity): Long
 
-    /** Soft-delete, konsisten dgn pola ProductDao.setActive. */
     @Query("UPDATE cashiers SET active = :active WHERE id = :id")
     suspend fun setActive(id: Long, active: Boolean)
 }

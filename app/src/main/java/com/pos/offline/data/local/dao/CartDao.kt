@@ -8,10 +8,6 @@ import androidx.room.Transaction
 import com.pos.offline.data.local.entity.CartItemEntity
 import kotlinx.coroutines.flow.Flow
 
-/**
- * Akses data keranjang aktif. Operasi "tambah produk" dibungkus [Transaction]
- * agar cek-ada + update bersifat atomik (tidak ada duplikat baris).
- */
 @Dao
 interface CartDao {
 
@@ -33,10 +29,6 @@ interface CartDao {
     @Query("DELETE FROM cart_items")
     suspend fun clear()
 
-    /**
-     * Tambah 1 unit produk ke keranjang. Jika sudah ada, tambah quantity-nya.
-     * [Transaction] menjamin "baca lalu tulis" tidak terganggu operasi lain.
-     */
     @Transaction
     suspend fun incrementQuantity(productId: Long, name: String, unitPrice: Long) {
         val existing = findByProduct(productId)

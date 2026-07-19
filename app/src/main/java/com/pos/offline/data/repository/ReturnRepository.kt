@@ -12,7 +12,6 @@ import com.pos.offline.data.local.entity.hasReturn
 import com.pos.offline.data.local.entity.isVoid
 import kotlinx.coroutines.flow.Flow
 
-/** Input 1 baris item yang diretur — dipilih & diatur kasir di dialog Retur (Batch E3). */
 data class ReturnItemInput(
     val transactionItemId: Long,
     val productId: Long?,
@@ -22,7 +21,6 @@ data class ReturnItemInput(
     val restocked: Boolean
 )
 
-/** Snapshot lengkap 1 proses retur (header + rincian item) — dasar dialog detail read-only. */
 data class ReturnDetail(
     val header: ReturnEntity,
     val items: List<ReturnItemEntity>
@@ -35,7 +33,6 @@ sealed class ReturnOutcome {
     data object AlreadyReturned : ReturnOutcome()
     data object NoItemsSelected : ReturnOutcome()
 
-    /** quantityReturned tidak valid (<=0 atau melebihi qty asli baris transaksi terkait). */
     data class InvalidQuantity(val productName: String) : ReturnOutcome()
 }
 
@@ -45,7 +42,6 @@ class ReturnRepository(
     private val transactionDao: TransactionDao,
     private val productDao: ProductDao
 ) {
-    /** Retur yang TERJADI (returnedAt) dalam rentang tanggal — dasar section "Retur Hari Ini". */
     fun returnsBetween(start: Long, end: Long): Flow<List<ReturnEntity>> =
         returnDao.observeReturnsBetween(start, end)
 
@@ -54,26 +50,11 @@ class ReturnRepository(
         return ReturnDetail(header, returnDao.getItems(returnId))
     }
 
-    /** Dipakai TransactionDetailDialog untuk menampilkan ringkasan retur transaksi ybs (kalau ada). */
     suspend fun getDetailByTransactionId(transactionId: String): ReturnDetail? {
         val header = returnDao.getByTransactionId(transactionId) ?: return null
         return ReturnDetail(header, returnDao.getItems(header.id))
     }
 
-    /**
-     * Proses retur untuk satu transaksi. Data transaksi & item asli di-RE-FETCH
-     * dari DB berdasarkan [transactionId] (bukan diterima sebagai parameter dari
-     * UI) — konsisten dengan pola TransactionRepository.voidTransaction, supaya
-     * tidak ada celah state UI basi antara dialog dibuka & dikonfirmasi.
-     *
-     * Efek dalam SATU database transaction (atomik):
-     * 1. Insert header `returns` + baris `return_items`.
-     * 2. Kembalikan stok HANYA untuk item dengan `restocked = true` & `productId`
-     *    tersedia (data pra-migrasi tanpa productId dilewati aman, sama seperti
-     *    reversal stok di voidTransaction).
-     * 3. Set `transactions.returnId` → menandai transaksi FINAL, tidak bisa
-     *    diretur lagi (tombol "Retur Item" hilang otomatis di UI).
-     */
     suspend fun processReturn(
         transactionId: String,
         itemInputs: List<ReturnItemInput>,

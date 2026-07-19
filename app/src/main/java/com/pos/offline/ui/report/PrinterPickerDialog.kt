@@ -17,11 +17,6 @@ import androidx.compose.ui.unit.dp
 import com.pos.offline.data.local.entity.PrinterConnectionType
 import com.pos.offline.data.local.entity.PrinterEntity
 
-/**
- * Dialog pemilihan printer untuk reprint manual (H7) — TERPISAH dari `PrinterManagementDialog`
- * (yang untuk CRUD printer). Sengaja TIDAK ada cascade di sini: kalau user pilih printer B lalu
- * gagal, sistem tidak boleh diam-diam mencoba printer C tanpa sepengetahuan user.
- */
 @Composable
 fun PrinterPickerDialog(
     printers: List<PrinterEntity>,

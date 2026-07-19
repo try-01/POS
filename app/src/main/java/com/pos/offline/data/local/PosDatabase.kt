@@ -102,9 +102,6 @@ abstract class PosDatabase : RoomDatabase() {
                     )
                 }
 
-                // Batch H1: baris singleton profil toko dibuat sekali di sini
-                // untuk instalasi baru (untuk upgrade dari versi lama, baris
-                // yang sama dibuat lewat MIGRATION_7_8).
                 db.execSQL(
                     "INSERT OR IGNORE INTO store_profile " +
                         "(id, storeName, address, footerNote, logoBytes, autoPrintEnabled) " +

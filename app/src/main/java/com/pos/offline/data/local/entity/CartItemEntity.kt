@@ -5,16 +5,6 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/**
- * Item keranjang AKTIF (sesi kasir yang sedang berjalan).
- *
- * Dipersist ke DB (bukan di-memori) supaya tahan terhadap proses di-kill OS
- * (anti memory-leak / kehilangan data saat low-memory). Saat checkout selesai,
- * seluruh baris tabel ini dikosongkan.
- *
- * Denormalisasi: [name] & [unitPrice] di-snapshot saat ditambahkan agar render
- * keranjang tidak perlu JOIN ke tabel produk (render lebih cepat).
- */
 @Entity(
     tableName = "cart_items",
     foreignKeys = [
@@ -35,6 +25,5 @@ data class CartItemEntity(
     val unitPrice: Long,    // snapshot harga saat ditambahkan (Rupiah)
     val quantity: Int = 1
 ) {
-    /** Total baris = harga satuan × jumlah. Long untuk presisi. */
     val lineTotal: Long get() = unitPrice * quantity.toLong()
 }

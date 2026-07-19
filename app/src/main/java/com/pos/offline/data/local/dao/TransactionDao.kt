@@ -40,7 +40,6 @@ interface TransactionDao {
     @Query("SELECT * FROM transaction_items WHERE transactionId = :invoiceId")
     suspend fun getItems(invoiceId: String): List<TransactionItemEntity>
 
-    /** Semua transaksi dalam satu sesi shift — dasar Laporan Tutup Shift. */
     @Query("SELECT * FROM transactions WHERE shiftId = :shiftId ORDER BY createdAt ASC")
     fun observeByShift(shiftId: Long): Flow<List<TransactionEntity>>
 
@@ -53,15 +52,9 @@ interface TransactionDao {
     )
     suspend fun setStatus(id: String, status: String, voidedAt: Long?, reason: String?)
 
-    /**
-     * Tandai transaksi sudah diretur (FINAL — "sekali retur = final"). Dipanggil
-     * dalam satu database transaction bersama insert ReturnEntity/ReturnItemEntity
-     * oleh ReturnRepository.processReturn(), supaya konsisten atomik.
-     */
     @Query("UPDATE transactions SET returnId = :returnId WHERE id = :id")
     suspend fun setReturnId(id: String, returnId: Long)
 
-    /** Tulis header + semua item dalam satu transaksi DB. */
     @Transaction
     suspend fun checkout(tx: TransactionEntity, items: List<TransactionItemEntity>) {
         insertTransaction(tx)

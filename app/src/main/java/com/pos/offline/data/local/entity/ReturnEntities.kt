@@ -4,24 +4,6 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/**
- * Satu baris = satu proses retur untuk SATU transaksi (relasi 1:1 dengan
- * TransactionEntity, ditegakkan oleh index unik pada transactionId — sebagai
- * safety-net DB selain cek TransactionEntity.returnId != null di app layer,
- * konsisten dengan gaya defensif proyek ini, mis. ProductDao.decrementStock).
- *
- * Retur BOLEH parsial (sebagian item/qty dari transaksi asal) — item yang
- * diretur dicatat di ReturnItemEntity, baris ini hanya header/ringkasan.
- *
- * shiftId & cashierId merujuk shift/kasir yang AKTIF SAAT RETUR TERJADI,
- * BUKAN shift/kasir transaksi asal — sesuai keputusan retur boleh lintas
- * hari/shift. Keduanya nullable karena Shift OPSIONAL (konsisten dgn pola
- * TransactionEntity.shiftId/cashierId).
- *
- * Tidak ada @ForeignKey (ikut pola TransactionItemEntity — index biasa untuk
- * performa lookup, bukan constraint referensial, menghindari kerumitan
- * cascade lintas tabel yang sudah tidak dipakai di skema manapun).
- */
 @Entity(
     tableName = "returns",
     indices = [
@@ -34,36 +16,23 @@ data class ReturnEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
 
-    /** ID invoice transaksi yang diretur. */
     val transactionId: String,
 
-    /** Epoch millis saat retur DIPROSES (bukan tanggal transaksi asal). */
     val returnedAt: Long,
 
-    /** Shift aktif saat retur terjadi; null jika tidak ada shift aktif saat itu. */
     val shiftId: Long? = null,
 
-    /** Kasir yang memproses retur; null jika tidak ada atribusi kasir. */
     val cashierId: Long? = null,
 
-    /** Snapshot nama kasir yang memproses retur. */
     val cashierName: String = "",
 
-    /** Nominal FINAL yang dikembalikan ke pembeli (hasil sugesti atau override manual kasir). */
     val refundAmount: Long,
 
-    /** PaymentMethod.name — dibatasi CASH/QRIS di UI, default ikut metode transaksi asal. */
     val refundMethod: String,
 
-    /** Catatan bebas alasan retur (mis. "barang cacat produksi"). Boleh kosong. */
     val note: String = ""
 )
 
-/**
- * Satu baris = satu item produk yang diretur dalam satu proses ReturnEntity.
- * Snapshot productId/productName/unitPrice diambil dari TransactionItemEntity
- * asal saat retur diproses (data transaksi read-only, tidak pernah diedit).
- */
 @Entity(
     tableName = "return_items",
     indices = [Index(value = ["returnId"])]
@@ -72,28 +41,17 @@ data class ReturnItemEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
 
-    /** FK logis ke ReturnEntity.id (retur mana baris ini menjadi bagian darinya). */
     val returnId: Long,
 
-    /** Referensi baris TransactionItemEntity asal, untuk audit/detail. */
     val transactionItemId: Long,
 
-    /**
-     * Snapshot productId dari TransactionItemEntity asal — nullable, konsisten
-     * dengan pola productId di TransactionItemEntity (Batch D), supaya
-     * reversal stok tetap aman kalau data lama/pra-migrasi tidak lengkap.
-     */
     val productId: Long? = null,
 
-    /** Snapshot nama produk saat transaksi asal terjadi. */
     val productName: String,
 
-    /** Snapshot harga jual SATUAN asli (dari TransactionItemEntity.unitPrice) — dasar sugesti refund, TANPA prorata diskon/pajak. */
     val unitPrice: Long,
 
-    /** Jumlah unit yang diretur pada baris ini (maks = quantity asli baris transaksi). */
     val quantityReturned: Int,
 
-    /** true = quantityReturned dikembalikan ke stok produk; false = dianggap rusak/cacat, stok TIDAK bertambah. */
     val restocked: Boolean
 )

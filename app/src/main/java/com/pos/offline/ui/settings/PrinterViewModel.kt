@@ -26,7 +26,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** Data form tambah/edit printer. */
 data class PrinterFormState(
     val id: Long? = null, // null = printer baru
     val label: String = "",
@@ -46,15 +45,9 @@ data class PrinterUiState(
     val formState: PrinterFormState = PrinterFormState(),
     val isSaving: Boolean = false,
     val pendingDeleteId: Long? = null,
-    /** Guard anti-dobel-klik Test Print PER PRINTER (Batch H3d) -- pakai
-     *  Set<Long>, BUKAN flag boolean global, supaya user tetap bisa test
-     *  print printer B selagi printer A masih diproses, tapi tetap dicegah
-     *  klik ganda pada printer YANG SAMA. */
     val testingPrinterIds: Set<Long> = emptySet()
 )
 
-/** State picker Bluetooth -- terpisah dari [PrinterUiState] karena siklus
- *  hidupnya beda (aktif hanya selagi dialog pemilihan perangkat terbuka). */
 data class BluetoothUiState(
     val bondedDevices: List<BluetoothDeviceInfo> = emptyList(),
     val discoveredDevices: List<BluetoothDeviceInfo> = emptyList(),
@@ -63,9 +56,6 @@ data class BluetoothUiState(
     val isPairing: Boolean = false
 )
 
-/** State picker USB (Batch H3c) -- terpisah karena model permission &
- *  siklus hidupnya beda total dari Bluetooth (tanpa discovery aktif, tanpa
- *  PIN, cukup listen attach/detach + request permission sekali klik). */
 data class UsbUiState(
     val devices: List<UsbDeviceInfo> = emptyList(),
     val isRequestingPermission: Boolean = false
@@ -90,14 +80,9 @@ class PrinterViewModel(
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
-    /** Event one-shot: emit sekali saat pairing+pemilihan perangkat sukses,
-     *  dipakai UI utk menutup dialog picker otomatis (pola sama seperti
-     *  [messages], supaya tidak ke-collect ulang saat rekomposisi/rotasi). */
     private val _pairingSuccess = MutableSharedFlow<BluetoothDeviceInfo>(extraBufferCapacity = 1)
     val pairingSuccess: SharedFlow<BluetoothDeviceInfo> = _pairingSuccess.asSharedFlow()
 
-    /** Event one-shot serupa [pairingSuccess], untuk penutupan otomatis
-     *  dialog picker USB setelah izin akses diberikan. */
     private val _usbSelectionSuccess = MutableSharedFlow<UsbDeviceInfo>(extraBufferCapacity = 1)
     val usbSelectionSuccess: SharedFlow<UsbDeviceInfo> = _usbSelectionSuccess.asSharedFlow()
 
@@ -107,7 +92,6 @@ class PrinterViewModel(
     private var discoveryJob: Job? = null
     private var usbAttachmentJob: Job? = null
 
-    // ---- Dialog form ----
 
     fun openAddDialog() {
         _uiState.value = _uiState.value.copy(
@@ -266,7 +250,6 @@ class PrinterViewModel(
         }
     }
 
-    // ---- Set default & reorder priority ----
 
     fun setAsDefault(printer: PrinterEntity) {
         viewModelScope.launch {
@@ -293,7 +276,6 @@ class PrinterViewModel(
         }
     }
 
-    // ---- Hapus (hard delete) ----
 
     fun requestDelete(id: Long) {
         _uiState.value = _uiState.value.copy(pendingDeleteId = id)
@@ -320,7 +302,6 @@ class PrinterViewModel(
         }
     }
 
-    // ---- Test Print (Batch H3d) ----
 
     fun testPrint(printer: PrinterEntity) {
         if (_uiState.value.testingPrinterIds.contains(printer.id)) return // guard anti-dobel-klik
@@ -328,12 +309,6 @@ class PrinterViewModel(
             _uiState.value = _uiState.value.copy(
                 testingPrinterIds = _uiState.value.testingPrinterIds + printer.id
             )
-            // Jaring pengaman terakhir -- membungkus SELURUH pemanggilan
-            // dengan try/catch. Idealnya PrinterConnectionFactory sudah
-            // menangani semua exception secara internal, tapi ini disiapkan
-            // sebagai lapisan pertahanan terakhir supaya kesalahan tak
-            // terduga apa pun (dari library eksternal/hardware) berakhir
-            // sebagai pesan error, BUKAN membuat aplikasi force close.
             val resultMessage = try {
                 when (val result = connectionFactory.testPrint(printer)) {
                     is TestPrintResult.Success -> "Test print ke \"${printer.label}\" berhasil."
@@ -349,7 +324,6 @@ class PrinterViewModel(
         }
     }
 
-    // ---- Bluetooth: pairing & discovery (Batch H3b) ----
 
     fun hasBluetoothPermissions(): Boolean = bluetoothHelper.hasPermissions()
 
@@ -372,8 +346,6 @@ class PrinterViewModel(
                 }
             }
         }
-        // Discovery Bluetooth Classic bawaan Android otomatis berhenti
-        // ~12 detik -- selaraskan indikator "isScanning" dengan batas itu.
         viewModelScope.launch {
             delay(13_000)
             if (discoveryJob?.isActive == true) stopDiscovery()
@@ -417,7 +389,6 @@ class PrinterViewModel(
         }
     }
 
-    /** Pilih perangkat yang SUDAH ter-pairing (tanpa perlu PIN lagi). */
     fun selectBondedDevice(device: BluetoothDeviceInfo) {
         selectBluetoothDevice(device)
     }
@@ -436,7 +407,6 @@ class PrinterViewModel(
         }
     }
 
-    // ---- USB (Batch H3c) ----
 
     fun refreshUsbDevices() {
         _usbUiState.value = _usbUiState.value.copy(devices = usbHelper.getDeviceList())
@@ -456,9 +426,6 @@ class PrinterViewModel(
         usbAttachmentJob = null
     }
 
-    /** Pilih device USB -- langsung minta izin akses (sekali klik), TIDAK
-     *  ada langkah PIN seperti Bluetooth karena model permission USB murni
-     *  soal izin akses OS, bukan pairing perangkat. */
     fun selectUsbDevice(device: UsbDeviceInfo) {
         viewModelScope.launch {
             _usbUiState.value = _usbUiState.value.copy(isRequestingPermission = true)

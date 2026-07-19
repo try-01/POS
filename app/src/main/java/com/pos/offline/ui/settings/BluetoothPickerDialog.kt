@@ -66,9 +66,6 @@ fun BluetoothPickerDialog(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
-        // Ditandai SUDAH PERNAH minta, apa pun hasilnya -- dipakai untuk
-        // membedakan "belum pernah ditanya" vs "ditolak permanen" pada
-        // pengecekan berikutnya (lihat PermissionUtils.currentBluetoothPermissionState).
         PermissionUtils.markBluetoothPermissionRequested(context)
         permissionState = PermissionUtils.currentBluetoothPermissionState(context)
         if (permissionState == PermissionUtils.BluetoothPermissionState.Granted) {
@@ -95,11 +92,6 @@ fun BluetoothPickerDialog(
         viewModel.pairingSuccess.collect { onDismiss() }
     }
 
-    // BUGFIX (H3b): status permission bisa berubah di LUAR siklus hidup
-    // dialog ini -- misalnya user membuka Pengaturan Sistem > App Info untuk
-    // mengizinkan/mencabut izin Bluetooth secara manual, lalu kembali ke app
-    // TANPA menutup dialog (dialog tetap ter-compose selagi Activity di-pause).
-    // Tanpa re-check di ON_RESUME, `permissionState` basi dan UI tidak sinkron.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {

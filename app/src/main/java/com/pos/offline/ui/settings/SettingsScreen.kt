@@ -81,7 +81,6 @@ fun SettingsScreen(
     var showPrinterDialog by remember { mutableStateOf(false) }
     var showStoreProfileDialog by remember { mutableStateOf(false) }
 
-    // --- SAF launchers ---
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri -> if (uri != null) viewModel.exportDatabase(context, uri) }
@@ -170,13 +169,6 @@ fun SettingsScreen(
                 }
             }
          },
-        // FIX: sebelumnya WindowInsets.statusBars saja, dengan komentar usang yang
-        // menyebut "padding bawah sudah dihandle sistem overlay di MainActivity" —
-        // itu TIDAK LAGI BENAR setelah redesign. MainActivity sekarang full
-        // edge-to-edge tanpa ruang 80dp tetap dari BottomNavBar/SideNavRail lama,
-        // jadi SettingsScreen wajib menjaga sendiri clearance dari navigation bar
-        // sistem — penting karena tombol "Keluar Aplikasi" (aksi sensitif) ada
-        // di baris paling bawah layar ini.
         contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars)
     ) { innerPadding ->
         Column(
@@ -391,7 +383,6 @@ fun SettingsScreen(
                 }
             }
 
-            // ---- Sesi Aplikasi Terkini (BATCH H8) ----
             SectionLabel("Sesi Aplikasi")
 
             GlassCard(
@@ -421,10 +412,6 @@ fun SettingsScreen(
                     }
                 }
             }
-            // FIX: 8dp → 96dp. Memberi clearance dari tombol menu mengambang (FAB)
-            // baru di pojok kiri-bawah MainActivity, supaya tombol "Keluar Aplikasi"
-            // (aksi sensitif, item paling bawah layar) tidak pernah tertimpa FAB
-            // ataupun gesture bar sistem.
             Spacer(Modifier.height(96.dp))
         }
     }

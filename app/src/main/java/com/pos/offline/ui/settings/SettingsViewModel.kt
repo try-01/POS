@@ -24,41 +24,13 @@ import kotlinx.coroutines.launch
 data class SettingsUiState(
     val isExporting: Boolean = false,
     val isImporting: Boolean = false,
-    // BARU: menyiapkan salinan database untuk dibagikan (share) — terpisah
-    // dari isExporting karena tidak melalui SAF sama sekali (Opsi A).
     val isSharing: Boolean = false,
-    // Uri file hasil ACTION_OPEN_DOCUMENT, menunggu konfirmasi user sebelum
-    // benar-benar ditimpakan ke database aktif.
     val pendingRestoreUri: Uri? = null,
-    // Batch 3B: visibilitas dialog "Tambah Kasir" disimpan di sini (bukan
-    // `remember` lokal di Composable) agar konsisten dengan pola
-    // `pendingRestoreUri` — bertahan saat rotasi layar.
     val showAddCashierDialog: Boolean = false
 ) {
     val isBusy: Boolean get() = isExporting || isImporting || isSharing
 }
 
-/**
- * Backup/Restore murni memanggil [BackupManager] (object stateless).
- * Batch 3B menambah [CashierRepository] sebagai dependency untuk fitur
- * Kelola Kasir — sesuai rencana awal, factory-nya di ServiceLocator sudah
- * disiapkan sejak 3A jadi call-site di MainActivity tidak berubah.
- *
- * BATCH B menambah [ShiftRepository] — dipakai HANYA untuk memvalidasi
- * "apakah kasir ini masih punya shift berjalan" sebelum dinonaktifkan.
- * Sengaja tidak meng-observe apa pun dari sini (tidak perlu daftar shift di
- * layar ini), murni panggilan sekali-jalan di [setCashierActive].
- *
- * BARU: [shareDatabase] — menyiapkan salinan lalu langsung memicu share
- * chooser Android. TIDAK butuh dependency baru (BackupManager tetap
- * stateless), dan TIDAK melalui MainActivity seperti fitur share struk di
- * ReportScreen — karena share Intent tidak butuh penanganan permission
- * runtime apa pun (beda dari cetak Bluetooth), jadi cukup dipanggil
- * langsung dari sini persis pola `restartApp(context)` yang sudah ada.
- *
- * `Context` TIDAK disimpan sebagai field (mencegah leak) — selalu diteruskan
- * per-pemanggilan dari Composable yang mengambilnya via `LocalContext.current`.
- */
 class SettingsViewModel(
     private val cashierRepository: CashierRepository,
     private val shiftRepository: ShiftRepository
@@ -68,20 +40,11 @@ class SettingsViewModel(
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
-    /** Event sekali-pakai untuk ditampilkan sebagai Toast oleh Screen. */
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
-    /**
-     * Seluruh kasir (aktif maupun nonaktif) — sengaja bukan hanya yang aktif,
-     * supaya kasir yang dinonaktifkan tetap terlihat di layar ini (pudar) dan
-     * bisa diaktifkan kembali, bukan hilang selamanya dari UI.
-     */
     val cashiers: StateFlow<List<CashierEntity>> = cashierRepository.allCashiers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    // -------------------------------------------------------------------
-    // Backup / Restore (Batch 3A)
-    // -------------------------------------------------------------------
 
     fun exportDatabase(context: Context, destinationUri: Uri) {
         if (_uiState.value.isBusy) return
@@ -97,15 +60,6 @@ class SettingsViewModel(
         }
     }
 
-    /**
-     * BARU: siapkan salinan database ke cache lalu langsung buka chooser
-     * "Bagikan" Android (WhatsApp/Email/Drive/dsb) — tidak melalui SAF sama
-     * sekali (Opsi A: tombol independen dari Export).
-     *
-     * `context.startActivity` dipanggil di sini dari parameter yang
-     * diteruskan per-pemanggilan (bukan field tersimpan) — pola sama dengan
-     * `restartApp(context)` yang sudah dipanggil dari `confirmRestore`.
-     */
     fun shareDatabase(context: Context) {
         if (_uiState.value.isBusy) return
         viewModelScope.launch {
@@ -150,9 +104,6 @@ class SettingsViewModel(
         }
     }
 
-    // -------------------------------------------------------------------
-    // Kelola Kasir (Batch 3B + Batch B: validasi nonaktifkan)
-    // -------------------------------------------------------------------
 
     fun openAddCashierDialog() {
         _uiState.value = _uiState.value.copy(showAddCashierDialog = true)
@@ -162,7 +113,6 @@ class SettingsViewModel(
         _uiState.value = _uiState.value.copy(showAddCashierDialog = false)
     }
 
-    /** Validasi minimal: nama tidak boleh kosong/blank. Duplikat nama diperbolehkan. */
     fun addCashier(name: String) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) {
@@ -176,19 +126,6 @@ class SettingsViewModel(
         _uiState.value = _uiState.value.copy(showAddCashierDialog = false)
     }
 
-    /**
-     * Soft-delete/restore — dipanggil dari Switch aktif/nonaktif di tiap baris.
-     *
-     * BATCH B: sebelum MENONAKTIFKAN (active = false), divalidasi dulu
-     * apakah kasir ini masih punya shift berjalan (`endedAt IS NULL`). Kalau
-     * ya, operasi DIBATALKAN dengan pesan penjelasan — mencegah shift
-     * "menggantung" tanpa rekonsiliasi kas fisik yang pernah dicatat.
-     * Switch di UI tidak akan bergeser karena state sumbernya (`cashier.active`
-     * dari StateFlow) memang tidak berubah.
-     *
-     * MENGAKTIFKAN kembali (active = true) TIDAK divalidasi — dianggap aman
-     * tanpa efek samping ke shift mana pun.
-     */
     fun setCashierActive(id: Long, active: Boolean) {
         viewModelScope.launch {
             if (!active && shiftRepository.hasOpenShift(id)) {

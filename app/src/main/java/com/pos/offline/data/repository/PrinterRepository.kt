@@ -12,12 +12,9 @@ class PrinterRepository(private val printerDao: PrinterDao) {
 
     suspend fun getDefault(): PrinterEntity? = printerDao.getDefault()
 
-    /** Dipakai PrintCoordinator (Batch H6) untuk iterasi fallback berurutan. */
     suspend fun getAllOrderedByPriority(): List<PrinterEntity> =
         printerDao.getAllOrderedByPriority()
 
-    /** Insert printer baru. Kalau [PrinterEntity.isDefault] true, printer
-     *  lain otomatis dilepas status default-nya. */
     suspend fun add(printer: PrinterEntity): Long {
         val id = printerDao.insert(printer)
         if (printer.isDefault) {
@@ -33,7 +30,6 @@ class PrinterRepository(private val printerDao: PrinterDao) {
         }
     }
 
-    /** Hard delete -- beda dari Cashier yang soft-delete. */
     suspend fun delete(printer: PrinterEntity) = printerDao.delete(printer)
 
     suspend fun setAsDefault(printer: PrinterEntity) {

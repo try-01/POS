@@ -31,7 +31,6 @@ fun GlassCard(
     val tint = if (isDark) Color.White else Color.Black
     val shape: Shape = RoundedCornerShape(cornerRadius)
     
-    // Rantai modifier disusun berurutan: Clip -> Background -> Border -> Clickable (agar ripple ter-clip)
     var cardModifier = modifier
         .clip(shape)
         .background(

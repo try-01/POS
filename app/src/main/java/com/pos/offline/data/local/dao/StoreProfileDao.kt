@@ -17,8 +17,6 @@ interface StoreProfileDao {
     @Query("SELECT * FROM store_profile WHERE id = 1 LIMIT 1")
     suspend fun get(): StoreProfileEntity?
 
-    /** IGNORE supaya aman dipanggil berkali-kali sbg jaga-jaga tanpa
-     *  menimpa data yang sudah ada (mis. dipanggil ulang saat save()). */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertDefaultIfAbsent(profile: StoreProfileEntity = StoreProfileEntity())
 

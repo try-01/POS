@@ -1,16 +1,7 @@
 package com.pos.offline.ui.inventory
 
-import android.content.Intent
-import android.net.Uri
-import android.provider.Settings
 import android.Manifest
 import android.content.pm.PackageManager
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import com.pos.offline.ui.components.BarcodeScannerCamera
-import com.pos.offline.util.CameraPermissionState
-import com.pos.offline.util.openAppSettings
-import com.pos.offline.util.rememberCameraPermissionState
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -90,27 +81,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pos.offline.ui.components.BarcodeScannerCamera
+import com.pos.offline.ui.components.rememberBarcodeScanner
 import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.util.toRupiah
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 
-/**
- * Layar Inventaris (CRUD produk) — versi kompak, disamakan densitas
- * visualnya dengan PosScreen agar lebih banyak item muat di layar ponsel
- * tanpa scroll berlebihan.
- *
- * REDESIGN (poin 4): baris produk tidak lagi memakai gestur swipe untuk
- * edit/hapus (rawan tidak sengaja tertekan & tidak discoverable bagi user
- * awam). Sekarang: ikon pensil kecil di kanan tiap baris → buka form edit.
- * Tombol "Hapus" (merah) dipindah ke DALAM form edit itu sendiri.
- *
- * Performa:
- *  - LazyColumn dengan `key` + `contentType` → recycle optimal.
- *  - Baris produk memakai Surface tipis (bukan Card bergradien) → murah di GPU.
- *  - State dikoleksi sadar-siklus ([collectAsStateWithLifecycle]).
- *  - Umpan balik satu-kali via Snackbar (dari Channel di ViewModel).
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InventoryScreen(viewModel: InventoryViewModel) {
@@ -119,19 +96,21 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
     val form by viewModel.form.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val pendingDelete by viewModel.pendingDelete.collectAsStateWithLifecycle()
+    val scanNotFound by viewModel.scanNotFound.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val sortOption by viewModel.sortOption.collectAsStateWithLifecycle()
+
+    val context = LocalContext.current
+    val hasCamera = remember {
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+    }
+    val launchMainScanner = rememberBarcodeScanner(onScanned = viewModel::onBarcodeScanned)
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg -> snackbarHostState.showSnackbar(msg) }
     }
 
-        // Dibungkus Box agar FAB "Tambah Produk" bisa diposisikan MANUAL (bukan lewat
-    // slot floatingActionButton bawaan Scaffold, yang punya jarak internal 16dp
-    // baku & tidak bisa diatur presisi) — supaya bisa disamakan PERSIS (bottom 8dp)
-    // dengan tombol menu mengambang di MainActivity. Hasilnya kedua tombol akan
-    // selalu sejajar secara vertikal, terlepas layar mana yang sedang aktif.
     Box(Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
@@ -180,14 +159,15 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                             modifier = Modifier.weight(1f).height(34.dp)
                         )
                         Spacer(Modifier.width(6.dp))
+                        if (hasCamera) {
+                            ScanIconButton(onClick = launchMainScanner)
+                            Spacer(Modifier.width(6.dp))
+                        }
                         SortMenuButton(current = sortOption, onSelect = viewModel::setSortOption)
                     }
                 }
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },
-            // FIX: floatingActionButton dihapus dari sini, dipindah jadi overlay manual
-            // di bawah (lihat SmallFloatingActionButton setelah Scaffold ini) — supaya
-            // posisinya bisa disinkronkan presisi dengan tombol menu di MainActivity.
             contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars)
         ) { inner ->
             Column(Modifier.fillMaxSize().padding(inner)) {
@@ -213,8 +193,6 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             }
         }
 
-        // FIX: posisi manual, bottom = 8dp — SAMA PERSIS dengan tombol menu mengambang
-        // di MainActivity.kt, agar kedua tombol selalu sejajar vertikal di semua layar.
         SmallFloatingActionButton(
             onClick = viewModel::startAdd,
             modifier = Modifier
@@ -226,11 +204,10 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
         }
     }
 
-    // ---- Dialog tambah / edit ----
     form?.let { state ->
         ProductFormDialog(
             state = state,
-            categories = categories, // BARU
+            categories = categories,
             onSave = viewModel::save,
             onDismiss = viewModel::dismissForm,
             checkBarcodeConflict = viewModel::checkBarcodeConflict,
@@ -238,7 +215,6 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
         )
     }
 
-    // ---- Konfirmasi hapus (dipicu baik dari tombol dalam form, maupun langsung) ----
     pendingDelete?.let { target ->
         AlertDialog(
             onDismissRequest = viewModel::cancelDelete,
@@ -254,15 +230,29 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             text = { Text("\"${target.name}\" akan dihapus dari katalog.") }
         )
     }
+
+    scanNotFound?.let { state ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissScanNotFound,
+            title = { Text("Produk Tidak Ditemukan") },
+            text = {
+                Text("Barcode \"${state.barcode}\" belum terdaftar di katalog produk.")
+            },
+            confirmButton = {
+                Button(onClick = viewModel::startAddFromScanned) {
+                    Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Tambah Produk Baru")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissScanNotFound) { Text("Batal") }
+            }
+        )
+    }
 }
 
-// ============================ BARIS PRODUK (TOMBOL EDIT) ============================
 
-/**
- * Baris produk (REDESIGN poin 4): tidak lagi memakai gestur swipe.
- * Ikon pensil kecil di kanan → membuka form edit (tombol "Hapus" merah
- * ada DI DALAM form itu, lihat [ProductFormDialog]).
- */
 @Composable
 private fun ProductRow(
     product: ProductEntity,
@@ -342,7 +332,6 @@ private fun CategoryBadge(category: String) {
     }
 }
 
-/** Tombol aksi bundar kompak (32dp) — dipakai untuk ikon edit di ProductRow. */
 @Composable
 private fun CompactIconAction(
     icon: ImageVector,
@@ -363,7 +352,6 @@ private fun CompactIconAction(
     }
 }
 
-/** Lencana stok — ukuran dipangkas agar sebaris dengan harga tanpa memakan tinggi tambahan. */
 @Composable
 private fun StockBadge(stock: Int) {
     val color = when {
@@ -409,7 +397,6 @@ private fun EmptyInventory(hasQuery: Boolean) {
     }
 }
 
-/** Search bar kompak — gaya identik dengan CompactSearchBar di PosScreen. */
 @Composable
 private fun CompactInventorySearchBar(
     query: String,
@@ -472,7 +459,6 @@ private fun CompactInventorySearchBar(
     )
 }
 
-/** Tombol kompak pemicu dropdown pilihan urutan daftar produk. */
 @Composable
 private fun SortMenuButton(
     current: ProductSortOption,
@@ -518,11 +504,29 @@ private fun SortMenuButton(
     }
 }
 
-// ============================ FORM TAMBAH / EDIT ============================
+@Composable
+private fun ScanIconButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            Icons.Rounded.QrCodeScanner,
+            contentDescription = "Scan barcode produk",
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
 @Composable
 private fun ProductFormDialog(
     state: ProductFormState,
-    categories: List<String>, // BARU
+    categories: List<String>,
     onSave: (ProductFormState) -> Unit,
     onDismiss: () -> Unit,
     checkBarcodeConflict: suspend (String, Long) -> String?,
@@ -549,13 +553,7 @@ private fun ProductFormDialog(
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
     }
 
-    val (permState, requestPermission) = rememberCameraPermissionState()
-    var showScanner by remember { mutableStateOf(false) }
-    var pendingOpenScanner by remember { mutableStateOf(false) }
-    var showPermissionDeniedDialog by remember { mutableStateOf(false) }
-
-    // State untuk Dialog Ditolak Permanen
-    var showPermanentlyDeniedDialog by remember { mutableStateOf(false) }
+    val launchScanner = rememberBarcodeScanner(onScanned = { code -> barcode = code })
 
     val configuration = LocalConfiguration.current
     val maxContentHeight = (configuration.screenHeightDp * 0.42f).dp
@@ -566,23 +564,6 @@ private fun ProductFormDialog(
         if (trimmed.isBlank()) { barcodeConflict = null; return@LaunchedEffect }
         delay(400)
         barcodeConflict = checkBarcodeConflict(trimmed, state.id)
-    }
-
-    // Pantau perubahan izin kamera (hanya untuk kasus pending open dari first request)
-    LaunchedEffect(permState) {
-        if (pendingOpenScanner) {
-            when (permState) {
-                CameraPermissionState.GRANTED -> {
-                    showScanner = true
-                    pendingOpenScanner = false
-                }
-                CameraPermissionState.PERMANENTLY_DENIED -> {
-                    showPermanentlyDeniedDialog = true
-                    pendingOpenScanner = false
-                }
-                else -> Unit
-            }
-        }
     }
 
     AlertDialog(
@@ -638,18 +619,7 @@ private fun ProductFormDialog(
                                     }
                                 }
                                 if (hasCamera) {
-                                    IconButton(onClick = {
-                                        when (permState) {
-                                            CameraPermissionState.GRANTED -> showScanner = true
-                                            CameraPermissionState.SHOW_RATIONALE, CameraPermissionState.PERMANENTLY_DENIED -> {
-                                                showPermissionDeniedDialog = true
-                                            }
-                                            else -> {
-                                                pendingOpenScanner = true
-                                                requestPermission()
-                                            }
-                                        }
-                                    }, modifier = Modifier.size(24.dp)) {
+                                    IconButton(onClick = launchScanner, modifier = Modifier.size(24.dp)) {
                                         Icon(Icons.Rounded.QrCodeScanner, contentDescription = "Scan", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
                                     }
                                 }
@@ -684,8 +654,6 @@ private fun ProductFormDialog(
                 Spacer(Modifier.height(2.dp))
             }
         },
-        // BARU (poin 4): tombol "Hapus" merah — HANYA tampil saat mode edit (bukan tambah baru).
-        // Ditaruh di slot dismissButton (sisi kiri baris tombol M3 AlertDialog).
         dismissButton = if (!state.isNew) {
             {
                 Button(
@@ -698,9 +666,6 @@ private fun ProductFormDialog(
                 }
             }
         } else null,
-        // Batal + Simpan digabung di slot confirmButton (sisi kanan), supaya tombol Hapus
-        // tetap terpisah jelas di kiri — meminimalkan risiko salah tekan (fat-finger) antara
-        // aksi destruktif (Hapus) dan aksi aman (Batal/Simpan).
         confirmButton = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onDismiss) { Text("Batal") }
@@ -726,63 +691,6 @@ private fun ProductFormDialog(
             }
         }
     )
-
-    if (showPermissionDeniedDialog) {
-        val permanentlyDenied = permState == CameraPermissionState.PERMANENTLY_DENIED
-        AlertDialog(
-            onDismissRequest = { showPermissionDeniedDialog = false },
-            title = { Text(if (permanentlyDenied) "Izin Kamera Diblokir" else "Izin Kamera Diperlukan", style = MaterialTheme.typography.titleMedium) },
-            text = {
-                Text(
-                    if (permanentlyDenied) "Akses kamera untuk scan barcode ditolak permanen. Aktifkan manual lewat Pengaturan aplikasi."
-                    else "Akses kamera dibutuhkan untuk memindai barcode produk secara langsung.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            },
-            confirmButton = {
-                Button(onClick = {
-                    showPermissionDeniedDialog = false
-                    pendingOpenScanner = true // Set agar scanner auto-buka begitu izin didapat
-                    if (permanentlyDenied) {
-                        try {
-                            context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                data = Uri.fromParts("package", context.packageName, null)
-                            })
-                        } catch (e: Exception) { /* device non-standar, jarang terjadi */ }
-                    } else {
-                        requestPermission()
-                    }
-                }) { Text(if (permanentlyDenied) "Buka Pengaturan" else "Izinkan") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPermissionDeniedDialog = false }) { Text("Tutup") }
-            }
-        )
-    }
-
-    // Dialog Full-Screen Scanner untuk Form Inventaris
-    if (showScanner) {
-        Dialog(
-            onDismissRequest = { showScanner = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-        ) {
-            Box(Modifier.fillMaxSize()) {
-                BarcodeScannerCamera(
-                    onBarcodeScanned = { code ->
-                        showScanner = false
-                        barcode = code
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-                IconButton(
-                    onClick = { showScanner = false },
-                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
-                ) {
-                    Icon(Icons.Rounded.Close, contentDescription = "Tutup")
-                }
-            }
-        }
-    }
 }
 
 @Composable
@@ -804,13 +712,6 @@ private fun NumberField(
     )
 }
 
-/**
- * Field kategori dengan autocomplete sederhana — mengetik menyaring daftar
- * kategori yang SUDAH PERNAH dipakai dan menampilkannya sebagai dropdown untuk
- * dipilih. Murni bantuan konsistensi penamaan (mencegah "Minuman" vs "minuman"
- * tercatat sebagai kategori berbeda) — pengguna tetap bebas mengetik kategori
- * BARU yang belum ada; field ini tidak memvalidasi/memblokir apa pun.
- */
 @Composable
 private fun CategoryField(
     value: String,
@@ -865,11 +766,6 @@ private fun CategoryField(
     }
 }
 
-/**
- * Field angka uang dengan separator ribuan otomatis + prefix "Rp" —
- * dipakai khusus untuk Harga Jual & Modal. Field mentah (tanpa titik)
- * tetap yang disimpan ke state; titik hanya efek visual (VisualTransformation).
- */
 @Composable
 private fun MoneyNumberField(
     value: String,

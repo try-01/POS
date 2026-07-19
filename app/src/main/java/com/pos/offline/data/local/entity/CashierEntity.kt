@@ -3,10 +3,6 @@ package com.pos.offline.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-/**
- * Data kasir/staff. Pemakaian fitur ini OPSIONAL — aplikasi tetap bisa dipakai
- * tanpa memilih kasir/shift sama sekali (checkout `cashierId` boleh null).
- */
 @Entity(tableName = "cashiers")
 data class CashierEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

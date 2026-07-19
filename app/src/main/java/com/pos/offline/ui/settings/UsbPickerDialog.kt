@@ -40,9 +40,6 @@ fun UsbPickerDialog(
         viewModel.refreshUsbDevices()
     }
 
-    // Beda dari Bluetooth (perlu discovery aktif), USB device terdeteksi
-    // otomatis begitu kabel tersambung -- kita cukup dengarkan broadcast
-    // attach/detach selagi dialog ini terbuka supaya list auto-update.
     DisposableEffect(Unit) {
         viewModel.startObservingUsbAttachment()
         onDispose { viewModel.resetUsbPicker() }

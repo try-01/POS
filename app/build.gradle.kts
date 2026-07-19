@@ -6,9 +6,6 @@ plugins {
     id("androidx.room")                       // export skema JSON (untuk migrasi teruji)
 }
 
-// Room Gradle Plugin: mengekspor riwayat skema database (JSON) ke app/schemas
-// saat kompilasi. Berkas ini WAJIB di-commit ke VCS agar migrasi otomatis
-// antar versi bisa dibangkitkan & diuji secara reproduktif.
 room {
     schemaDirectory("$projectDir/schemas")
 }
@@ -25,7 +22,6 @@ android {
         versionName = "1.0.0.1"
         vectorDrawables { useSupportLibrary = true }
 
-        // Runner instrumentasi default untuk androidTest (migration test, dsb.).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -33,12 +29,6 @@ android {
         release {
             isMinifyEnabled = true        // R8: buang kode mati → APK kecil & RAM hemat
             isShrinkResources = true
-            // Aturan default sudah memuat optimasi R8; tiap library (Compose/Room)
-            // menyertakan consumer-rules sendiri, jadi tidak butuh file tambahan.
-            // Catatan (Batch H): kalau nanti H3 memakai reflection ke hidden API
-            // (BluetoothDevice.setPin) dan build release mengalami crash aneh,
-            // kemungkinan besar R8 memangkas sesuatu yang diakses via reflection —
-            // akan ditambah keep-rule spesifik saat itu terjadi, bukan sekarang.
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
     }
@@ -51,18 +41,6 @@ android {
 
     buildFeatures { compose = true }
 
-    // Sediakan skema JSON Room sebagai ASET uji agar MigrationTestHelper bisa
-    // membaca 1.json / 2.json. Plugin Room menempatkan skema di
-    //   app/schemas/<namaKanonik>/<versi>.json
-    // jadi cukup mendaftarkan "schemas" sebagai sumber aset — berkas akan berakhir
-    // di path "<namaKanonik>/<versi>.json" di dalam APK.
-    //
-    // Didaftarkan ke DUA source set agar TAHAN BANTING (robust):
-    //  - androidTest (primer): aset dibaca via konteks uji (getContext).
-    //  - debug (cadangan): MigrationTestHelper otomatis JATUH ke konteks aplikasi
-    //    (getTargetContext) bila aset uji tak ditemukan — jadi tes tetap lolos walau
-    //    mekanisme merge aset androidTest berperilaku aneh di suatu versi AGP.
-    //    (Hanya varian debug yang terpengaruh; APK rilis tetap bersih.)
     sourceSets {
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
         getByName("debug").assets.srcDir("$projectDir/schemas")
@@ -73,18 +51,12 @@ android {
     }
 }
 
-// URUTAN BUILD (penting agar skema versi terbaru, mis. 2.json, masuk ke APK):
-// KSP membangkitkan <version>.json (mis. 2.json untuk skema saat ini) selama
-// kspDebugKotlin. Tanpa dependensi eksplisit, task merge*Assets bisa berjalan
-// SEBELUM 2.json ditulis → hanya 1.json (yang sudah di-commit) yang ter-merge.
-// Memaksa merge assets tergantung pada kspDebugKotlin menjamin kedua berkas ada.
 afterEvaluate {
     tasks.matching { it.name == "mergeDebugAssets" || it.name == "mergeDebugAndroidTestAssets" }
         .configureEach { dependsOn("kspDebugKotlin") }
 }
 
 dependencies {
-    // ---- Compose (Material 3) ----
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
@@ -94,38 +66,26 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.13.1")
 
-    // ---- Lifecycle: koleksi Flow sadar-siklus → berhenti saat background (hemat baterai) ----
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
 
-    // ---- Coroutines + Flow ----
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
-    // ---- Room (database offline cepat) ----
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1") // suspend DAO + withTransaction
     ksp("androidx.room:room-compiler:2.6.1")
 
-    // ---- Batch H2: Printer thermal (Bluetooth + WiFi/TCP + USB dalam satu lib) ----
-    // CATATAN VERSI: "3.3.0" berdasarkan pengetahuan terakhir saya saat ini.
-    // Karena saya tidak bisa mengecek rilis JitPack secara real-time, mohon
-    // verifikasi dulu angka versi terbaru di halaman GitHub DantSu sebelum
-    // build (badge "jitpack.io" di README repo), lalu sesuaikan angka di
-    // bawah ini kalau ada versi lebih baru. Formatnya tetap sama.
     implementation("com.github.DantSu:ESCPOS-ThermalPrinter-Android:3.4.0")
 
-    // ---- CameraX (Untuk Barcode Scanner) ----
     val cameraxVersion = "1.4.1"
     implementation("androidx.camera:camera-core:${cameraxVersion}")
     implementation("androidx.camera:camera-camera2:${cameraxVersion}")
     implementation("androidx.camera:camera-lifecycle:${cameraxVersion}")
     implementation("androidx.camera:camera-view:${cameraxVersion}")
 
-    // ---- ML Kit Barcode Scanning (Bundled - Offline) ----
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
-    // ---- androidTest: uji migrasi Room + runner JUnit4 ----
     androidTestImplementation("androidx.room:room-testing:2.6.1") // MigrationTestHelper
     androidTestImplementation("androidx.test.ext:junit:1.2.1")     // AndroidJUnit4
     androidTestImplementation("androidx.test:runner:1.6.2")        // InstrumentationRegistry

@@ -8,18 +8,12 @@ import androidx.room.Query
 import com.pos.offline.data.local.entity.ProductEntity
 import kotlinx.coroutines.flow.Flow
 
-/**
- * Akses data produk. Semua fungsi `suspend` berjalan di dispatcher IO via Room.
- * Fungsi observasi mengembalikan [Flow] (cold) — hemat daya karena hanya aktif
- * saat ada subscriber (UI sedang terlihat).
- */
 @Dao
 interface ProductDao {
 
     @Query("SELECT * FROM products WHERE active = 1 ORDER BY updatedAt DESC")
     fun observeAll(): Flow<List<ProductEntity>>
 
-    /** Pencarian nama/SKU memakai index; LIKE ringan karena di-debounce di ViewModel. */
     @Query(
         """
         SELECT * FROM products
@@ -39,12 +33,6 @@ interface ProductDao {
     @Delete
     suspend fun delete(product: ProductEntity)
 
-    /**
-     * Decrement stok atomik: hanya berkurang jika stok MASIH mencukupi.
-     * Kondisi `stock >= :qty` di klausa WHERE menjamin tidak ada race condition
-     * antara dua checkout bersamaan. Mengembalikan jumlah baris terpengaruh
-     * (0 = stok tidak cukup → pemanggil melempar exception untuk rollback).
-     */
     @Query(
         """
         UPDATE products
@@ -54,11 +42,6 @@ interface ProductDao {
     )
     suspend fun decrementStock(id: Long, qty: Int, now: Long): Int
 
-    /**
-     * BATCH D: kebalikan [decrementStock] — dipakai saat Void Transaksi untuk
-     * mengembalikan stok item yang dibatalkan. Tidak perlu guard kondisi
-     * (menambah stok selalu aman, tidak ada risiko race "kekurangan").
-     */
     @Query(
         """
         UPDATE products
@@ -68,11 +51,6 @@ interface ProductDao {
     )
     suspend fun incrementStock(id: Long, qty: Int, now: Long)
 
-    /**
-     * Soft-delete (arsipkan): set `active = false` agar produk menghilang dari
-     * katalog & layar kasir, namun baris data tetap ada. Aman karena transaksi
-     * yang sudah dicatat menyimpan snapshot produk → riwayat tidak rusak.
-     */
     @Query("UPDATE products SET active = :active, updatedAt = :now WHERE id = :id")
     suspend fun setActive(id: Long, active: Boolean, now: Long)
     
@@ -82,9 +60,6 @@ interface ProductDao {
     @Query("SELECT * FROM products WHERE barcode = :barcode LIMIT 1")
     suspend fun getByBarcodeAny(barcode: String): ProductEntity?
 
-     /** Kategori unik dari produk AKTIF (untuk chip filter di Kasir & autocomplete
-     *  di form Inventaris). String kosong ("tanpa kategori") sengaja dikecualikan
-     *  agar tidak muncul sebagai chip/opsi kosong yang membingungkan. */
     @Query(
         """
         SELECT DISTINCT category FROM products

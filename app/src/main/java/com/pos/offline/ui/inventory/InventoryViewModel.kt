@@ -33,8 +33,6 @@ data class ProductFormState(
     val isNew: Boolean get() = id == 0L
 }
 
-/** Opsi urutan daftar produk. Sorting dilakukan in-memory (bukan query DB ulang)
- *  karena hasil pencarian sudah ada di RAM — jauh lebih murah & instan. */
 enum class ProductSortOption(val label: String) {
     NAME_ASC("Nama (A-Z)"),
     NAME_DESC("Nama (Z-A)"),
@@ -63,20 +61,15 @@ class InventoryViewModel(
     private val _sortOption = MutableStateFlow(ProductSortOption.NAME_ASC)
     val sortOption: StateFlow<ProductSortOption> = _sortOption.asStateFlow()
 
-    // Hasil mentah dari DB (belum diurutkan sesuai pilihan user).
     private val rawProducts = _searchQuery
         .debounce(180)
         .distinctUntilChanged()
         .flatMapLatest { productRepository.search(it) }
 
-    // Digabung dengan pilihan sort → hanya recompute saat salah satu berubah.
-    // Sorting di sini murni operasi CPU ringan (List.sortedWith), tidak menyentuh DB.
     val products: StateFlow<List<ProductEntity>> = combine(rawProducts, _sortOption) { list, sort ->
         list.sortedWith(sort.comparator)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** Daftar kategori unik yang sudah pernah dipakai — sugesti autocomplete di
-     *  form tambah/edit produk (mencegah fragmentasi nama akibat typo). */
     val categories: StateFlow<List<String>> = productRepository.observeCategories()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -88,6 +81,47 @@ class InventoryViewModel(
 
     private val _messages = Channel<String>(capacity = Channel.BUFFERED)
     val messages = _messages.receiveAsFlow()
+
+    data class ScanNotFoundState(val barcode: String)
+
+    private val _scanNotFound = MutableStateFlow<ScanNotFoundState?>(null)
+    val scanNotFound: StateFlow<ScanNotFoundState?> = _scanNotFound.asStateFlow()
+
+    private fun sanitizeScannedCode(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val cleaned = raw.trim().filter { c -> c.isLetterOrDigit() || c in "-_./: #" }.take(128)
+        return cleaned.ifBlank { null }
+    }
+
+    fun onBarcodeScanned(raw: String?) {
+        val sanitized = sanitizeScannedCode(raw)
+        if (sanitized == null) {
+            notify("Gagal memindai kode. Coba pindai ulang.")
+            return
+        }
+        viewModelScope.launch {
+            val product = try {
+                productRepository.getProductByBarcodeAny(sanitized)
+                    ?: sanitized.toLongOrNull()?.let { productRepository.getById(it) }
+            } catch (e: Exception) {
+                notify("Gagal memindai: ${e.message ?: "kesalahan tak dikenal"}.")
+                return@launch
+            }
+            if (product != null && product.active) {
+                startEdit(product) // redirect ke halaman Edit Produk
+            } else {
+                _scanNotFound.value = ScanNotFoundState(sanitized)
+            }
+        }
+    }
+
+    fun dismissScanNotFound() { _scanNotFound.value = null }
+
+    fun startAddFromScanned() {
+        val barcode = _scanNotFound.value?.barcode ?: return
+        _scanNotFound.value = null
+        _form.value = ProductFormState(barcode = barcode)
+    }
 
     fun search(q: String) { _searchQuery.value = q }
     fun setSortOption(option: ProductSortOption) { _sortOption.value = option }
@@ -161,11 +195,6 @@ class InventoryViewModel(
         }
     }
 
-     /** Dipanggil dari tombol "Hapus" di dalam form edit produk (poin redesign #4).
-     *  Menutup form terlebih dahulu, lalu memicu dialog konfirmasi hapus yang SAMA
-     *  dengan yang dipicu [requestDelete] biasa — sehingga tetap ada satu langkah
-     *  konfirmasi eksplisit sebelum data benar-benar terhapus (tidak ada jalan pintas
-     *  yang melewati AlertDialog "Hapus Produk?"). */
     fun requestDeleteFromForm(id: Long) {
         val target = products.value.find { it.id == id } ?: return
         _form.value = null
@@ -180,7 +209,6 @@ class InventoryViewModel(
     val trimmed = barcode.trim()
     if (trimmed.isBlank()) return null
     val existing = productRepository.getProductByBarcodeAny(trimmed)
-    // Kembalikan nama produk jika barcode sudah dipakai oleh produk LAIN
     return if (existing != null && existing.id != excludeId) existing.name else null
     }
 }

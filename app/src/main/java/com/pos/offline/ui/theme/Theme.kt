@@ -11,7 +11,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// ---------- Palet (tema gelap elegan, kontras tinggi, minim silau untuk kasir) ----------
 private val DarkColors = darkColorScheme(
     primary = Color(0xFF6FCF97),
     onPrimary = Color(0xFF003919),
@@ -42,11 +41,6 @@ private val AppTypography = Typography(
     labelLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
 )
 
-/**
- * Tema aplikasi. Default mengikuti sistem (gelap/terang).
- * Dynamic color sengaja TIDAK diaktifkan agar warna glassmorphism konsisten di
- * semua perangkat (mengurangi beban pemrosesan warna & menjaga kontras struk).
- */
 @Composable
 fun PosTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),

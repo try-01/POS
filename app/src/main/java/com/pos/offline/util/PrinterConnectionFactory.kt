@@ -184,16 +184,12 @@ class PrinterConnectionFactory(
 
             return try {
                 val escPosPrinter = withContext(Dispatchers.IO) {
-                    // Jika ON: Buka laci tepat sebelum memulai data cetak (Satu koneksi aliran data)
                     if (openCashDrawer) {
                         try {
                             val commands = EscPosPrinterCommands(ready.connection)
                             commands.openCashBox()
-                            // Memberi JEDA 250 milidetik agar laci terbuka dengan sempurna 
-                            // sebelum data gambar struk masuk ke aliran printer yang sama
                             Thread.sleep(250)
                         } catch (e: Exception) {
-                            // Abaikan error laci dan paksa lanjut cetak
                         }
                     }
                     EscPosPrinter(

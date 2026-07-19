@@ -14,13 +14,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 
-/**
- * Abstraksi device USB -- [deviceName] adalah path sistem (mis.
- * "/dev/bus/usb/001/002"), dipakai HANYA sebagai kunci sementara untuk
- * mencari ulang [UsbDevice] mentah lewat [UsbPrinterHelper.findDeviceByName]
- * selama sesi picker berlangsung. TIDAK disimpan ke database -- yang
- * disimpan permanen ke [PrinterEntity] hanya vendorId & productId.
- */
 data class UsbDeviceInfo(
     val deviceName: String,
     val label: String,
@@ -40,10 +33,6 @@ class UsbPrinterHelper(private val appContext: Context) {
 
     fun isUsbSupported(): Boolean = usbManager != null
 
-    /** Semua device USB yang SEDANG TERCOLOK, tanpa filter device class --
-     *  printer thermal generik (termasuk RPP02N) sering tidak melaporkan
-     *  USB_CLASS_PRINTER standar, jadi keputusan mana yang printer
-     *  diserahkan ke user, bukan disaring otomatis oleh app. */
     fun getDeviceList(): List<UsbDeviceInfo> {
         val manager = usbManager ?: return emptyList()
         return manager.deviceList.values.map { it.toInfo() }
@@ -55,26 +44,13 @@ class UsbPrinterHelper(private val appContext: Context) {
     fun findDeviceByName(deviceName: String): UsbDevice? =
         usbManager?.deviceList?.get(deviceName)
 
-    /** Cari device USB berdasarkan vendorId & productId yang tersimpan
-     *  permanen di [PrinterEntity] -- dipakai [PrinterConnectionFactory] saat
-     *  Test Print/cetak sungguhan, KARENA [deviceName] (path sistem) bersifat
-     *  sesi-sementara dan tidak disimpan ke database (bisa berubah tiap kali
-     *  device dicabut-pasang ulang), sedangkan vendorId:productId bersifat
-     *  tetap untuk unit fisik yang sama. */
     fun findDeviceByVendorProduct(vendorId: Int, productId: Int): UsbDevice? =
         usbManager?.deviceList?.values?.firstOrNull {
             it.vendorId == vendorId && it.productId == productId
         }
 
-    /** Expose UsbManager mentah untuk dipakai [PrinterConnectionFactory]
-     *  membangun UsbConnection DantSu (butuh UsbManager sebagai parameter
-     *  constructor). */
     fun getSystemUsbManager(): UsbManager? = usbManager
 
-    /** Auto-update daftar saat kabel dicolok/dicabut selagi dialog picker
-     *  terbuka. Registrasi BroadcastReceiver ini bersifat DINAMIS & SEMENTARA
-     *  (hanya hidup selagi collector aktif) -- berbeda dari intent-filter
-     *  statis di manifest yang sengaja DITUNDA (keputusan Opsi B, H2). */
     fun observeAttachDetach(): Flow<Unit> = callbackFlow {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
@@ -95,18 +71,6 @@ class UsbPrinterHelper(private val appContext: Context) {
         }
     }
 
-    /**
-     * Minta izin akses ke device USB tertentu. Model permission ini BEDA
-     * TOTAL dari runtime permission Bluetooth (bukan ActivityResultContracts)
-     * -- UsbManager memakai PendingIntent + broadcast custom yang didaftarkan
-     * sementara, sesuai API resmi UsbManager.requestPermission().
-     *
-     * CATATAN PENTING (untuk H6 nanti): izin ini TIDAK selalu permanen --
-     * bisa hilang saat device dicabut-pasang ulang atau (tergantung OEM/versi
-     * Android) setelah reboot. PrintCoordinator WAJIB re-check
-     * hasPermission() sebelum tiap cetak USB, tidak boleh asumsikan sekali
-     * dapat izin lalu selesai selamanya seperti Bluetooth bonding.
-     */
     suspend fun requestPermission(device: UsbDevice): UsbPermissionResult {
         val manager = usbManager ?: return UsbPermissionResult.Denied
         if (manager.hasPermission(device)) return UsbPermissionResult.Granted
@@ -137,9 +101,6 @@ class UsbPrinterHelper(private val appContext: Context) {
                 runCatching { appContext.unregisterReceiver(receiver) }
             }
 
-            // FLAG_MUTABLE wajib di API 31+ karena sistem perlu menyisipkan
-            // extra EXTRA_PERMISSION_GRANTED ke intent balikan -- tanpa ini,
-            // extra tidak terpasang di beberapa versi Android (bug umum).
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
             } else {

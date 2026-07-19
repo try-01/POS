@@ -13,13 +13,6 @@ enum class PaperWidth {
         MM_80 -> 48
     }
 
-    /** Lebar AREA CETAK RIIL dalam mm (BUKAN lebar kertas nominal) --
-     *  dipakai sebagai parameter printerWidthMM saat membangun EscPosPrinter
-     *  DantSu, supaya perhitungan lebar pixel (gambar/QR code, di H5 nanti)
-     *  akurat. Lebar kertas 58mm/80mm SELALU lebih besar dari area cetak
-     *  riil karena margin mekanis printhead. Nilai disepakati bersama user
-     *  (bukan hasil pengukuran spesifik RPP02N) -- bisa disesuaikan lagi
-     *  nanti kalau ditemukan printer dengan area cetak signifikan berbeda. */
     fun printableWidthMM(): Float = when (this) {
         MM_58 -> 48f
         MM_80 -> 72f

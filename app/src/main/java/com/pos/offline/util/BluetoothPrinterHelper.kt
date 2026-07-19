@@ -16,9 +16,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 
-/** Info ringkas perangkat Bluetooth -- dipakai di ViewModel/UI supaya tidak
- *  perlu meneruskan objek [BluetoothDevice] mentah (yang sebagian method-nya
- *  butuh permission runtime & anotasi @SuppressLint) ke lapisan atas. */
 data class BluetoothDeviceInfo(val name: String, val address: String)
 
 sealed class BondResult {
@@ -27,24 +24,6 @@ sealed class BondResult {
     object Failed : BondResult()
 }
 
-/**
- * Helper Bluetooth Classic untuk pairing & discovery printer thermal (Batch H3b).
- *
- * Dipegang sebagai instance tunggal (di-construct dengan Application Context
- * oleh ServiceLocator, sama seperti PosDatabase) -- aman disimpan long-lived
- * karena bukan Activity Context.
- *
- * CATATAN PIN HYBRID (final, sesuai keputusan arsitektur Batch H):
- * 1. `device.createBond()` dipanggil; saat sistem memunculkan broadcast
- *    ACTION_PAIRING_REQUEST, kita intersep via BroadcastReceiver prioritas
- *    tinggi lalu coba panggil `BluetoothDevice.setPin()` (hidden/non-SDK
- *    API) via reflection, dibungkus try-catch TOTAL.
- * 2. Kalau reflection SUKSES -> abortBroadcast() supaya dialog pairing
- *    bawaan sistem tidak ikut muncul (PIN sudah terisi otomatis).
- * 3. Kalau reflection GAGAL/exception (mis. diblokir OEM/versi Android
- *    tertentu) -> broadcast TIDAK di-abort, sehingga dialog pairing native
- *    Android tetap muncul sebagai fallback -- tidak ada skenario buntu.
- */
 class BluetoothPrinterHelper(private val appContext: Context) {
 
     private val adapter: BluetoothAdapter?
@@ -66,9 +45,6 @@ class BluetoothPrinterHelper(private val appContext: Context) {
         }
     }
 
-    /** Emit tiap perangkat baru yang ditemukan selama discovery aktif.
-     *  Discovery otomatis dibatalkan saat collector berhenti (mis. dialog
-     *  ditutup / coroutine di-cancel). */
     @SuppressLint("MissingPermission")
     fun discoverDevices(): Flow<BluetoothDeviceInfo> = callbackFlow {
         val bt = adapter
@@ -107,12 +83,9 @@ class BluetoothPrinterHelper(private val appContext: Context) {
         try {
             adapter?.let { if (it.isDiscovering) it.cancelDiscovery() }
         } catch (t: SecurityException) {
-            // Abaikan -- tidak fatal, hanya berarti discovery tidak sempat dibatalkan.
         }
     }
 
-    /** Memasangkan (pair) perangkat dengan PIN yang diberikan. Lihat catatan
-     *  kelas di atas untuk penjelasan alur hybrid reflection + fallback. */
     @SuppressLint("MissingPermission")
     suspend fun pairDevice(address: String, pin: String): BondResult {
         val bt = adapter ?: return BondResult.Failed
@@ -141,12 +114,8 @@ class BluetoothPrinterHelper(private val appContext: Context) {
                                 try {
                                     abortBroadcast()
                                 } catch (t: Throwable) {
-                                    // Bukan ordered broadcast di sebagian ROM -- abaikan,
-                                    // dialog sistem mungkin tetap muncul, tidak fatal.
                                 }
                             }
-                            // reflectionOk == false -> sengaja TIDAK abort, supaya
-                            // dialog pairing sistem native tampil sbg fallback.
                         }
                         BluetoothDevice.ACTION_BOND_STATE_CHANGED -> {
                             val target = intent.getParcelableExtraCompat<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
@@ -160,7 +129,6 @@ class BluetoothPrinterHelper(private val appContext: Context) {
                                     runCatching { appContext.unregisterReceiver(receiver) }
                                     if (cont.isActive) cont.resumeWith(Result.success(BondResult.Failed))
                                 }
-                                // BOND_BONDING -> masih berlangsung, tunggu broadcast berikutnya.
                             }
                         }
                     }
@@ -190,9 +158,6 @@ class BluetoothPrinterHelper(private val appContext: Context) {
         }
     }
 
-    /** Best-effort reflection ke hidden API BluetoothDevice.setPin(byte[]).
-     *  Kegagalan di sini BUKAN error fatal -- hanya berarti kita jatuh ke
-     *  fallback dialog pairing sistem (lihat pairDevice). */
     private fun trySetPinViaReflection(device: BluetoothDevice, pin: String): Boolean = try {
         val method = device.javaClass.getDeclaredMethod("setPin", ByteArray::class.java)
         method.isAccessible = true

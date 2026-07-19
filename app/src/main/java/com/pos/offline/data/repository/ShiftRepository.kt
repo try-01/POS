@@ -9,18 +9,11 @@ data class ShiftSummary(
     val cashRevenue: Long,
     val qrisRevenue: Long,
     val totalCost: Long,
-    /** Total refund TUNAI yang terjadi selama shift ini berlangsung (Batch E). */
     val cashRefunds: Long
 ) {
     val totalRevenue: Long get() = cashRevenue + qrisRevenue
     val grossProfit: Long get() = totalRevenue - totalCost
 
-    /**
-     * Kas yang SEHARUSNYA ada di laci fisik — QRIS TIDAK dihitung (bukan uang
-     * fisik), refund TUNAI MENGURANGI (uang keluar dari laci). Penyesuaian
-     * laba kotor akibat retur SENGAJA TIDAK dilakukan di sini (keterbatasan
-     * yang disepakati) — grossProfit di atas murni dari penjualan asli.
-     */
     val expectedCashInDrawer: Long get() = startingCash + cashRevenue - cashRefunds
 }
 

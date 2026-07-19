@@ -81,7 +81,6 @@ data class ReturnSummary(
     }
 }
 
-/** BATCH H7: kandidat printer menunggu dipilih user untuk reprint (>1 printer tersedia). */
 data class PendingPrintTarget(
     val checkoutResult: CheckoutResult,
     val availablePrinters: List<PrinterEntity>
@@ -158,7 +157,6 @@ class ReportViewModel(
     private val _messages = MutableSharedFlow<ReportMessage>(extraBufferCapacity = 1)
     val messages: SharedFlow<ReportMessage> = _messages.asSharedFlow()
 
-    // BATCH H7: state cetak ulang struk thermal.
     private val _printUiState = MutableStateFlow<PrintUiState>(PrintUiState.Idle)
     val printUiState: StateFlow<PrintUiState> = _printUiState.asStateFlow()
 
@@ -284,13 +282,7 @@ class ReportViewModel(
         }
     }
 
-    // ---- BATCH H7: reprint manual (TANPA cascade) ----
 
-    /**
-     * Reprint struk (H7). Logika bypass-picker (YAGNI, sesuai kesepakatan):
-     * 0 printer -> NoPrinterConfigured langsung; 1 printer -> langsung cetak tanpa dialog;
-     * >1 printer -> tampilkan [PrinterPickerDialog] agar user pilih secara eksplisit.
-     */
     fun printReceipt(result: CheckoutResult) {
         if (_printUiState.value is PrintUiState.Printing) return
         viewModelScope.launch {
