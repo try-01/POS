@@ -25,10 +25,12 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -53,6 +55,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -64,10 +67,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -97,6 +96,11 @@ import com.pos.offline.ui.components.ThousandsSeparatorTransformation
  * Layar Inventaris (CRUD produk) — versi kompak, disamakan densitas
  * visualnya dengan PosScreen agar lebih banyak item muat di layar ponsel
  * tanpa scroll berlebihan.
+ *
+ * REDESIGN (poin 4): baris produk tidak lagi memakai gestur swipe untuk
+ * edit/hapus (rawan tidak sengaja tertekan & tidak discoverable bagi user
+ * awam). Sekarang: ikon pensil kecil di kanan tiap baris → buka form edit.
+ * Tombol "Hapus" (merah) dipindah ke DALAM form edit itu sendiri.
  *
  * Performa:
  *  - LazyColumn dengan `key` + `contentType` → recycle optimal.
@@ -154,20 +158,20 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                         )
                     }
                 }
-Row(
-    modifier = Modifier
-        .fillMaxWidth()
-        .padding(bottom = 6.dp),
-    verticalAlignment = Alignment.CenterVertically
-) {
-    CompactInventorySearchBar(
-        query = query,
-        onQueryChange = viewModel::search,
-        modifier = Modifier.weight(1f).height(34.dp)
-    )
-    Spacer(Modifier.width(6.dp))
-    SortMenuButton(current = sortOption, onSelect = viewModel::setSortOption)
-}
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CompactInventorySearchBar(
+                        query = query,
+                        onQueryChange = viewModel::search,
+                        modifier = Modifier.weight(1f).height(34.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    SortMenuButton(current = sortOption, onSelect = viewModel::setSortOption)
+                }
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -176,14 +180,19 @@ Row(
                 Icon(Icons.Rounded.Add, contentDescription = "Tambah Produk", modifier = Modifier.size(20.dp))
             }
         },
-        contentWindowInsets = WindowInsets.statusBars
+        // Full edge-to-edge (poin 1): sertakan navigationBars juga (bukan cuma statusBars),
+        // supaya FAB "Tambah Produk" tidak tertimpa gesture bar sistem — sebelumnya ruang ini
+        // "gratis" didapat dari padding(bottom = 80.dp) di MainActivity lama yang sudah dihapus.
+        contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars)
     ) { inner ->
         Column(Modifier.fillMaxSize().padding(inner)) {
             if (products.isEmpty()) {
                 EmptyInventory(hasQuery = query.isNotEmpty())
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    // bottom 96dp: clearance dari FAB "Tambah Produk" (kanan-bawah) DAN dari
+                    // FAB menu mengambang baru di MainActivity (kiri-bawah) — poin 1 & 3.
+                    contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(
@@ -193,8 +202,7 @@ Row(
                     ) { product ->
                         ProductRow(
                             product = product,
-                            onEdit = { viewModel.startEdit(product) },
-                            onDelete = { viewModel.requestDelete(product) }
+                            onEdit = { viewModel.startEdit(product) }
                         )
                     }
                 }
@@ -208,11 +216,12 @@ Row(
             state = state,
             onSave = viewModel::save,
             onDismiss = viewModel::dismissForm,
-            checkBarcodeConflict = viewModel::checkBarcodeConflict // <--- TAMBAHKAN BARIS INI
+            checkBarcodeConflict = viewModel::checkBarcodeConflict,
+            onDeleteRequest = { viewModel.requestDeleteFromForm(state.id) }
         )
     }
 
-    // ---- Konfirmasi hapus ----
+    // ---- Konfirmasi hapus (dipicu baik dari tombol dalam form, maupun langsung) ----
     pendingDelete?.let { target ->
         AlertDialog(
             onDismissRequest = viewModel::cancelDelete,
@@ -230,172 +239,92 @@ Row(
     }
 }
 
-// ============================ BARIS PRODUK (SWIPE ACTION) ============================
+// ============================ BARIS PRODUK (TOMBOL EDIT) ============================
 
 /**
- * Baris produk dengan gestur swipe:
- *  - Swipe KANAN (StartToEnd) → Edit  (aksi aman, warna primary, ikon kiri)
- *  - Swipe KIRI  (EndToStart) → Hapus (aksi destruktif, warna error, ikon kanan)
- *
- * Kartu TIDAK benar-benar "dismiss" — confirmValueChange selalu true agar animasi
- * swipe selesai penuh (feedback visual jelas), lalu LaunchedEffect memicu aksi
- * dan otomatis reset() kartu kembali ke posisi semula. Penghapusan aktual tetap
- * lewat dialog konfirmasi di ViewModel — jadi tidak ada risiko kehapus tanpa sengaja.
+ * Baris produk (REDESIGN poin 4): tidak lagi memakai gestur swipe.
+ * Ikon pensil kecil di kanan → membuka form edit (tombol "Hapus" merah
+ * ada DI DALAM form itu, lihat [ProductFormDialog]).
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProductRow(
     product: ProductEntity,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onEdit: () -> Unit
 ) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { true }, // izinkan swipe selesai penuh secara visual
-        positionalThreshold = { totalDistance -> totalDistance * 0.32f } // ~1/3 lebar, cukup ringan buat di-trigger
-    )
-
-    // Efek samping: begitu swipe "settle" di salah satu arah, jalankan aksi lalu kembalikan posisi.
-    LaunchedEffect(dismissState.currentValue) {
-        when (dismissState.currentValue) {
-            SwipeToDismissBoxValue.StartToEnd -> {
-                onEdit()
-                dismissState.reset()
-            }
-            SwipeToDismissBoxValue.EndToStart -> {
-                onDelete()
-                dismissState.reset()
-            }
-            SwipeToDismissBoxValue.Settled -> Unit
-        }
-    }
-
-    SwipeToDismissBox(
-        state = dismissState,
-        backgroundContent = { SwipeActionBackground(direction = dismissState.targetValue) },
-        modifier = Modifier.fillMaxWidth()
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 14.dp,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        onClick = null // kartu murni visual; satu-satunya aksi adalah tombol edit di kanan
     ) {
-        GlassCard(
-            modifier = Modifier.fillMaxWidth(),
-            cornerRadius = 14.dp,
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            onClick = null // kartu murni visual; semua aksi lewat swipe
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    product.name,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    product.sku,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        product.name,
+                        product.price.toRupiah(),
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
                     )
-                    Text(
-                        product.sku,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            product.price.toRupiah(),
-                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    Spacer(Modifier.width(8.dp))
+                    StockBadge(stock = product.stock)
+                    if (product.cost > 0) {
                         Spacer(Modifier.width(8.dp))
-                        StockBadge(stock = product.stock)
-                        if (product.cost > 0) {
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "Laba ${(product.price - product.cost).toRupiah()}",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                        Text(
+                            "Laba ${(product.price - product.cost).toRupiah()}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
-                // Ikon kecil di kanan sebagai HINT visual bahwa baris ini bisa di-swipe.
-                // Tidak fungsional (bukan tombol) — murni affordance untuk discoverability,
-                // karena gestur swipe tidak seintuitif tombol bagi sebagian pengguna awam.
-                Icon(
-                    Icons.Rounded.Edit,
-                    contentDescription = null,
-                    modifier = Modifier.size(12.dp),
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)
-                )
             }
+            Spacer(Modifier.width(8.dp))
+            CompactIconAction(
+                icon = Icons.Rounded.Edit,
+                contentDescription = "Edit ${product.name}",
+                tint = MaterialTheme.colorScheme.primary,
+                background = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                onClick = onEdit
+            )
         }
     }
 }
 
-/** Latar yang tersingkap saat kartu di-swipe — warna & ikon berubah sesuai arah. */
+/** Tombol aksi bundar kompak (32dp) — dipakai untuk ikon edit di ProductRow. */
 @Composable
-private fun SwipeActionBackground(direction: SwipeToDismissBoxValue) {
-    val (color, icon, alignment, label) = when (direction) {
-        SwipeToDismissBoxValue.StartToEnd -> Quad(
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-            Icons.Rounded.Edit,
-            Alignment.CenterStart,
-            "Edit"
-        )
-        SwipeToDismissBoxValue.EndToStart -> Quad(
-            MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
-            Icons.Rounded.Delete,
-            Alignment.CenterEnd,
-            "Hapus"
-        )
-        SwipeToDismissBoxValue.Settled -> Quad(Color.Transparent, null, Alignment.Center, "")
-    }
-
+private fun CompactIconAction(
+    icon: ImageVector,
+    contentDescription: String,
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    background: Color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+    onClick: () -> Unit
+) {
     Box(
         modifier = Modifier
-            .fillMaxSize()
-            .clip(RoundedCornerShape(14.dp))
-            .background(color)
-            .padding(horizontal = 18.dp),
-        contentAlignment = alignment
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(background)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
-        if (icon != null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (alignment == Alignment.CenterStart) {
-                    Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(label, color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                } else {
-                    Text(label, color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.width(6.dp))
-                    Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(18.dp))
-                }
-            }
-        }
+        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(16.dp))
     }
 }
-
-/** Helper kecil pengganti Tuple 4-elemen (Kotlin stdlib hanya sediakan Pair/Triple). */
-private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
-
-/** Tombol aksi bundar kompak (26dp) — pengganti IconButton standar (48dp) agar hemat ruang. */
-// @Composable
-// private fun CompactIconAction(
-//    icon: ImageVector,
-//    contentDescription: String,
-//    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
-//    background: Color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-//    onClick: () -> Unit
-// ) {
-//    Box(
-//        modifier = Modifier
-//            .size(26.dp)
-//            .clip(CircleShape)
-//            .background(background)
-//            .clickable(onClick = onClick),
-//        contentAlignment = Alignment.Center
-//    ) {
-//        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(14.dp))
-//    }
-// }
 
 /** Lencana stok — ukuran dipangkas agar sebaris dengan harga tanpa memakan tinggi tambahan. */
 @Composable
@@ -558,7 +487,8 @@ private fun ProductFormDialog(
     state: ProductFormState,
     onSave: (ProductFormState) -> Unit,
     onDismiss: () -> Unit,
-    checkBarcodeConflict: suspend (String, Long) -> String?
+    checkBarcodeConflict: suspend (String, Long) -> String?,
+    onDeleteRequest: () -> Unit // BARU (poin 4): dipanggil saat tombol "Hapus" merah ditekan
 ) {
     var name by remember(state.id) { mutableStateOf(state.name) }
     var sku by remember(state.id) { mutableStateOf(state.sku) }
@@ -574,7 +504,7 @@ private fun ProductFormDialog(
     }
 
     var barcodeConflict by remember(state.id) { mutableStateOf<String?>(null) }
-    
+
     val context = LocalContext.current
     val hasCamera = remember {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
@@ -584,7 +514,7 @@ private fun ProductFormDialog(
     var showScanner by remember { mutableStateOf(false) }
     var pendingOpenScanner by remember { mutableStateOf(false) }
     var showPermissionDeniedDialog by remember { mutableStateOf(false) }
-    
+
     // State untuk Dialog Ditolak Permanen
     var showPermanentlyDeniedDialog by remember { mutableStateOf(false) }
 
@@ -637,7 +567,7 @@ private fun ProductFormDialog(
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
-                
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = sku,
@@ -648,7 +578,7 @@ private fun ProductFormDialog(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f)
                     )
-                    
+
                     OutlinedTextField(
                         value = barcode,
                         onValueChange = { barcode = it },
@@ -688,7 +618,7 @@ private fun ProductFormDialog(
                         }
                     )
                 }
-                
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MoneyNumberField(price, { price = it }, "Harga Jual", Modifier.weight(1f))
                     MoneyNumberField(cost, { cost = it }, "Modal", Modifier.weight(1f))
@@ -709,26 +639,46 @@ private fun ProductFormDialog(
                 Spacer(Modifier.height(2.dp))
             }
         },
-        confirmButton = {
-            Button(
-                enabled = barcodeConflict == null,
-                onClick = {
-                    onSave(
-                        ProductFormState(
-                            id = state.id,
-                            name = name,
-                            sku = sku,
-                            barcode = barcode.trim(),
-                            price = price.toLongOrNull() ?: 0L,
-                            cost = cost.toLongOrNull() ?: 0L,
-                            stock = stock.toIntOrNull() ?: 0,
-                            createdAt = state.createdAt
-                        )
+        // BARU (poin 4): tombol "Hapus" merah — HANYA tampil saat mode edit (bukan tambah baru).
+        // Ditaruh di slot dismissButton (sisi kiri baris tombol M3 AlertDialog).
+        dismissButton = if (!state.isNew) {
+            {
+                Button(
+                    onClick = onDeleteRequest,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
                     )
+                ) {
+                    Text("Hapus", color = MaterialTheme.colorScheme.onError)
                 }
-            ) { Text("Simpan") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
+            }
+        } else null,
+        // Batal + Simpan digabung di slot confirmButton (sisi kanan), supaya tombol Hapus
+        // tetap terpisah jelas di kiri — meminimalkan risiko salah tekan (fat-finger) antara
+        // aksi destruktif (Hapus) dan aksi aman (Batal/Simpan).
+        confirmButton = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onDismiss) { Text("Batal") }
+                Spacer(Modifier.width(4.dp))
+                Button(
+                    enabled = barcodeConflict == null,
+                    onClick = {
+                        onSave(
+                            ProductFormState(
+                                id = state.id,
+                                name = name,
+                                sku = sku,
+                                barcode = barcode.trim(),
+                                price = price.toLongOrNull() ?: 0L,
+                                cost = cost.toLongOrNull() ?: 0L,
+                                stock = stock.toIntOrNull() ?: 0,
+                                createdAt = state.createdAt
+                            )
+                        )
+                    }
+                ) { Text("Simpan") }
+            }
+        }
     )
 
     if (showPermissionDeniedDialog) {

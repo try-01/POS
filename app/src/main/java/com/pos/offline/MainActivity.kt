@@ -1,84 +1,71 @@
 package com.pos.offline
 
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.foundation.layout.navigationBars
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
-import androidx.activity.viewModels
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.compose.BackHandler
+import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Assessment
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Inventory2
+import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pos.offline.data.di.ServiceLocator
@@ -102,14 +89,10 @@ private enum class Dest(val label: String) {
 }
 
 class MainActivity : ComponentActivity() {
-
     // Ambil instance PosViewModel yang SAMA PERSIS dengan yang dipakai di Compose AppRoot()
     private val posViewModel: PosViewModel by viewModels {
         ServiceLocator.posViewModelFactory()
     }
-
-    // Inisialisasi interceptor menggunakan trailing lambda.
-    // Parameter maxCharGapMs, minLength, dan maxLength akan menggunakan default value dari class Anda.
     private val scannerInterceptor = HardwareScannerInterceptor { barcode ->
         posViewModel.onBarcodeScanned(barcode)
     }
@@ -143,31 +126,31 @@ private fun AppRoot() {
         viewModel(factory = ServiceLocator.printerViewModelFactory())
     val storeProfileViewModel: StoreProfileViewModel =
         viewModel(factory = ServiceLocator.storeProfileViewModelFactory())
+
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var dest by rememberSaveable { mutableStateOf(Dest.POS) }
+
+    // ---- Pager: pengganti BottomNavBar/SideNavRail lama ----
+    val pagerState = rememberPagerState(initialPage = 0) { Dest.entries.size }
+    val currentDest = Dest.entries[pagerState.currentPage]
+
+    fun goTo(dest: Dest) {
+        scope.launch { pagerState.animateScrollToPage(dest.ordinal) }
+    }
 
     // Memantau status shift aktif secara dinamis dari DB
     val openShift by posViewModel.openShift.collectAsStateWithLifecycle()
-
-    // State Dialog Exit tersentralisasi di Root Level
     var showExitDialog by rememberSaveable { mutableStateOf(false) }
 
-    // Intercept Back HP 1: Jika tidak berada di halaman Kasir, kembalikan ke Kasir
-    BackHandler(enabled = dest != Dest.POS) {
-        dest = Dest.POS
-    }
+    // Intercept Back 1: kalau tidak di Kasir, kembalikan ke Kasir dulu
+    BackHandler(enabled = currentDest != Dest.POS) { goTo(Dest.POS) }
+    // Intercept Back 2: kalau sudah di Kasir & dialog belum muncul, tampilkan dialog keluar
+    BackHandler(enabled = currentDest == Dest.POS && !showExitDialog) { showExitDialog = true }
 
-    // Intercept Back HP 2: Jika sudah di Kasir dan dialog belum muncul, tampilkan dialog
-    BackHandler(enabled = dest == Dest.POS && !showExitDialog) {
-        showExitDialog = true
-    }
-
-    // Dialog Konfirmasi Keluar Tersentralisasi (Root Level)
+    // ---- Dialog konfirmasi keluar (logika identik dengan versi lama) ----
     if (showExitDialog) {
         val shift = openShift
         if (shift != null) {
-            // Skenario A: Masih ada shift aktif (Warning Keras)
             AlertDialog(
                 onDismissRequest = { showExitDialog = false },
                 icon = {
@@ -178,13 +161,7 @@ private fun AppRoot() {
                         modifier = Modifier.size(28.dp)
                     )
                 },
-                title = {
-                    Text(
-                        "Ada Shift Kasir Aktif!",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
+                title = { Text("Ada Shift Kasir Aktif!", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
@@ -203,12 +180,7 @@ private fun AppRoot() {
                     }
                 },
                 confirmButton = {
-                    Button(
-                        onClick = {
-                            showExitDialog = false
-                            dest = Dest.POS
-                        }
-                    ) {
+                    Button(onClick = { showExitDialog = false; goTo(Dest.POS) }) {
                         Text("Tutup Shift Dulu", fontSize = 13.sp)
                     }
                 },
@@ -222,31 +194,18 @@ private fun AppRoot() {
                                 showExitDialog = false
                                 (context as? android.app.Activity)?.finishAndRemoveTask()
                             },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error
-                            )
-                        ) {
-                            Text("Tetap Keluar", fontSize = 13.sp)
-                        }
-                        OutlinedButton(
-                            onClick = { showExitDialog = false }
-                        ) {
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) { Text("Tetap Keluar", fontSize = 13.sp) }
+                        OutlinedButton(onClick = { showExitDialog = false }) {
                             Text("Batal", fontSize = 13.sp)
                         }
                     }
                 }
             )
         } else {
-            // Skenario B: Tidak ada shift aktif (Konfirmasi Bersih)
             AlertDialog(
                 onDismissRequest = { showExitDialog = false },
-                title = {
-                    Text(
-                        "Keluar Aplikasi?",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
+                title = { Text("Keluar Aplikasi?", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
                 text = {
                     Text(
                         "Semua data transaksi dan laci kas Anda telah tersimpan dengan aman di database lokal. " +
@@ -260,17 +219,11 @@ private fun AppRoot() {
                             showExitDialog = false
                             (context as? android.app.Activity)?.finishAndRemoveTask()
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Text("Keluar", fontSize = 13.sp)
-                    }
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) { Text("Keluar", fontSize = 13.sp) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showExitDialog = false }) {
-                        Text("Batal", fontSize = 13.sp)
-                    }
+                    TextButton(onClick = { showExitDialog = false }) { Text("Batal", fontSize = 13.sp) }
                 }
             )
         }
@@ -280,282 +233,181 @@ private fun AppRoot() {
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    // Hoist state cartExpanded ke Root agar BottomNavBar bisa merespons
     var isCartExpanded by remember { mutableStateOf(false) }
-    LaunchedEffect(dest) {
-        if (dest != Dest.POS) isCartExpanded = false
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pagerState.currentPage) {
+        if (currentDest != Dest.POS) isCartExpanded = false
+        menuExpanded = false // pindah halaman (swipe/tap menu) otomatis menutup expand FAB
     }
 
-    val hideBottomNav = !isLandscape && dest == Dest.POS && isCartExpanded
+    // FAB disembunyikan saat keyboard tampil, atau saat cart POS di-expand penuh (khusus portrait,
+    // sama seperti perilaku hideBottomNav pada kode lama).
+    val hideFab = imeVisible || (!isLandscape && currentDest == Dest.POS && isCartExpanded)
 
-    if (isLandscape) {
-        Row(
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        // ---- Konten utama: full edge-to-edge. Tiap layar mengatur inset-nya sendiri
+        //      (statusBarsPadding di header/top, navigationBars + clearance FAB di bawah). ----
+        HorizontalPager(
+            state = pagerState,
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .systemBarsPadding()
-        ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .imePadding()
-            ) {
-                ScreenContent(
-                    dest = dest,
-                    posViewModel = posViewModel,
-                    inventoryViewModel = inventoryViewModel,
-                    reportViewModel = reportViewModel,
-                    settingsViewModel = settingsViewModel,
+                .imePadding(),
+            userScrollEnabled = !menuExpanded && !isCartExpanded && !imeVisible
+        ) { page ->
+            val dest = Dest.entries[page]
+            when (dest) {
+                Dest.POS -> PosScreen(
+                    viewModel = posViewModel,
+                    forceWideLayout = isLandscape,
+                    onNavigateToSettings = { goTo(Dest.SETTINGS) },
+                    onSharePdfFile = { file ->
+                        context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
+                    },
+                    onExportPdf = { result ->
+                        val file = ReceiptManager.exportToPdf(context, result)
+                        Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
+                    },
+                    // Konsep "expand cart" hanya relevan di portrait (layout bottom-sheet).
+                    // Di landscape, cart selalu tampil sebagai panel samping → dikunci false.
+                    isCartExpanded = if (isLandscape) false else isCartExpanded,
+                    onCartExpandedChange = if (isLandscape) ({}) else ({ v: Boolean -> isCartExpanded = v })
+                )
+                Dest.INVENTORY -> InventoryScreen(viewModel = inventoryViewModel)
+                Dest.REPORT -> ReportScreen(
+                    viewModel = reportViewModel,
+                    onNavigateToSettings = { goTo(Dest.SETTINGS) },
+                    onSharePdfFile = { file ->
+                        context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
+                    },
+                    onExportPdf = { result ->
+                        val file = ReceiptManager.exportToPdf(context, result)
+                        Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
+                    },
+                    onShare = { result ->
+                        context.startActivity(ReceiptManager.buildShareIntent(context, result))
+                    }
+                )
+                Dest.SETTINGS -> SettingsScreen(
+                    viewModel = settingsViewModel,
                     printerViewModel = printerViewModel,
                     storeProfileViewModel = storeProfileViewModel,
-                    context = context,
-                    scope = scope,
-                    onNavigateToSettings = { dest = Dest.SETTINGS },
-                    onRequestExit = { showExitDialog = true },
-                    isLandscape = true,
-                    isCartExpanded = false,
-                    onCartExpandedChange = {}
+                    onExitClick = { showExitDialog = true }
                 )
             }
-            SideNavRail(selected = dest, onSelect = { dest = it })
         }
-    } else {
-        // Hitung tinggi fisik sistem navigation bar (gesture bar)
-        val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-        
-        // BottomNavBar kita fix di tinggi 80.dp. Saat visible, konten butuh padding 80.dp + navBarInset.
-        // Saat keyboard/cart expand, padding 0.dp (hanya imePadding yang aktif).
-        val contentBottomPadding by animateDpAsState(
-            targetValue = if (imeVisible || hideBottomNav) 0.dp else (80.dp + navBarInset),
-            animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
-            label = "contentBottomPadding"
-        )
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+        // ---- Scrim: tap di luar FAB untuk menutup menu ----
+        AnimatedVisibility(
+            visible = menuExpanded,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Layer 1: Konten Utama
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = contentBottomPadding) // Berakhir tepat di atas BottomNav
-                    .imePadding()
-            ) {
-                ScreenContent(
-                    dest = dest,
-                    posViewModel = posViewModel,
-                    inventoryViewModel = inventoryViewModel,
-                    reportViewModel = reportViewModel,
-                    settingsViewModel = settingsViewModel,
-                    printerViewModel = printerViewModel,
-                    storeProfileViewModel = storeProfileViewModel,
-                    context = context,
-                    scope = scope,
-                    onNavigateToSettings = { dest = Dest.SETTINGS },
-                    onRequestExit = { showExitDialog = true },
-                    isLandscape = false,
-                    isCartExpanded = isCartExpanded,
-                    onCartExpandedChange = { isCartExpanded = it }
-                )
-            }
+                    .background(Color.Black.copy(alpha = 0.35f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { menuExpanded = false }
+            )
+        }
 
-            AnimatedVisibility(
-                visible = !imeVisible && !hideBottomNav,
-                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-                modifier = Modifier.align(Alignment.BottomCenter)
-            ) {
-                BottomNavBar(selected = dest, onSelect = { dest = it })
-            }
-        } // Penutup Box (Layer 1)
-    } // Penutup else (Mode Portrait)
-} // Penutup fungsi AppRoot()
-
-@Composable
-private fun ScreenContent(
-    dest: Dest,
-    posViewModel: PosViewModel,
-    inventoryViewModel: InventoryViewModel,
-    reportViewModel: ReportViewModel,
-    settingsViewModel: SettingsViewModel,
-    printerViewModel: PrinterViewModel,
-    storeProfileViewModel: StoreProfileViewModel,
-    context: android.content.Context,
-    scope: kotlinx.coroutines.CoroutineScope,
-    onNavigateToSettings: () -> Unit,
-    onRequestExit: () -> Unit,
-    isLandscape: Boolean,
-    isCartExpanded: Boolean, // TAMBAHKAN
-    onCartExpandedChange: (Boolean) -> Unit // TAMBAHKAN
-) {
-    when (dest) {
-        Dest.POS -> PosScreen(
-            viewModel = posViewModel,
-            forceWideLayout = isLandscape,
-            onNavigateToSettings = onNavigateToSettings,
-            onSharePdfFile = { file ->
-                context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
-            },
-            onExportPdf = { result ->
-                val file = ReceiptManager.exportToPdf(context, result)
-                Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
-            },
-            isCartExpanded = isCartExpanded, // TAMBAHKAN
-            onCartExpandedChange = onCartExpandedChange // TAMBAHKAN
-        )
-        Dest.INVENTORY -> InventoryScreen(viewModel = inventoryViewModel)
-        Dest.REPORT -> ReportScreen(
-            viewModel = reportViewModel,
-            onNavigateToSettings = onNavigateToSettings,
-            onSharePdfFile = { file ->
-                context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
-            },
-            onExportPdf = { result ->
-                val file = ReceiptManager.exportToPdf(context, result)
-                Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
-            },
-            onShare = { result ->
-                val intent = ReceiptManager.buildShareIntent(context, result)
-                context.startActivity(intent)
-            }
-        )
-        Dest.SETTINGS -> SettingsScreen(
-            viewModel = settingsViewModel,
-            printerViewModel = printerViewModel,
-            storeProfileViewModel = storeProfileViewModel,
-            onExitClick = onRequestExit
-        )
+        // ---- Tombol menu mengambang, pojok kiri bawah, tepat di atas nav bar sistem ----
+        AnimatedVisibility(
+            visible = !hideFab,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 16.dp, bottom = 16.dp)
+                .navigationBarsPadding()
+        ) {
+            ExpandableMenuFab(
+                expanded = menuExpanded,
+                onToggle = { menuExpanded = !menuExpanded },
+                selected = currentDest,
+                onSelect = { dest -> goTo(dest); menuExpanded = false }
+            )
+        }
     }
 }
 
+/**
+ * Tombol menu mengambang yang bisa di-expand ke atas.
+ * Ditempatkan dengan Alignment.BottomStart di pemanggil → saat AnimatedVisibility
+ * menambah tinggi Column (menu terbuka), sisi BAWAH tetap diam (anchor di nav bar),
+ * sisi ATAS yang tumbuh — sehingga terasa seperti "expand ke atas".
+ */
 @Composable
-private fun BottomNavBar(selected: Dest, onSelect: (Dest) -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(80.dp) // TINGGI FIX AGAR TIDAK ADA CELAH DENGAN KONTEN ATASNYA
-            .navigationBarsPadding(), // Menempel tepat di atas gesture bar sistem
-        contentAlignment = Alignment.Center
+private fun ExpandableMenuFab(
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    selected: Dest,
+    onSelect: (Dest) -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .shadow(8.dp, RoundedCornerShape(28.dp))
-                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(28.dp))
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom),
+            exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom)
         ) {
-            Dest.entries.forEach { item ->
-                val isSelected = selected == item
-                val interactionSource = remember { MutableInteractionSource() }
-                val isPressed by interactionSource.collectIsPressedAsState()
-                
-                val scale by animateFloatAsState(
-                    targetValue = if (isPressed) 0.9f else 1f,
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-                    label = "scale"
-                )
-
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                        .clickable(
-                            interactionSource = interactionSource,
-                            indication = null
-                        ) { onSelect(item) }
-                        .scale(scale)
-                        .padding(horizontal = if (isSelected) 16.dp else 12.dp, vertical = 8.dp)
-                        .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = item.icon(),
-                        contentDescription = item.label,
-                        tint = if (isSelected) MaterialTheme.colorScheme.primary
-                               else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(22.dp)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Dest.entries.forEach { item ->
+                    MiniMenuItem(
+                        dest = item,
+                        isSelected = item == selected,
+                        onClick = { onSelect(item) }
                     )
-                    AnimatedVisibility(visible = isSelected) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = item.label,
-                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
                 }
+            }
+        }
+        // Tombol utama (toggle buka/tutup)
+        Surface(
+            modifier = Modifier.size(52.dp).shadow(6.dp, CircleShape),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primary,
+            onClick = onToggle
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = if (expanded) Icons.Rounded.Close else Icons.Rounded.Menu,
+                    contentDescription = if (expanded) "Tutup menu" else "Buka menu",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
     }
 }
 
 @Composable
-private fun SideNavRail(selected: Dest, onSelect: (Dest) -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxHeight()
-            .width(72.dp) // TAMBAHKAN INI: Lebar tetap agar tidak ada celah kosong di kanan-kirinya
-            .padding(vertical = 24.dp),
-        contentAlignment = Alignment.Center
+private fun MiniMenuItem(dest: Dest, isSelected: Boolean, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.size(44.dp).shadow(4.dp, CircleShape),
+        shape = CircleShape,
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        onClick = onClick
     ) {
-        Column(
-            modifier = Modifier
-                .shadow(8.dp, RoundedCornerShape(28.dp))
-                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(28.dp))
-                .padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Dest.entries.forEach { item ->
-                val isSelected = selected == item
-                val interactionSource = remember { MutableInteractionSource() }
-                val isPressed by interactionSource.collectIsPressedAsState()
-                
-                val scale by animateFloatAsState(
-                    targetValue = if (isPressed) 0.9f else 1f,
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-                    label = "scale"
-                )
-
-                Column(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                        .clickable(
-                            interactionSource = interactionSource,
-                            indication = null
-                        ) { onSelect(item) }
-                        .scale(scale)
-                        .padding(vertical = 12.dp, horizontal = 8.dp)
-                        .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        imageVector = item.icon(),
-                        contentDescription = item.label,
-                        tint = if (isSelected) MaterialTheme.colorScheme.primary
-                               else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = item.label,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color = if (isSelected) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        maxLines = 1
-                    )
-                }
-            }
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = dest.icon(),
+                contentDescription = dest.label,
+                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }

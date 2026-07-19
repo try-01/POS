@@ -583,6 +583,7 @@ private fun ProductFormDialog(
     val (permState, requestPermission) = rememberCameraPermissionState()
     var showScanner by remember { mutableStateOf(false) }
     var pendingOpenScanner by remember { mutableStateOf(false) }
+    var showPermissionDeniedDialog by remember { mutableStateOf(false) }
     
     // State untuk Dialog Ditolak Permanen
     var showPermanentlyDeniedDialog by remember { mutableStateOf(false) }
@@ -717,7 +718,7 @@ private fun ProductFormDialog(
                             id = state.id,
                             name = name,
                             sku = sku,
-                            barcode = barcode.trim().ifBlank { null },
+                            barcode = barcode.trim(),
                             price = price.toLongOrNull() ?: 0L,
                             cost = cost.toLongOrNull() ?: 0L,
                             stock = stock.toIntOrNull() ?: 0,

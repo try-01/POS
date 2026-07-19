@@ -23,6 +23,7 @@ data class ProductFormState(
     val id: Long = 0L,
     val name: String = "",
     val sku: String = "",
+    val barcode: String = "",
     val price: Long = 0L,
     val cost: Long = 0L,
     val stock: Int = 0,

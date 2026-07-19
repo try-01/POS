@@ -93,6 +93,7 @@ class InventoryViewModel(
             id = product.id,
             name = product.name,
             sku = product.sku,
+            barcode = product.barcode ?: "", // FIX: sebelumnya barcode tidak disalin, selalu tampil kosong saat edit
             price = product.price,
             cost = product.cost,
             stock = product.stock,
@@ -109,12 +110,16 @@ class InventoryViewModel(
         if (state.stock < 0) { notify("Stok tidak boleh negatif."); return@launch }
 
         val sku = state.sku.trim().ifBlank { "SKU-${System.currentTimeMillis()}" }
+        // FIX: barcode kosong disimpan sebagai null (bukan ""), karena kolom `barcode`
+        // punya unique index — dua produk dengan barcode "" akan bentrok index unik.
+        val barcode = state.barcode.trim().ifBlank { null }
         val now = System.currentTimeMillis()
 
         val entity = ProductEntity(
             id = state.id,
             name = name,
             sku = sku,
+            barcode = barcode, // FIX: sebelumnya field ini tidak disertakan sama sekali → barcode tidak pernah tersimpan
             price = state.price,
             cost = state.cost,
             stock = state.stock,
@@ -128,7 +133,9 @@ class InventoryViewModel(
             notify(if (state.isNew) "Produk ditambahkan." else "Produk diperbarui.")
             _form.value = null
         } catch (e: SQLiteConstraintException) {
-            notify("SKU \"$sku\" sudah dipakai produk lain.")
+            // FIX: pesan generik sebelumnya menyebut "SKU" walau constraint yang gagal
+            // bisa saja dari barcode (keduanya unique). Dibuat lebih netral.
+            notify("Gagal menyimpan: SKU atau Barcode sudah dipakai produk lain.")
         } catch (e: Exception) {
             notify("Gagal menyimpan: ${e.message ?: "kesalahan tak dikenal"}.")
         }
@@ -147,6 +154,17 @@ class InventoryViewModel(
         } finally {
             _pendingDelete.value = null
         }
+    }
+
+     /** Dipanggil dari tombol "Hapus" di dalam form edit produk (poin redesign #4).
+     *  Menutup form terlebih dahulu, lalu memicu dialog konfirmasi hapus yang SAMA
+     *  dengan yang dipicu [requestDelete] biasa — sehingga tetap ada satu langkah
+     *  konfirmasi eksplisit sebelum data benar-benar terhapus (tidak ada jalan pintas
+     *  yang melewati AlertDialog "Hapus Produk?"). */
+    fun requestDeleteFromForm(id: Long) {
+        val target = products.value.find { it.id == id } ?: return
+        _form.value = null
+        _pendingDelete.value = target
     }
 
     private fun notify(text: String) {

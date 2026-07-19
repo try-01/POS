@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.ime
@@ -285,7 +287,11 @@ fun PosScreen(
                 }
             }
         },
-        contentWindowInsets = WindowInsets.statusBars
+        // FIX: sebelumnya hanya statusBars → navigation bar sistem tidak pernah
+        // diperhitungkan. Sekarang MainActivity full edge-to-edge (tanpa BottomNavBar/
+        // SideNavRail lama yang dulu "gratis" menyediakan ruang ini), jadi PosScreen
+        // wajib menjaga sendiri clearance dari navigation bar di sisi manapun ia berada.
+        contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars)
     ) { inner ->
         BoxWithConstraints(
             modifier = Modifier
@@ -869,7 +875,11 @@ private fun ProductPane(
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 104.dp),
         modifier = modifier.padding(horizontal = 12.dp),
-        contentPadding = PaddingValues(bottom = 16.dp),
+        // FIX: 16dp → 96dp. Memberi clearance dari tombol menu mengambang (FAB) baru
+        // di pojok kiri-bawah MainActivity, yang selalu menimpa pojok ini baik di
+        // portrait (di atas CartPane yang collapsed) maupun landscape (ProductPane
+        // ada di kiri layar, tepat di belakang FAB).
+        contentPadding = PaddingValues(bottom = 96.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
@@ -1180,7 +1190,12 @@ private fun CartPane(
             } else {
                 Spacer(Modifier.height(4.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // FIX: clearance dari tombol menu mengambang (FAB) pojok kiri-bawah.
+                        // Cabang ini HANYA dieksekusi saat portrait & cart di-collapse —
+                        // saat itulah FAB tampil tepat menimpa area ini kalau tanpa padding.
+                        .padding(start = 84.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {

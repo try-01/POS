@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -149,9 +151,14 @@ fun SettingsScreen(
                 }
             )
         },
-        // Nonaktifkan padding sistem bawah, cukup ambil padding status bar atas.
-        // Padding bawah sudah dihandle oleh sistem overlay di MainActivity.
-        contentWindowInsets = WindowInsets.statusBars
+        // FIX: sebelumnya WindowInsets.statusBars saja, dengan komentar usang yang
+        // menyebut "padding bawah sudah dihandle sistem overlay di MainActivity" —
+        // itu TIDAK LAGI BENAR setelah redesign. MainActivity sekarang full
+        // edge-to-edge tanpa ruang 80dp tetap dari BottomNavBar/SideNavRail lama,
+        // jadi SettingsScreen wajib menjaga sendiri clearance dari navigation bar
+        // sistem — penting karena tombol "Keluar Aplikasi" (aksi sensitif) ada
+        // di baris paling bawah layar ini.
+        contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars)
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -395,8 +402,11 @@ fun SettingsScreen(
                     }
                 }
             }
-
-            Spacer(Modifier.height(8.dp))
+            // FIX: 8dp → 96dp. Memberi clearance dari tombol menu mengambang (FAB)
+            // baru di pojok kiri-bawah MainActivity, supaya tombol "Keluar Aplikasi"
+            // (aksi sensitif, item paling bawah layar) tidak pernah tertimpa FAB
+            // ataupun gesture bar sistem.
+            Spacer(Modifier.height(96.dp))
         }
     }
 }

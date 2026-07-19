@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -25,6 +27,7 @@ import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Storefront
+import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -64,7 +67,8 @@ import com.pos.offline.ui.components.GlassCard
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     printerViewModel: PrinterViewModel,
-    storeProfileViewModel: StoreProfileViewModel
+    storeProfileViewModel: StoreProfileViewModel,
+    onExitClick: () -> Unit
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
@@ -144,16 +148,20 @@ fun SettingsScreen(
                     )
                 }
             )
-        }
+        },
+        // Nonaktifkan padding sistem bawah, cukup ambil padding status bar atas.
+        // Padding bawah sudah dihandle oleh sistem overlay di MainActivity.
+        contentWindowInsets = WindowInsets.statusBars
     ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(horizontal = 12.dp) // Hapus vertical 8.dp
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            Spacer(Modifier.height(8.dp)) // Tambahkan spacer di atas saja
             SectionLabel("Cadangkan & Pulihkan")
 
             GlassCard(
@@ -353,6 +361,37 @@ fun SettingsScreen(
                         Icon(Icons.Rounded.Print, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Kelola Printer", fontSize = 13.sp)
+                    }
+                }
+            }
+
+            // ---- Sesi Aplikasi Terkini (BATCH H8) ----
+            SectionLabel("Sesi Aplikasi")
+
+            GlassCard(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(14.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Keluar dari aplikasi kasir dengan aman. Semua data penjualan Anda tetap tersimpan utuh di memori lokal perangkat.",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(
+                        onClick = onExitClick,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.Logout,
+                            contentDescription = "Keluar Aplikasi",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Keluar Aplikasi", fontSize = 13.sp)
                     }
                 }
             }
