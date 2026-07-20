@@ -306,16 +306,16 @@ fun PosScreen(
                     )
                 }
             } else {
-                Column(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize()) { // <--- FIX: Ubah Column menjadi Box agar bertumpuk
                     ProductPane(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        modifier = Modifier.fillMaxSize(), // <--- FIX: Katalog produk memenuhi layar
                         products = products,
                         cartQtyByProductId = cartQtyByProductId,
                         onAdd = viewModel::addToCart
                     )
-                    Spacer(Modifier.height(8.dp))
                     CartPane(
                         modifier = Modifier
+                            .align(Alignment.BottomCenter) // <--- FIX: Keranjang diposisikan melayang di bawah
                             .fillMaxWidth()
                             .wrapContentHeight()
                             .let { base ->
@@ -937,7 +937,9 @@ private fun CartPane(
     Box(
         modifier = modifier
             .padding(start = 12.dp, end = 12.dp, top = 1.dp, bottom = 1.dp)
+            .background(MaterialTheme.colorScheme.background, RoundedCornerShape(16.dp)) // <--- FIX: Background solid agar menutupi produk di belakangnya
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp)) // <--- FIX: Memastikan sudut tetap melengkung rapi
     ) {
         Column(
             modifier = Modifier
