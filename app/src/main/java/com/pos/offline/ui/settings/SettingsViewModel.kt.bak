@@ -32,6 +32,7 @@ data class SettingsUiState(
 }
 
 class SettingsViewModel(
+    private val appContext: Context,
     private val cashierRepository: CashierRepository,
     private val shiftRepository: ShiftRepository
 ) : ViewModel() {
@@ -48,9 +49,8 @@ class SettingsViewModel(
     val cashiers: StateFlow<List<CashierEntity>> = cashierRepository.allCashiers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    fun exportDatabase(context: Context, destinationUri: Uri) {
+    fun exportDatabase(destinationUri: Uri) {
         if (_uiState.value.isBusy) return
-        val appContext = context.applicationContext
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isExporting = true)
             try {
@@ -64,9 +64,8 @@ class SettingsViewModel(
         }
     }
 
-    fun shareDatabase(context: Context) {
+    fun shareDatabase() {
         if (_uiState.value.isBusy) return
-        val appContext = context.applicationContext
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSharing = true)
             try {
@@ -90,9 +89,8 @@ class SettingsViewModel(
         _uiState.value = _uiState.value.copy(pendingRestoreUri = null)
     }
 
-    fun confirmRestore(context: Context, onRestartRequired: () -> Unit) {
+    fun confirmRestore(onRestartRequired: () -> Unit) {
         val uri = _uiState.value.pendingRestoreUri ?: return
-        val appContext = context.applicationContext
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isImporting = true, pendingRestoreUri = null)
             try {

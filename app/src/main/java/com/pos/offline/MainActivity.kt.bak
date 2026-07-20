@@ -261,7 +261,7 @@ private fun AppRoot() {
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer { alpha = pageAlpha.value }, 
-            userScrollEnabled = !menuExpanded && !isCartExpanded && !imeVisible && !isJumping
+            userScrollEnabled = !menuExpanded && !imeVisible && !isJumping
         ) { page ->
             val dest = Dest.entries[page]
             when (dest) {

@@ -346,7 +346,6 @@ class PosViewModel(
             )
             _discountType.value = DiscountType.NOMINAL
             _discountValue.value = 0.0
-            _taxRate.value = 0.0 // Reset tax rate agar tidak terbawa transaksi berikutnya
             _paid.value = 0L
             _paymentMethod.value = PaymentMethod.CASH
             CheckoutState.Success(result)

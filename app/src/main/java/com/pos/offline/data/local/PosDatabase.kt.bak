@@ -96,8 +96,8 @@ abstract class PosDatabase : RoomDatabase() {
                 samples.forEach { s ->
                     db.execSQL(
                         "INSERT INTO products " +
-                            "(name, sku, barcode, category, price, cost, stock, active, createdAt, updatedAt) " +
-                            "VALUES (?, ?, NULL, '', ?, ?, ?, 1, ?, ?)",
+                            "(name, sku, price, cost, stock, active, createdAt, updatedAt) " +
+                            "VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
                         arrayOf<Any>(s.name, s.sku, s.price, s.cost, 25, now, now)
                     )
                 }

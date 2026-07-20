@@ -133,6 +133,9 @@ private fun AppRoot() {
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = 0) { Dest.entries.size }
     val currentDest = Dest.entries[pagerState.currentPage]
+
+    // Ambil profil toko terkini untuk diteruskan ke ReceiptManager saat ekspor PDF/Gambar
+    val storeProfile by storeProfileViewModel.profile.collectAsStateWithLifecycle()
     
     val pageAlpha = remember { Animatable(1f) }
     var isJumping by remember { mutableStateOf(false) }
@@ -273,8 +276,11 @@ private fun AppRoot() {
                         context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
                     },
                     onExportPdf = { result ->
-                        val file = ReceiptManager.exportToPdf(context, result)
-                        Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
+                        // Pindahkan ke background thread mencegah ANR
+                        scope.launch {
+                            val file = ReceiptManager.exportToPdf(context, result, storeProfile)
+                            Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
+                        }
                     },
                     isCartExpanded = if (isLandscape) false else isCartExpanded,
                     onCartExpandedChange = if (isLandscape) ({}) else ({ v: Boolean -> isCartExpanded = v })
@@ -287,8 +293,11 @@ private fun AppRoot() {
                         context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
                     },
                     onExportPdf = { result ->
-                        val file = ReceiptManager.exportToPdf(context, result)
-                        Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
+                        // Pindahkan ke background thread mencegah ANR
+                        scope.launch {
+                            val file = ReceiptManager.exportToPdf(context, result, storeProfile)
+                            Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
+                        }
                     },
                     onShare = { result ->
                         context.startActivity(ReceiptManager.buildShareIntent(context, result))
@@ -327,9 +336,7 @@ private fun AppRoot() {
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = 16.dp, bottom = 8.dp)
-                // BEST PRACTICE 2: Tambahkan imePadding agar FAB naik saat keyboard muncul
                 .navigationBarsPadding()
-                .imePadding() 
         ) {
             ExpandableMenuFab(
                 expanded = menuExpanded,

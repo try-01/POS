@@ -11,6 +11,8 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
+import com.pos.offline.data.repository.CheckoutResult
+import com.pos.offline.ui.components.discountRowLabel
 import com.pos.offline.util.toRupiah
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,10 +23,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.pos.offline.data.local.entity.StoreProfileEntity
-import com.pos.offline.data.repository.CheckoutResult
-import com.pos.offline.ui.components.discountRowLabel
-
+import java.util.UUID
 enum class ReceiptAlign { LEFT, CENTER, RIGHT }
 data class ReceiptLine(
     val left: String = "",
@@ -35,20 +34,12 @@ data class ReceiptLine(
 )
 object ReceiptManager {
 
-    private const val DEFAULT_STORE_NAME = "TOKO KASIR OFFLINE"
+    private const val STORE_NAME = "TOKO KASIR OFFLINE"
     private val dateFmt = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("id-ID"))
-    fun buildLines(result: CheckoutResult, storeProfile: StoreProfileEntity? = null): List<ReceiptLine> {
+    fun buildLines(result: CheckoutResult): List<ReceiptLine> {
         val tx = result.transaction
         val lines = mutableListOf<ReceiptLine>()
-        
-        val storeName = storeProfile?.storeName?.ifBlank { DEFAULT_STORE_NAME } ?: DEFAULT_STORE_NAME
-        lines += ReceiptLine(left = storeName, align = ReceiptAlign.CENTER, bold = true, large = true)
-        
-        val address = storeProfile?.address
-        if (!address.isNullOrBlank()) {
-            lines += ReceiptLine(left = address, align = ReceiptAlign.CENTER)
-        }
-        
+        lines += ReceiptLine(left = STORE_NAME, align = ReceiptAlign.CENTER, bold = true, large = true)
         lines += ReceiptLine(left = dateFmt.format(Date(tx.createdAt)), align = ReceiptAlign.CENTER)
         lines += ReceiptLine(left = "No: ${tx.id}", align = ReceiptAlign.CENTER)
         if (tx.cashierName.isNotBlank()) {
@@ -69,11 +60,6 @@ object ReceiptManager {
         lines += ReceiptLine(left = "Bayar", right = tx.paidAmount.toRupiah())
         lines += ReceiptLine(left = "Kembali", right = tx.change.toRupiah())
         lines += divider()
-        
-        val footerNote = storeProfile?.footerNote
-        if (!footerNote.isNullOrBlank()) {
-            lines += ReceiptLine(left = footerNote, align = ReceiptAlign.CENTER)
-        }
         lines += ReceiptLine(left = "Terima kasih", align = ReceiptAlign.CENTER)
         lines += ReceiptLine(left = "Struk elektronik", align = ReceiptAlign.CENTER)
         return lines
@@ -107,37 +93,33 @@ object ReceiptManager {
         val pad = (width - right.length - l.length).coerceAtLeast(0)
         return l + " ".repeat(pad) + right
     }
-    suspend fun exportToPdf(context: Context, result: CheckoutResult, storeProfile: StoreProfileEntity? = null): File = withContext(Dispatchers.IO) {
-        val lines = buildLines(result, storeProfile)
+    fun exportToPdf(context: Context, result: CheckoutResult): File {
+        val lines = buildLines(result)
         val pageWidth = 240               // ~3,3 inci (lebar struk)
         val margin = 14f
         val lineHeight = 20f
         val pageHeight = (lines.size * lineHeight + 2 * margin).toInt().coerceAtLeast(320)
 
         val document = PdfDocument()
-        try {
-            val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
-            val page = document.startPage(pageInfo)
-            val canvas = page.canvas
+        val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
+        val page = document.startPage(pageInfo)
+        val canvas = page.canvas
 
-            var y = margin + 14f
-            for (line in lines) {
-                drawLine(canvas, line, pageWidth.toFloat(), margin, y)
-                y += lineHeight
-            }
-            document.finishPage(page)
-
-            val dir = File(context.getExternalFilesDir(null) ?: context.filesDir, "receipts").apply { mkdirs() }
-            val file = File(dir, "${result.transaction.id}.pdf")
-            FileOutputStream(file).use { document.writeTo(it) }
-            return@withContext file
-        } finally {
-            // Pastikan document selalu ditutup walau terjadi error saat rendering/write
-            document.close()
+        var y = margin + 14f
+        for (line in lines) {
+            drawLine(canvas, line, pageWidth.toFloat(), margin, y)
+            y += lineHeight
         }
+        document.finishPage(page)
+
+        val dir = File(context.getExternalFilesDir(null) ?: context.filesDir, "receipts").apply { mkdirs() }
+        val file = File(dir, "${result.transaction.id}.pdf")
+        FileOutputStream(file).use { document.writeTo(it) }
+        document.close()
+        return file
     }
-    fun renderToBitmap(result: CheckoutResult, scale: Int = 3, storeProfile: StoreProfileEntity? = null): Bitmap {
-        val lines = buildLines(result, storeProfile)
+    fun renderToBitmap(result: CheckoutResult, scale: Int = 3): Bitmap {
+        val lines = buildLines(result)
         val w = 240 * scale
         val lineHeight = 22f * scale
         val margin = 16f * scale
@@ -178,8 +160,8 @@ object ReceiptManager {
             }
         }
     }
-    fun buildShareIntent(context: Context, result: CheckoutResult, storeProfile: StoreProfileEntity? = null): Intent {
-        val bitmap = renderToBitmap(result, storeProfile)
+    fun buildShareIntent(context: Context, result: CheckoutResult): Intent {
+        val bitmap = renderToBitmap(result)
         val dir = File(context.cacheDir, "shared_receipts").apply { mkdirs() }
         val file = File(dir, "${result.transaction.id}_${System.currentTimeMillis()}.png")
         FileOutputStream(file).use { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }
@@ -213,4 +195,31 @@ object ReceiptManager {
     } catch (e: SecurityException) {
         emptyList() // BLUETOOTH_CONNECT belum diberikan (Android 12+)
     }
+    suspend fun printToFirstBonded(context: Context, result: CheckoutResult): Boolean = try {
+        val device = bondedPrinters(context).firstOrNull() ?: return false
+        val data = toEscPosBytes(buildLines(result))
+        BluetoothReceiptPrinter().print(context, device, data)
+    } catch (e: SecurityException) {
+        false
+    }
+}
+class BluetoothReceiptPrinter {
+    private val sppUuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+    suspend fun print(context: Context, device: BluetoothDevice, data: ByteArray): Boolean =
+        withContext(Dispatchers.IO) {
+            val socket = device.createRfcommSocketToServiceRecord(sppUuid)
+            try {
+                socket.connect()
+                socket.outputStream.use { stream ->
+                    stream.write(data)
+                    stream.flush()
+                }
+                true
+            } catch (e: IOException) {
+                false
+            } finally {
+                runCatching { socket.close() }
+            }
+        }
 }

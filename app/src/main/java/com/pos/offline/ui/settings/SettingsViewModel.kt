@@ -25,6 +25,7 @@ data class SettingsUiState(
     val isExporting: Boolean = false,
     val isImporting: Boolean = false,
     val isSharing: Boolean = false,
+    val isAddingCashier: Boolean = false,
     val pendingRestoreUri: Uri? = null,
     val showAddCashierDialog: Boolean = false
 ) {
@@ -121,17 +122,26 @@ class SettingsViewModel(
         _uiState.value = _uiState.value.copy(showAddCashierDialog = false)
     }
 
-    fun addCashier(name: String) {
+        fun addCashier(name: String) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) {
             viewModelScope.launch { _messages.emit("Nama kasir tidak boleh kosong.") }
             return
         }
+        if (_uiState.value.isAddingCashier) return
+        
         viewModelScope.launch {
-            cashierRepository.save(CashierEntity(name = trimmed))
-            _messages.emit("Kasir \"$trimmed\" ditambahkan.")
+            _uiState.value = _uiState.value.copy(isAddingCashier = true)
+            try {
+                cashierRepository.save(CashierEntity(name = trimmed))
+                _messages.emit("Kasir \"$trimmed\" ditambahkan.")
+                _uiState.value = _uiState.value.copy(showAddCashierDialog = false)
+            } catch (e: Exception) {
+                _messages.emit("Gagal menambahkan kasir: ${e.message ?: "kesalahan tak dikenal"}")
+            } finally {
+                _uiState.value = _uiState.value.copy(isAddingCashier = false)
+            }
         }
-        _uiState.value = _uiState.value.copy(showAddCashierDialog = false)
     }
 
     fun setCashierActive(id: Long, active: Boolean) {
