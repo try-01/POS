@@ -984,10 +984,11 @@ private fun CartPane(
 
             if (showFull) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
-
+                
+                // 1. AREA LIST ITEM (Scrollable)
                 Box(
                     modifier = Modifier
-                        .weight(1f) // weight(1f) tanpa fill=false akan mengunci tinggi secara rigid
+                        .weight(1f, fill = false) // fill=false agar keranjang tidak memakan ruang kosong jika item sedikit
                         .fillMaxWidth()
                         .clipToBounds()
                 ) {
@@ -999,7 +1000,7 @@ private fun CartPane(
                             item(key = "empty_cart") {
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxSize()
+                                        .fillMaxWidth()
                                         .padding(vertical = 24.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -1041,53 +1042,9 @@ private fun CartPane(
                                     modifier = Modifier.animateItem()
                                 )
                             }
-
-                            item(key = "cart_divider") {
-                                HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                            }
-
-                            item(key = "cart_totals") {
-                                TotalsSummary(
-                                    totals = totals,
-                                    change = change,
-                                    discountType = discountType,
-                                    discountValue = discountValue,
-                                    taxRate = taxRate,
-                                    paid = paid,
-                                    paymentMethod = paymentMethod,
-                                    onDiscountTypeToggle = onDiscountTypeToggle,
-                                    onDiscountValueChange = onDiscountValueChange,
-                                    onTaxRateChange = onTaxRateChange,
-                                    onPaidChange = onPaidChange,
-                                    onPaymentMethodChange = onPaymentMethodChange
-                                )
-                            }
-
-                            item(key = "cart_checkout_button") {
-                                Spacer(Modifier.height(6.dp))
-                                Button(
-                                    onClick = ::attemptCheckout,
-                                    enabled = canCheckout,
-                                    modifier = Modifier.fillMaxWidth().height(42.dp),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    if (isProcessing) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(20.dp),
-                                            color = MaterialTheme.colorScheme.onPrimary,
-                                            strokeWidth = 2.dp
-                                        )
-                                    } else {
-                                        Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Bayar · ${totals.total.toRupiah()}")
-                                    }
-                                }
-                                Spacer(Modifier.height(4.dp))
-                            }
                         }
                     }
-
+                    
                     val showTopFade by remember { derivedStateOf { listState.canScrollBackward } }
                     val showBottomFade by remember { derivedStateOf { listState.canScrollForward } }
                     if (showTopFade) {
@@ -1104,6 +1061,45 @@ private fun CartPane(
                             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
                         )
                     }
+                }
+
+                // 2. AREA TOTAL & CHECKOUT (Fixed di bawah, tidak ikut ter-scroll)
+                if (cart.isNotEmpty()) {
+                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                    TotalsSummary(
+                        totals = totals,
+                        change = change,
+                        discountType = discountType,
+                        discountValue = discountValue,
+                        taxRate = taxRate,
+                        paid = paid,
+                        paymentMethod = paymentMethod,
+                        onDiscountTypeToggle = onDiscountTypeToggle,
+                        onDiscountValueChange = onDiscountValueChange,
+                        onTaxRateChange = onTaxRateChange,
+                        onPaidChange = onPaidChange,
+                        onPaymentMethodChange = onPaymentMethodChange
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Button(
+                        onClick = ::attemptCheckout,
+                        enabled = canCheckout,
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        if (isProcessing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Bayar · ${totals.total.toRupiah()}")
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
                 }
             } else {
                 Spacer(Modifier.height(4.dp))
