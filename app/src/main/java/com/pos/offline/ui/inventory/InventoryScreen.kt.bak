@@ -196,6 +196,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                     }
                 }
             }
+        )
         }
 
         SmallFloatingActionButton(

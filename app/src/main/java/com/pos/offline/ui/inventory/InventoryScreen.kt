@@ -175,7 +175,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                 .fillMaxSize()
                 .padding(inner)
                 .imePadding()
-            {
+        )    {
                 if (products.isEmpty()) {
                     EmptyInventory(hasQuery = query.isNotEmpty())
                 } else {
@@ -196,7 +196,6 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                     }
                 }
             }
-        )
         }
 
         SmallFloatingActionButton(
