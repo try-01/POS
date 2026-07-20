@@ -190,9 +190,7 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
     if (showScanner) {
         Dialog(
             onDismissRequest = { showScanner = false },
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false
-            )
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
         ) {
             Box(Modifier.fillMaxSize()) {
                 BarcodeScannerCamera(
