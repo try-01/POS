@@ -201,10 +201,8 @@ class PosViewModel(
                 _uiEvents.emit(PosUiEvent.ShowMessage("Produk tidak ditemukan!"))
                 return@launch
             }
-            val success = tryAddToCart(product)
-            if (success) {
-                _uiEvents.emit(PosUiEvent.ShowMessage("${product.name} ditambahkan ke keranjang"))
-            }
+            addToCart(product)
+            _uiEvents.emit(PosUiEvent.ShowMessage("${product.name} ditambahkan ke keranjang"))
         }
     }
 
@@ -267,22 +265,15 @@ class PosViewModel(
     fun setPaid(value: Long) { _paid.value = value.coerceAtLeast(0L) }
     fun setPaymentMethod(method: PaymentMethod) { _paymentMethod.value = method }
 
-    // Pisahkan logika inti ke suspend function agar bisa mengembalikan status (Boolean)
-    private suspend fun tryAddToCart(product: ProductEntity): Boolean {
+    fun addToCart(product: ProductEntity) = viewModelScope.launch {
         val currentQtyInCart = cart.value.find { it.productId == product.id }?.quantity ?: 0
         if (currentQtyInCart + 1 > product.stock) {
             _uiEvents.emit(
                 PosUiEvent.ShowMessage("Stok \"${product.name}\" tidak mencukupi (tersisa ${product.stock}).")
             )
-            return false // Gagal karena kehabisan stok
+            return@launch
         }
         cartRepository.add(product.id, product.name, product.price)
-        return true // Sukses
-    }
-
-    // Fungsi utama yang dipanggil oleh klik di UI (Tetap mempertahankan signature aslinya)
-    fun addToCart(product: ProductEntity) = viewModelScope.launch {
-        tryAddToCart(product)
     }
 
     fun setQuantityDirect(item: CartItemEntity, newQuantity: Int) = viewModelScope.launch {

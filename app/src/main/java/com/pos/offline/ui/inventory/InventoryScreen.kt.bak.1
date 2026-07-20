@@ -170,12 +170,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             snackbarHost = { SnackbarHost(snackbarHostState) },
             contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars)
         ) { inner ->
-            Column(
-            Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .imePadding()
-            {
+            Column(Modifier.fillMaxSize().padding(inner)) {
                 if (products.isEmpty()) {
                     EmptyInventory(hasQuery = query.isNotEmpty())
                 } else {
@@ -204,7 +199,6 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                 .align(Alignment.BottomEnd)
                 .padding(end = 16.dp, bottom = 8.dp)
                 .navigationBarsPadding()
-                .imePadding()
         ) {
             Icon(Icons.Rounded.Add, contentDescription = "Tambah Produk", modifier = Modifier.size(20.dp))
         }

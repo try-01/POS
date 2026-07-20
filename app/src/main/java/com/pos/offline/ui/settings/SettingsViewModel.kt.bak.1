@@ -32,7 +32,6 @@ data class SettingsUiState(
 }
 
 class SettingsViewModel(
-    private val appContext: Context,
     private val cashierRepository: CashierRepository,
     private val shiftRepository: ShiftRepository
 ) : ViewModel() {
@@ -43,41 +42,37 @@ class SettingsViewModel(
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
-    private val _shareIntent = MutableSharedFlow<android.content.Intent>(extraBufferCapacity = 1)
-    val shareIntent: SharedFlow<android.content.Intent> = _shareIntent.asSharedFlow()
-
     val cashiers: StateFlow<List<CashierEntity>> = cashierRepository.allCashiers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    fun exportDatabase(destinationUri: Uri) {
+
+    fun exportDatabase(context: Context, destinationUri: Uri) {
         if (_uiState.value.isBusy) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isExporting = true)
-            try {
-                when (val result = BackupManager.exportDatabase(appContext, destinationUri)) {
-                    is BackupOutcome.Success -> _messages.emit("Cadangan berhasil disimpan.")
-                    is BackupOutcome.Error -> _messages.emit("Gagal membuat cadangan: ${result.throwable.message}")
-                }
-            } finally {
-                _uiState.value = _uiState.value.copy(isExporting = false)
+            when (val result = BackupManager.exportDatabase(context, destinationUri)) {
+                is BackupOutcome.Success ->
+                    _messages.emit("Cadangan berhasil disimpan.")
+                is BackupOutcome.Error ->
+                    _messages.emit("Gagal membuat cadangan: ${result.throwable.message}")
             }
+            _uiState.value = _uiState.value.copy(isExporting = false)
         }
     }
 
-    fun shareDatabase() {
+    fun shareDatabase(context: Context) {
         if (_uiState.value.isBusy) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSharing = true)
-            try {
-                when (val result = BackupManager.prepareShareableCopy(appContext)) {
-                    is ShareOutcome.Success -> {
-                        _shareIntent.emit(BackupManager.buildShareIntent(appContext, result.file))
-                    }
-                    is ShareOutcome.Error -> _messages.emit("Gagal menyiapkan cadangan untuk dibagikan: ${result.throwable.message}")
+            when (val result = BackupManager.prepareShareableCopy(context)) {
+                is ShareOutcome.Success -> {
+                    val intent = BackupManager.buildShareIntent(context, result.file)
+                    context.startActivity(intent)
                 }
-            } finally {
-                _uiState.value = _uiState.value.copy(isSharing = false)
+                is ShareOutcome.Error ->
+                    _messages.emit("Gagal menyiapkan cadangan untuk dibagikan: ${result.throwable.message}")
             }
+            _uiState.value = _uiState.value.copy(isSharing = false)
         }
     }
 
@@ -89,25 +84,22 @@ class SettingsViewModel(
         _uiState.value = _uiState.value.copy(pendingRestoreUri = null)
     }
 
-    fun confirmRestore(onRestartRequired: () -> Unit) {
+    fun confirmRestore(context: Context, onRestartRequired: () -> Unit) {
         val uri = _uiState.value.pendingRestoreUri ?: return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isImporting = true, pendingRestoreUri = null)
-            try {
-                when (val result = BackupManager.validateAndRestore(appContext, uri)) {
-                    is RestoreOutcome.Success -> onRestartRequired()
-                    is RestoreOutcome.InvalidFile -> {
-                        _messages.emit("File tidak valid: ${result.reason}")
-                        _uiState.value = _uiState.value.copy(isImporting = false)
-                    }
-                    is RestoreOutcome.Error -> {
-                        _messages.emit("Gagal memulihkan: ${result.throwable.message}")
-                        _uiState.value = _uiState.value.copy(isImporting = false)
-                    }
+            when (val result = BackupManager.validateAndRestore(context, uri)) {
+                is RestoreOutcome.Success -> {
+                    onRestartRequired()
                 }
-            } catch (e: Exception) {
-                _messages.emit("Gagal memulihkan: ${e.message ?: "kesalahan tak dikenal"}")
-                _uiState.value = _uiState.value.copy(isImporting = false)
+                is RestoreOutcome.InvalidFile -> {
+                    _messages.emit("File tidak valid: ${result.reason}")
+                    _uiState.value = _uiState.value.copy(isImporting = false)
+                }
+                is RestoreOutcome.Error -> {
+                    _messages.emit("Gagal memulihkan: ${result.throwable.message}")
+                    _uiState.value = _uiState.value.copy(isImporting = false)
+                }
             }
         }
     }

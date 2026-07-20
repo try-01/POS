@@ -111,7 +111,7 @@ class MainActivity : ComponentActivity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         scannerInterceptor.onKeyEvent(event)
-        return super.dispatchKeyEvent(event)
+        return super.dispatchKeyEvent(event) // wajib, jangan pernah dihapus
     }
 }
 
@@ -131,9 +131,10 @@ private fun AppRoot() {
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
     val pagerState = rememberPagerState(initialPage = 0) { Dest.entries.size }
     val currentDest = Dest.entries[pagerState.currentPage]
-    
+
     val pageAlpha = remember { Animatable(1f) }
     var isJumping by remember { mutableStateOf(false) }
 
@@ -239,12 +240,13 @@ private fun AppRoot() {
     val density = LocalDensity.current
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     var isCartExpanded by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(pagerState.currentPage) {
         if (currentDest != Dest.POS) isCartExpanded = false
-        menuExpanded = false
+        menuExpanded = false // pindah halaman (swipe/tap menu) otomatis menutup expand FAB
     }
 
     val hideFab = imeVisible || (!isLandscape && currentDest == Dest.POS && isCartExpanded)
@@ -256,11 +258,10 @@ private fun AppRoot() {
     ) {
         HorizontalPager(
             state = pagerState,
-            // BEST PRACTICE 1: imePadding Dihapus dari Pager. 
-            // Pager tetap full screen, inset keyboard diurus oleh layar masing-masing.
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { alpha = pageAlpha.value }, 
+                .imePadding()
+                .graphicsLayer { alpha = pageAlpha.value }, // fade ringan saat loncat halaman jauh
             userScrollEnabled = !menuExpanded && !isCartExpanded && !imeVisible && !isJumping
         ) { page ->
             val dest = Dest.entries[page]
@@ -327,9 +328,7 @@ private fun AppRoot() {
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = 16.dp, bottom = 8.dp)
-                // BEST PRACTICE 2: Tambahkan imePadding agar FAB naik saat keyboard muncul
                 .navigationBarsPadding()
-                .imePadding() 
         ) {
             ExpandableMenuFab(
                 expanded = menuExpanded,

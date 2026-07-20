@@ -189,7 +189,7 @@ class InventoryViewModel(
             productRepository.softDelete(target.id)
             notify("Produk \"${target.name}\" dihapus.")
         } catch (e: Exception) {
-            notify("Gagal menghapus: ${e.message ?: "kesalahan tak dikenal"}.")
+            notify("Gagal menyimpan: ${e.message ?: "kesalahan tak dikenal"}.")
         } finally {
             _pendingDelete.value = null
         }

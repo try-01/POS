@@ -185,10 +185,7 @@ fun ReportScreen(
         contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars)
     ) { inner ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .imePadding(),
+            modifier = Modifier.fillMaxSize().padding(inner),
             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp).let {
                 PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp)
             },
