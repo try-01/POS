@@ -102,7 +102,6 @@ class InventoryViewModel(
         viewModelScope.launch {
             val product = try {
                 productRepository.getProductByBarcodeAny(sanitized)
-                    ?: sanitized.toLongOrNull()?.let { productRepository.getById(it) }
             } catch (e: Exception) {
                 notify("Gagal memindai: ${e.message ?: "kesalahan tak dikenal"}.")
                 return@launch

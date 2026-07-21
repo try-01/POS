@@ -22,8 +22,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import com.pos.offline.data.local.entity.StoreProfileEntity
+import com.pos.offline.data.local.entity.isVoid
 import com.pos.offline.data.repository.CheckoutResult
-import com.pos.offline.ui.components.discountRowLabel
+import com.pos.offline.ui.components.paymentMethodLabel
 
 enum class ReceiptAlign { LEFT, CENTER, RIGHT }
 data class ReceiptLine(
@@ -35,47 +36,97 @@ data class ReceiptLine(
 )
 object ReceiptManager {
 
-    private const val DEFAULT_STORE_NAME = "TOKO KASIR OFFLINE"
     private val dateFmt = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("id-ID"))
     fun buildLines(result: CheckoutResult, storeProfile: StoreProfileEntity? = null): List<ReceiptLine> {
         val tx = result.transaction
         val lines = mutableListOf<ReceiptLine>()
-        
-        val storeName = storeProfile?.storeName?.ifBlank { DEFAULT_STORE_NAME } ?: DEFAULT_STORE_NAME
-        lines += ReceiptLine(left = storeName, align = ReceiptAlign.CENTER, bold = true, large = true)
-        
-        val address = storeProfile?.address
-        if (!address.isNullOrBlank()) {
-            lines += ReceiptLine(left = address, align = ReceiptAlign.CENTER)
+
+        val storeName = storeProfile?.storeName?.trim()
+        if (!storeName.isNullOrEmpty()) {
+            lines += ReceiptLine(left = storeName, align = ReceiptAlign.CENTER, bold = true, large = true)
         }
-        
-        lines += ReceiptLine(left = dateFmt.format(Date(tx.createdAt)), align = ReceiptAlign.CENTER)
-        lines += ReceiptLine(left = "No: ${tx.id}", align = ReceiptAlign.CENTER)
-        if (tx.cashierName.isNotBlank()) {
-            lines += ReceiptLine(left = "Kasir: ${tx.cashierName}", align = ReceiptAlign.CENTER)
+
+        val address = storeProfile?.address?.trim()
+        if (!address.isNullOrEmpty()) {
+            address.split("\n").forEach { rawLine ->
+                val line = rawLine.trim()
+                if (line.isNotEmpty()) {
+                    lines += ReceiptLine(left = line, align = ReceiptAlign.CENTER)
+                }
+            }
         }
+
         lines += divider()
+
+        val dateStr = dateFmt.format(Date(tx.createdAt))
+        val invStr = tx.id
+        lines += ReceiptLine(left = dateStr, right = invStr)
+
+        val cashier = tx.cashierName.trim()
+        val shiftId = tx.shiftId?.toString() ?: ""
+        if (cashier.isNotEmpty() || shiftId.isNotEmpty()) {
+            val left = cashier
+            val right = if (shiftId.isNotEmpty()) "Shift ID: $shiftId" else ""
+            if (left.isNotEmpty() && right.isNotEmpty()) {
+                lines += ReceiptLine(left = left, right = right)
+            } else if (left.isNotEmpty()) {
+                lines += ReceiptLine(left = left)
+            } else if (right.isNotEmpty()) {
+                lines += ReceiptLine(left = "", right = right)
+            }
+        }
+
+        if (tx.isVoid) {
+            lines += ReceiptLine(left = "*** TRANSAKSI DIBATALKAN ***", align = ReceiptAlign.CENTER, bold = true)
+        }
+
+        lines += divider()
+
         for (item in result.items) {
-            lines += ReceiptLine(left = item.productName, right = item.lineTotal.toRupiah(), bold = true)
-            lines += ReceiptLine(left = "  ${item.quantity} x ${item.unitPrice.toRupiah()}")
+            val name = item.productName.trim().ifEmpty { "(Tanpa nama)" }
+            if (item.quantity > 1) {
+                lines += ReceiptLine(left = name, bold = true)
+                lines += ReceiptLine(left = "  ${item.quantity} x ${item.unitPrice.toRupiah()}", right = item.lineTotal.toRupiah())
+            } else {
+                lines += ReceiptLine(left = name, right = item.lineTotal.toRupiah(), bold = true)
+            }
         }
+
+        lines += ReceiptLine(left = "") // Satu baris jarak eksklusif untuk Total
+
+        lines += ReceiptLine(left = "TOTAL: ${tx.total.toRupiah()}", align = ReceiptAlign.CENTER, bold = true, large = true)
         lines += divider()
-        lines += ReceiptLine(left = "Subtotal", right = tx.subtotal.toRupiah())
-        tx.discountRowLabel()?.let { label ->
-            lines += ReceiptLine(left = label, right = "- ${tx.discount.toRupiah()}")
+
+        val gridItems = mutableListOf<Pair<String, String>>()
+        val payLabel = paymentMethodLabel(tx.paymentMethod)
+        gridItems.add(Pair(payLabel, tx.paidAmount.toRupiah()))
+
+        if (tx.change > 0) gridItems.add(Pair("Kembali", tx.change.toRupiah()))
+        if (tx.discount > 0) gridItems.add(Pair("Diskon", tx.discount.toRupiah()))
+        if (tx.tax > 0) gridItems.add(Pair("Pajak", tx.tax.toRupiah()))
+
+        gridItems.chunked(2).forEach { chunk ->
+            if (chunk.size == 2) {
+                lines += ReceiptLine(left = "${chunk[0].first}: ${chunk[0].second}", right = "${chunk[1].first}: ${chunk[1].second}")
+            } else {
+                lines += ReceiptLine(left = "${chunk[0].first}: ${chunk[0].second}")
+            }
         }
-        if (tx.tax > 0) lines += ReceiptLine(left = "Pajak", right = tx.tax.toRupiah())
-        lines += ReceiptLine(left = "TOTAL", right = tx.total.toRupiah(), bold = true, large = true)
-        lines += ReceiptLine(left = "Bayar", right = tx.paidAmount.toRupiah())
-        lines += ReceiptLine(left = "Kembali", right = tx.change.toRupiah())
+
         lines += divider()
-        
-        val footerNote = storeProfile?.footerNote
-        if (!footerNote.isNullOrBlank()) {
-            lines += ReceiptLine(left = footerNote, align = ReceiptAlign.CENTER)
+
+        val footerNote = storeProfile?.footerNote?.trim()
+        if (!footerNote.isNullOrEmpty()) {
+            footerNote.split("\n").forEach { rawLine ->
+                val line = rawLine.trim()
+                if (line.isNotEmpty()) {
+                    lines += ReceiptLine(left = line, align = ReceiptAlign.CENTER)
+                }
+            }
         }
-        lines += ReceiptLine(left = "Terima kasih", align = ReceiptAlign.CENTER)
-        lines += ReceiptLine(left = "Struk elektronik", align = ReceiptAlign.CENTER)
+
+        lines += ReceiptLine(left = "") // Baris kosong di akhir
+
         return lines
     }
 
@@ -160,10 +211,17 @@ object ReceiptManager {
             textSize = (if (line.large) 16f else 11f) * scale
             typeface = if (line.bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
         }
+        
+        val rightPaint = if (line.bold && line.right.isNotEmpty()) {
+            Paint(paint).apply { typeface = Typeface.DEFAULT }
+        } else {
+            paint
+        }
+
         if (line.right.isNotEmpty()) {
             canvas.drawText(line.left, margin, y, paint)
-            val rightW = paint.measureText(line.right)
-            canvas.drawText(line.right, pageWidth - margin - rightW, y, paint)
+            val rightW = rightPaint.measureText(line.right)
+            canvas.drawText(line.right, pageWidth - margin - rightW, y, rightPaint)
         } else {
             when (line.align) {
                 ReceiptAlign.LEFT -> canvas.drawText(line.left, margin, y, paint)

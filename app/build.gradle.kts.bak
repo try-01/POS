@@ -86,9 +86,6 @@ dependencies {
 
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
-    implementation("org.apache.poi:poi:5.5.1")
-    implementation("org.apache.poi:poi-ooxml:5.5.1")
-
     androidTestImplementation("androidx.room:room-testing:2.6.1") // MigrationTestHelper
     androidTestImplementation("androidx.test.ext:junit:1.2.1")     // AndroidJUnit4
     androidTestImplementation("androidx.test:runner:1.6.2")        // InstrumentationRegistry

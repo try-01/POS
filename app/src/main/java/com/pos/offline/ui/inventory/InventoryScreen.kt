@@ -1,8 +1,6 @@
 package com.pos.offline.ui.inventory
 
-import android.Manifest
 import android.content.pm.PackageManager
-import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -45,11 +43,15 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.FileDownload
+import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -82,12 +84,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.pos.offline.ui.components.BarcodeScannerCamera
 import com.pos.offline.ui.components.rememberBarcodeScanner
 import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.util.toRupiah
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.ThousandsSeparatorTransformation
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.pos.offline.util.ExcelManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,6 +102,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val pendingDelete by viewModel.pendingDelete.collectAsStateWithLifecycle()
     val scanNotFound by viewModel.scanNotFound.collectAsStateWithLifecycle()
+    val excelState by viewModel.excelState.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val sortOption by viewModel.sortOption.collectAsStateWithLifecycle()
@@ -107,6 +112,16 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
     }
     val launchMainScanner = rememberBarcodeScanner(onScanned = viewModel::onBarcodeScanned)
+
+    val excelExportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    ) { uri -> if (uri != null) viewModel.exportToExcel(uri) }
+
+    val excelImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) viewModel.importFromExcel(uri) }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg -> snackbarHostState.showSnackbar(msg) }
@@ -164,6 +179,25 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                             ScanIconButton(onClick = launchMainScanner)
                             Spacer(Modifier.width(6.dp))
                         }
+                        ExcelIconButton(
+                            icon = Icons.Rounded.FileUpload,
+                            desc = "Import Excel",
+                            loading = excelState.isImporting,
+                            onClick = {
+                                excelImportLauncher.launch(arrayOf(
+                                    "application/vnd.ms-excel",
+                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                ))
+                            }
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        ExcelIconButton(
+                            icon = Icons.Rounded.FileDownload,
+                            desc = "Export Excel",
+                            loading = excelState.isExporting,
+                            onClick = { excelExportLauncher.launch(ExcelManager.suggestedExportFileName()) }
+                        )
+                        Spacer(Modifier.width(6.dp))
                         SortMenuButton(current = sortOption, onSelect = viewModel::setSortOption)
                     }
                 }
@@ -257,8 +291,186 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             }
         )
     }
+
+    if (excelState.showReviewDialog) {
+        ImportReviewDialog(
+            reviewItems = excelState.reviewItems,
+            parseErrors = excelState.parseErrors,
+            isCommitting = excelState.isCommitting,
+            onConfirm = viewModel::commitImport,
+            onDismiss = viewModel::dismissReviewDialog
+        )
+    }
 }
 
+@Composable
+private fun ExcelIconButton(
+    icon: ImageVector,
+    desc: String,
+    loading: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+            .clickable(enabled = !loading, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (loading) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+        } else {
+            Icon(
+                icon,
+                contentDescription = desc,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@Composable
+private fun ImportReviewDialog(
+    reviewItems: List<InventoryViewModel.ImportReviewItem>,
+    parseErrors: List<String>,
+    isCommitting: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val newCount = reviewItems.count { it.status == InventoryViewModel.ImportStatus.NEW }
+    val conflictCount = reviewItems.count { it.status == InventoryViewModel.ImportStatus.CONFLICT }
+    val dupCount = reviewItems.count { it.status == InventoryViewModel.ImportStatus.DUPLICATE_IN_FILE }
+
+    AlertDialog(
+        onDismissRequest = { if (!isCommitting) onDismiss() },
+        title = { Text("Tinjau Impor Produk", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ImportStatBadge("Baru: $newCount", MaterialTheme.colorScheme.primary)
+                    if (conflictCount > 0) ImportStatBadge("Konflik: $conflictCount", Color(0xFFF5A623))
+                    if (dupCount > 0) ImportStatBadge("Dobel: $dupCount", MaterialTheme.colorScheme.error)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Hanya produk berstatus \"Baru\" yang akan ditambahkan. Konflik & duplikat dilewati demi menjaga data lama.",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+
+                if (parseErrors.isNotEmpty()) {
+                    Text(
+                        "⚠ ${parseErrors.size} baris gagal dibaca:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                    parseErrors.take(10).forEach { err ->
+                        Text(
+                            err,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                }
+
+                reviewItems.forEach { item ->
+                    ImportReviewRow(item)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = !isCommitting && newCount > 0
+            ) {
+                if (isCommitting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Impor $newCount Produk", fontSize = 13.sp)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !isCommitting) {
+                Text("Batal", fontSize = 13.sp)
+            }
+        }
+    )
+}
+
+@Composable
+private fun ImportStatBadge(text: String, color: Color) {
+    Surface(color = color.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
+        Text(
+            text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+            color = color,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun ImportReviewRow(item: InventoryViewModel.ImportReviewItem) {
+    val (label, color) = when (item.status) {
+        InventoryViewModel.ImportStatus.NEW -> "BARU" to MaterialTheme.colorScheme.primary
+        InventoryViewModel.ImportStatus.CONFLICT -> "KONFLIK" to Color(0xFFF5A623)
+        InventoryViewModel.ImportStatus.DUPLICATE_IN_FILE -> "DOBEL" to MaterialTheme.colorScheme.error
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                item.row.name,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                "SKU: ${item.row.sku}${item.row.barcode?.let { " · $it" } ?: ""}",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (item.status == InventoryViewModel.ImportStatus.CONFLICT && item.conflictWith != null) {
+                Text(
+                    "Bentrok dg: ${item.conflictWith.name}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    color = color
+                )
+            }
+        }
+        Surface(color = color.copy(alpha = 0.15f), shape = RoundedCornerShape(4.dp)) {
+            Text(
+                label,
+                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                color = color,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
 
 @Composable
 private fun ProductRow(
@@ -269,7 +481,7 @@ private fun ProductRow(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 14.dp,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        onClick = null // kartu murni visual; satu-satunya aksi adalah tombol edit di kanan
+        onClick = null
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -569,7 +781,6 @@ private fun ProductFormDialog(
     LaunchedEffect(barcode) {
         val trimmed = barcode.trim()
         if (trimmed.isBlank()) { barcodeConflict = null; return@LaunchedEffect }
-        delay(400)
         barcodeConflict = checkBarcodeConflict(trimmed, state.id)
     }
 

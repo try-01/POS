@@ -93,7 +93,7 @@ object ServiceLocator {
     )
 
     fun inventoryViewModelFactory(): ViewModelProvider.Factory =
-        InventoryViewModelFactory(productRepository)
+        InventoryViewModelFactory(appContext, productRepository)
     fun reportViewModelFactory(): ViewModelProvider.Factory =
         ReportViewModelFactory(transactionRepository, shiftRepository, returnRepository, printCoordinator, printerRepository)
     fun settingsViewModelFactory(): ViewModelProvider.Factory =
@@ -140,11 +140,12 @@ class PosViewModelFactory(
 }
 
 class InventoryViewModelFactory(
+    private val appContext: Context,
     private val productRepository: ProductRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        InventoryViewModel(productRepository) as T
+        InventoryViewModel(appContext, productRepository) as T
 }
 
 class ReportViewModelFactory(

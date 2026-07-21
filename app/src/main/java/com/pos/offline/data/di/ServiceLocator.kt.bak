@@ -97,7 +97,7 @@ object ServiceLocator {
     fun reportViewModelFactory(): ViewModelProvider.Factory =
         ReportViewModelFactory(transactionRepository, shiftRepository, returnRepository, printCoordinator, printerRepository)
     fun settingsViewModelFactory(): ViewModelProvider.Factory =
-        SettingsViewModelFactory(cashierRepository, shiftRepository)
+        SettingsViewModelFactory(appContext, cashierRepository, shiftRepository)
     fun printerViewModelFactory(): ViewModelProvider.Factory =
         PrinterViewModelFactory(printerRepository, bluetoothPrinterHelper, usbPrinterHelper, printerConnectionFactory)
     fun storeProfileViewModelFactory(): ViewModelProvider.Factory =
@@ -160,12 +160,13 @@ class ReportViewModelFactory(
 }
 
 class SettingsViewModelFactory(
+    private val appContext: Context,
     private val cashierRepository: CashierRepository,
     private val shiftRepository: ShiftRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        SettingsViewModel(cashierRepository, shiftRepository) as T
+        SettingsViewModel(appContext, cashierRepository, shiftRepository) as T
 }
 
 class PrinterViewModelFactory(

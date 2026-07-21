@@ -68,10 +68,4 @@ interface ProductDao {
         """
     )
     fun observeDistinctCategories(): Flow<List<String>>
-
-    @Query("SELECT * FROM products WHERE sku = :sku LIMIT 1")
-    suspend fun getBySku(sku: String): ProductEntity?
-
-    @Insert(onConflict = OnConflictStrategy.ABORT)
-    suspend fun insertAll(products: List<ProductEntity>)
 }

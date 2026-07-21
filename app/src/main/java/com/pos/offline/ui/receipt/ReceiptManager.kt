@@ -1,7 +1,7 @@
 package com.pos.offline.ui.receipt
 
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothManager
+//import android.bluetooth.BluetoothDevice
+//import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap

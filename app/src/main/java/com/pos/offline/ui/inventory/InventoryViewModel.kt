@@ -1,10 +1,16 @@
 package com.pos.offline.ui.inventory
 
+import android.content.Context
 import android.database.sqlite.SQLiteConstraintException
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.data.repository.ProductRepository
+import com.pos.offline.util.ExcelImportResult
+import com.pos.offline.util.ExcelManager
+import com.pos.offline.util.ExcelOutcome
+import com.pos.offline.util.ImportedProductRow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +58,7 @@ enum class ProductSortOption(val label: String) {
 
 @OptIn(kotlinx.coroutines.FlowPreview::class, ExperimentalCoroutinesApi::class)
 class InventoryViewModel(
+    private val appContext: Context,
     private val productRepository: ProductRepository
 ) : ViewModel() {
 
@@ -87,6 +94,145 @@ class InventoryViewModel(
     private val _scanNotFound = MutableStateFlow<ScanNotFoundState?>(null)
     val scanNotFound: StateFlow<ScanNotFoundState?> = _scanNotFound.asStateFlow()
 
+    // ==================== EXCEL SUPPORT ====================
+    enum class ImportStatus { NEW, CONFLICT, DUPLICATE_IN_FILE }
+
+    data class ImportReviewItem(
+        val row: ImportedProductRow,
+        val status: ImportStatus,
+        val conflictWith: ProductEntity? = null
+    )
+
+    data class ExcelUiState(
+        val isExporting: Boolean = false,
+        val isImporting: Boolean = false,
+        val isCommitting: Boolean = false,
+        val reviewItems: List<ImportReviewItem> = emptyList(),
+        val parseErrors: List<String> = emptyList(),
+        val showReviewDialog: Boolean = false
+    )
+
+    private val _excelState = MutableStateFlow(ExcelUiState())
+    val excelState: StateFlow<ExcelUiState> = _excelState.asStateFlow()
+
+    fun dismissReviewDialog() {
+        _excelState.value = _excelState.value.copy(
+            showReviewDialog = false,
+            reviewItems = emptyList(),
+            parseErrors = emptyList()
+        )
+    }
+
+    fun exportToExcel(destinationUri: Uri) {
+        if (_excelState.value.isExporting) return
+        viewModelScope.launch {
+            _excelState.value = _excelState.value.copy(isExporting = true)
+            try {
+                val products = productRepository.getAllProductsOnce()
+                if (products.isEmpty()) {
+                    notify("Tidak ada produk untuk diekspor.")
+                    return@launch
+                }
+                when (val result = ExcelManager.exportProducts(appContext, products, destinationUri)) {
+                    is ExcelOutcome.Success ->
+                        notify("Berhasil mengekspor ${products.size} produk ke Excel.")
+                    is ExcelOutcome.Error ->
+                        notify("Gagal ekspor: ${result.throwable.message ?: "kesalahan tak dikenal"}")
+                }
+            } catch (e: Exception) {
+                notify("Gagal ekspor: ${e.message ?: "kesalahan tak dikenal"}")
+            } finally {
+                _excelState.value = _excelState.value.copy(isExporting = false)
+            }
+        }
+    }
+
+    fun importFromExcel(sourceUri: Uri) {
+        if (_excelState.value.isImporting) return
+        viewModelScope.launch {
+            _excelState.value = _excelState.value.copy(isImporting = true)
+            try {
+                val result: ExcelImportResult = ExcelManager.importProducts(appContext, sourceUri)
+                if (result.rows.isEmpty() && result.errors.isEmpty()) {
+                    notify("File Excel kosong atau tidak ada data valid.")
+                    return@launch
+                }
+                val reviewItems = validateImportedRows(result.rows)
+                _excelState.value = _excelState.value.copy(
+                    reviewItems = reviewItems,
+                    parseErrors = result.errors,
+                    showReviewDialog = true
+                )
+            } catch (e: Exception) {
+                notify("Gagal membaca file: ${e.message ?: "format tidak didukung"}")
+            } finally {
+                _excelState.value = _excelState.value.copy(isImporting = false)
+            }
+        }
+    }
+
+    private suspend fun validateImportedRows(rows: List<ImportedProductRow>): List<ImportReviewItem> {
+        val barcodeCounts = rows.mapNotNull { it.barcode }.groupingBy { it }.eachCount()
+        val skuCounts = rows.groupingBy { it.sku }.eachCount()
+        return rows.map { row ->
+            val duplicateInFile =
+                (row.barcode != null && (barcodeCounts[row.barcode] ?: 0) > 1) ||
+                    (skuCounts[row.sku] ?: 0) > 1
+            val dbConflict = row.barcode?.let { productRepository.getProductByBarcodeAny(it) }
+                ?: productRepository.getProductBySku(row.sku)
+            val status = when {
+                duplicateInFile -> ImportStatus.DUPLICATE_IN_FILE
+                dbConflict != null -> ImportStatus.CONFLICT
+                else -> ImportStatus.NEW
+            }
+            ImportReviewItem(row, status, dbConflict)
+        }
+    }
+
+    fun commitImport() {
+        if (_excelState.value.isCommitting) return
+        val newRows = _excelState.value.reviewItems
+            .filter { it.status == ImportStatus.NEW }
+            .map { it.row }
+
+        if (newRows.isEmpty()) {
+            notify("Tidak ada produk baru yang bisa diimpor (semua konflik/duplikat).")
+            return
+        }
+
+        viewModelScope.launch {
+            _excelState.value = _excelState.value.copy(isCommitting = true)
+            try {
+                val now = System.currentTimeMillis()
+                val toInsert = newRows.map { row ->
+                    ProductEntity(
+                        id = 0,
+                        name = row.name,
+                        sku = row.sku,
+                        barcode = row.barcode,
+                        category = row.category ?: "",
+                        price = row.price,
+                        cost = row.cost,
+                        stock = row.stock,
+                        active = true,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                }
+                productRepository.bulkInsert(toInsert)
+                notify("Berhasil mengimpor ${toInsert.size} produk baru.")
+                dismissReviewDialog()
+            } catch (e: SQLiteConstraintException) {
+                notify("Gagal impor: ada SKU/barcode dobel yang lolos validasi.")
+            } catch (e: Exception) {
+                notify("Gagal impor: ${e.message ?: "kesalahan tak dikenal"}")
+            } finally {
+                _excelState.value = _excelState.value.copy(isCommitting = false)
+            }
+        }
+    }
+    // ==================== END EXCEL SUPPORT ====================
+
     private fun sanitizeScannedCode(raw: String?): String? {
         if (raw.isNullOrBlank()) return null
         val cleaned = raw.trim().filter { c -> c.isLetterOrDigit() || c in "-_./: #" }.take(128)
@@ -107,7 +253,7 @@ class InventoryViewModel(
                 return@launch
             }
             if (product != null && product.active) {
-                startEdit(product) // redirect ke halaman Edit Produk
+                startEdit(product)
             } else {
                 _scanNotFound.value = ScanNotFoundState(sanitized)
             }
@@ -132,7 +278,7 @@ class InventoryViewModel(
             id = product.id,
             name = product.name,
             sku = product.sku,
-            barcode = product.barcode ?: "", // FIX: sebelumnya barcode tidak disalin, selalu tampil kosong saat edit
+            barcode = product.barcode ?: "",
             category = product.category,
             price = product.price,
             cost = product.cost,
@@ -151,7 +297,7 @@ class InventoryViewModel(
 
         val sku = state.sku.trim().ifBlank { "SKU-${System.currentTimeMillis()}" }
         val barcode = state.barcode.trim().ifBlank { null }
-        val category = state.category.trim() // BARU
+        val category = state.category.trim()
         val now = System.currentTimeMillis()
 
         val entity = ProductEntity(
@@ -159,7 +305,7 @@ class InventoryViewModel(
             name = name,
             sku = sku,
             barcode = barcode,
-            category = category, // BARU
+            category = category,
             price = state.price,
             cost = state.cost,
             stock = state.stock,
@@ -205,9 +351,9 @@ class InventoryViewModel(
     }
 
     suspend fun checkBarcodeConflict(barcode: String, excludeId: Long): String? {
-    val trimmed = barcode.trim()
-    if (trimmed.isBlank()) return null
-    val existing = productRepository.getProductByBarcodeAny(trimmed)
-    return if (existing != null && existing.id != excludeId) existing.name else null
+        val trimmed = barcode.trim()
+        if (trimmed.isBlank()) return null
+        val existing = productRepository.getProductByBarcodeAny(trimmed)
+        return if (existing != null && existing.id != excludeId) existing.name else null
     }
 }
