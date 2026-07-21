@@ -23,8 +23,15 @@
 -keepclassmembernames class kotlinx.coroutines.android.HandlerContext$FrameCallbackProvider {
     *** postFrameCallback(...);
 }
--keep class org.apache.poi.** { *; }
 -keep class org.apache.poi.ooxml.** { *; }
+-keep class org.apache.poi.ss.** { *; }
+-keep class org.apache.poi.hssf.** { *; }
+-keep class org.apache.poi.xssf.** { *; }
+-keep class org.apache.poi.poifs.** { *; }
+-keep class org.apache.poi.util.** { *; }
+-keep class org.apache.poi.openxml4j.** { *; }
+-keep class org.apache.poi.common.** { *; }
+-keep class org.apache.poi.ddf.** { *; }
 -keep class org.apache.xmlbeans.** { *; }
 -keep class com.microsoft.schemas.** { *; }
 -keep class org.openxmlformats.** { *; }
@@ -64,3 +71,5 @@
 -dontwarn org.jspecify.annotations.**
 -dontwarn org.osgi.framework.**
 -dontwarn org.tukaani.xz.**
+-dontwarn org.etsi.**
+-dontwarn com.microsoft.**

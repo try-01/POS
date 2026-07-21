@@ -1,16 +1,9 @@
-# =====================================================================
-# ATURAN BAWAAN & ARSITEKTUR APLIKASI (DI-PRESERVE)
-# =====================================================================
 -keepattributes Signature, InnerClasses, EnclosingMethod, Deprecated, SourceFile, LineNumberTable
 -keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations, RuntimeVisibleTypeAnnotations, AnnotationDefault
 -keep class kotlin.Metadata { *; }
 -renamesourcefileattribute SourceFile
-
-# Database Room
 -keep class com.pos.offline.data.local.entity.** { *; }
 -keep @androidx.room.Entity class * { *; }
-
-# Data & Repository
 -keep class com.pos.offline.data.repository.** { *; }
 -keep class * implements android.os.Parcelable { *; }
 -keep class **.*UiState { *; }
@@ -18,51 +11,26 @@
 -keep class **.*SortOption { *; }
 -keep class **.*Summary { *; }
 -keep class **.*Result { *; }
-
-# Jetpack Compose & Lifecycle
 -keep class androidx.compose.** { *; }
 -keepclasseswithmembers class * {
     @androidx.compose.runtime.Composable *;
 }
 -keep class * extends androidx.lifecycle.ViewModel { *; }
-
-# Package Internal Aplikasi
 -keep class com.pos.offline.util.** { *; }
 -keep class com.pos.offline.ui.receipt.** { *; }
-
-# Coroutines
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
 -keepclassmembernames class kotlinx.coroutines.android.HandlerContext$FrameCallbackProvider {
     *** postFrameCallback(...);
 }
-
-# =====================================================================
-# OPTIMALISASI APACHE POI 5.5.1 (HANYA SIMPAN EXCEL .XLS & .XLSX)
-# =====================================================================
-
-# [PERBAIKAN UTAMA] Hapus "-keep class org.apache.poi.** { *; }" agar R8 bisa memotong Word/PPT.
-# Sebagai gantinya, kita HANYA mengunci package Core, Excel Lama (.xls), dan Excel Baru (.xlsx):
--keep class org.apache.poi.ss.usermodel.** { *; }
--keep class org.apache.poi.hssf.usermodel.** { *; }
--keep class org.apache.poi.xssf.usermodel.** { *; }
--keep class org.apache.poi.xssf.streaming.** { *; }
--keep class org.apache.poi.ss.formula.** { *; }
--keep class org.apache.poi.poifs.filesystem.** { *; }
--keep class org.apache.poi.util.** { *; }
-
-# Hanya simpan skema XML yang dibutuhkan oleh Spreadsheet (Excel)
--keep class org.openxmlformats.schemas.spreadsheetml.x2006.main.** { *; }
-
-# Tetap pertahankan engine dasar XMLBeans pembaca file kompresi openxml
+-keep class org.apache.poi.** { *; }
+-keep class org.apache.poi.ooxml.** { *; }
 -keep class org.apache.xmlbeans.** { *; }
+-keep class com.microsoft.schemas.** { *; }
+-keep class org.openxmlformats.** { *; }
 -keep class schemaorg_apache_xmlbeans.** { *; }
-
-# Sisanya (Word, PPT, Grafis, dll) TIDAK ditaruh di "-keep" agar otomatis DIBUANG oleh R8.
-
-# =====================================================================
-# WARNING SUPPRESSION (TETAP DIPERTAHANKAN & DIOPTIMALKAN)
-# =====================================================================
+-keep class org.etsi.** { *; }
+-keep class org.w3.** { *; }
 -dontwarn com.microsoft.schemas.**
 -dontwarn org.openxmlformats.schemas.drawingml.**
 -dontwarn org.openxmlformats.**
@@ -96,5 +64,3 @@
 -dontwarn org.jspecify.annotations.**
 -dontwarn org.osgi.framework.**
 -dontwarn org.tukaani.xz.**
--dontwarn org.etsi.**
--dontwarn com.microsoft.**
