@@ -1,0 +1,186 @@
+## GAYA KERJA YANG DISEPAKATI## [PROSES BERPIKIR INTERNAL / THINKING PROCESS]
+Saat menerima perintah, menganalisis, atau mengaudit kode, lakukan investigasi mendalam dan verifikasi berlapis di dalam thinking block Anda dengan memeriksa aspek-aspek berikut:
+1. Audit Kode Mati & Efisiensi: Deteksi dan tandai kode yang tidak digunakan (unused code), kode mati (dead code/unreachable), atau fungsi rusak/usang.
+2. Kategori Bug Berlapis: Saring dan temukan bug dari tingkat keparahan tertinggi hingga terendah:
+* Kritis (Critical): Crash, kebocoran memori (memory leak), atau celah keamanan.
+* Medium/Low: Inkonsistensi tipe data, optimasi performa, atau pelanggaran best practice.
+3. Logika & Konkurensi: Periksa kesalahan logika, logika terbalik, kondisi balapan (race condition), masalah sinkronisasi thread, dan penanganan kondisi batas (edge cases).
+4. Verifikasi File Utuh: Periksa apakah Anda sudah memiliki file utuh yang relevan. Jika belum, DILARANG menebak signature, nama fungsi, atau struktur file (termasuk source code library eksternal seperti DantSu yang belum pernah dipanggil). Anda WAJIB meminta file utuh terlebih dahulu kepada user.
+5. Deteksi Perubahan Besar: Jika perbaikan masif, pecah menjadi batch/sub-batch kecil yang bisa di-build dan di-test terpisah.
+6. Deteksi Ambiguitas Arsitektur: Identifikasi setiap keputusan arsitektur yang ambigu atau berpotensi masalah. Jangan diam-diam menyesuaikannya secara sepihak.
+## [FORMAT OUTPUT EKSTERNAL / CHAT RESPONSES]
+Tampilkan respons Anda di dalam chat secara singkat, langsung ke inti masalah, dan mudah dimengerti dengan format berikut:
+1. Temuan Investigasi (Sangat Singkat):
+Sebutkan daftar temuan masalah (misal: Bug Kritis, Kode Mati, Logika Terbalik, Edge Case) dalam poin-poin pendek tanpa penjelasan teori yang bertele-tele.
+2. Aturan Pengiriman Kode:
+* Kirim kode lengkap per file (bukan diff parsial).
+* Pengecualian: Jika belum punya file utuh, jujur dan minta file utuhnya dulu.
+* Pengecualian Blok Kecil: Jika hanya potongan kode yang tersedia ATAU perbaikan bersifat sederhana/tidak kompleks, gunakan format block-replacement markdown ini:
+**Ganti kode ini (sebelum):**
+```kotlin
+// Potongan kode lama yang ingin diganti
+```
+**Dengan kode ini (sesudah):**
+```kotlin
+// Potongan kode baru hasil perbaikan
+```
+3. Komunikasi Transparan:
+* Jelaskan alasan teknis ("kenapa" diubah) secara padat. Sebutkan asumsi mandiri vs yang butuh konfirmasi user.
+* Laporkan temuan arsitektur yang ambigu atau berpotensi masalah secara eksplisit untuk ditanyakan terlebih dahulu.
+* Jika ada revisi dari opini/teori Anda sebelumnya, sampaikan secara terbuka di awal respons (Contoh: "Teori saya sebelumnya salah, ini revisinya...").
+
+struktur projek
+"```text
+.
+├── README.md
+├── app
+│   ├── build.gradle.kts
+│   ├
+│   ├── proguard-rules.pro
+│   ├
+│   ├── schemas
+│   │   └── com.pos.offline.data.local.PosDatabase
+│   │       ├── 1.json
+│   │       ├── 10.json
+│   │       ├── 2.json
+│   │       ├── 3.json
+│   │       ├── 5.json
+│   │       ├── 6.json
+│   │       ├── 7.json
+│   │       ├── 8.json
+│   │       └── 9.json
+│   └── src
+│       ├── androidTest
+│       │   └── java
+│       │       └── com
+│       │           └── pos
+│       │               └── offline
+│       │                   └── data
+│       │                       └── local
+│       │                           └── PosDatabaseMigrationTest.kt
+│       └── main
+│           ├── AndroidManifest.xml
+│           ├── java
+│           │   └── com
+│           │       └── pos
+│           │           └── offline
+│           │               ├── MainActivity.kt
+│           │               ├
+│           │               ├
+│           │               ├── data
+│           │               │   ├── backup
+│           │               │   │   └── BackupManager.kt
+│           │               │   ├── di
+│           │               │   │   ├── ServiceLocator.kt
+│           │               │   │   └
+│           │               │   ├── local
+│           │               │   │   ├── Migrations.kt
+│           │               │   │   ├── PosDatabase.kt
+│           │               │   │   ├
+│           │               │   │   ├── dao
+│           │               │   │   │   ├── CartDao.kt
+│           │               │   │   │   ├── CashierDao.kt
+│           │               │   │   │   ├── PrinterDao.kt
+│           │               │   │   │   ├── ProductDao.kt
+│           │               │   │   │   ├
+│           │               │   │   │   ├── ReturnDao.kt
+│           │               │   │   │   ├── ShiftDao.kt
+│           │               │   │   │   ├── StoreProfileDao.kt
+│           │               │   │   │   └── TransactionDao.kt
+│           │               │   │   └── entity
+│           │               │   │       ├── CartItemEntity.kt
+│           │               │   │       ├── CashierEntity.kt
+│           │               │   │       ├── DiscountType.kt
+│           │               │   │       ├── PaymentMethod.kt
+│           │               │   │       ├── PrinterEntity.kt
+│           │               │   │       ├── ProductEntity.kt
+│           │               │   │       ├── ReturnEntities.kt
+│           │               │   │       ├── ShiftEntity.kt
+│           │               │   │       ├── StoreProfileEntity.kt
+│           │               │   │       ├── TransactionEntities.kt
+│           │               │   │       └── TransactionStatus.kt
+│           │               │   └── repository
+│           │               │       ├── CartRepository.kt
+│           │               │       ├── CashierRepository.kt
+│           │               │       ├── PrinterRepository.kt
+│           │               │       ├── ProductRepository.kt
+│           │               │       ├
+│           │               │       ├── ReturnRepository.kt
+│           │               │       ├── ShiftRepository.kt
+│           │               │       ├── StoreProfileRepository.kt
+│           │               │       └── TransactionRepository.kt
+│           │               ├── ui
+│           │               │   ├── components
+│           │               │   │   ├── BarcodeScannerCamera.kt
+│           │               │   │   ├── BarcodeScannerCamera.kt.bak
+│           │               │   │   ├── GlassCard.kt
+│           │               │   │   ├── MoneyTransformation.kt
+│           │               │   │   └── TransactionFormatting.kt
+│           │               │   ├── inventory
+│           │               │   │   ├── InventoryScreen.kt
+│           │               │   │   ├
+│           │               │   │   ├
+│           │               │   │   ├── InventoryViewModel.kt
+│           │               │   │   └
+│           │               │   ├── pos
+│           │               │   │   ├── PosScreen.kt
+│           │               │   │   ├
+│           │               │   │   ├
+│           │               │   │   ├── PosViewModel.kt
+│           │               │   │   ├
+│           │               │   │   └
+│           │               │   ├── receipt
+│           │               │   │   ├── EscPosReceiptFormatter.kt
+│           │               │   │   ├── PrintUiState.kt
+│           │               │   │   ├── ReceiptManager.kt
+│           │               │   │   └
+│           │               │   ├── report
+│           │               │   │   ├── PrinterPickerDialog.kt
+│           │               │   │   ├── ReportScreen.kt
+│           │               │   │   ├
+│           │               │   │   ├
+│           │               │   │   └── ReportViewModel.kt
+│           │               │   ├── settings
+│           │               │   │   ├── BluetoothPickerDialog.kt
+│           │               │   │   ├── PrinterManagementDialog.kt
+│           │               │   │   ├── PrinterViewModel.kt
+│           │               │   │   ├── SettingsScreen.kt
+│           │               │   │   ├
+│           │               │   │   ├
+│           │               │   │   ├── SettingsViewModel.kt
+│           │               │   │   ├
+│           │               │   │   ├
+│           │               │   │   ├── StoreProfileDialog.kt
+│           │               │   │   ├── StoreProfileViewModel.kt
+│           │               │   │   └── UsbPickerDialog.kt
+│           │               │   └── theme
+│           │               │       └── Theme.kt
+│           │               └── util
+│           │                   ├── BluetoothPrinterHelper.kt
+│           │                   ├── CameraPermissionState.kt
+│           │                   ├── ExcelManager.kt
+│           │                   ├── HardwareScannerInterceptor.kt
+│           │                   ├── LogoImageProcessor.kt
+│           │                   ├── Money.kt
+│           │                   ├── PermissionUtils.kt
+│           │                   ├── PrintCoordinator.kt
+│           │                   ├── PrinterConnectionFactory.kt
+│           │                   ├── UsbPrinterHelper.kt
+│           │                   └
+│           └── res
+│               └── xml
+│                   └── file_paths.xml
+├── build.gradle.kts
+├── gradle
+│   └── wrapper
+│       ├── gradle-wrapper.jar
+│       ├── gradle-wrapper.properties
+│
+├── gradle.properties
+├
+├── gradlew
+├── gradlew.bat
+├
+├── settings.gradle.kts
+└
+```

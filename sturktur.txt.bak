@@ -1,0 +1,154 @@
+"```text
+.
+├── README.md
+├── app
+│   ├── build.gradle.kts
+│   ├
+│   ├── proguard-rules.pro
+│   ├
+│   ├── schemas
+│   │   └── com.pos.offline.data.local.PosDatabase
+│   │       ├── 1.json
+│   │       ├── 10.json
+│   │       ├── 2.json
+│   │       ├── 3.json
+│   │       ├── 5.json
+│   │       ├── 6.json
+│   │       ├── 7.json
+│   │       ├── 8.json
+│   │       └── 9.json
+│   └── src
+│       ├── androidTest
+│       │   └── java
+│       │       └── com
+│       │           └── pos
+│       │               └── offline
+│       │                   └── data
+│       │                       └── local
+│       │                           └── PosDatabaseMigrationTest.kt
+│       └── main
+│           ├── AndroidManifest.xml
+│           ├── java
+│           │   └── com
+│           │       └── pos
+│           │           └── offline
+│           │               ├── MainActivity.kt
+│           │               ├
+│           │               ├
+│           │               ├── data
+│           │               │   ├── backup
+│           │               │   │   └── BackupManager.kt
+│           │               │   ├── di
+│           │               │   │   ├── ServiceLocator.kt
+│           │               │   │   └
+│           │               │   ├── local
+│           │               │   │   ├── Migrations.kt
+│           │               │   │   ├── PosDatabase.kt
+│           │               │   │   ├
+│           │               │   │   ├── dao
+│           │               │   │   │   ├── CartDao.kt
+│           │               │   │   │   ├── CashierDao.kt
+│           │               │   │   │   ├── PrinterDao.kt
+│           │               │   │   │   ├── ProductDao.kt
+│           │               │   │   │   ├
+│           │               │   │   │   ├── ReturnDao.kt
+│           │               │   │   │   ├── ShiftDao.kt
+│           │               │   │   │   ├── StoreProfileDao.kt
+│           │               │   │   │   └── TransactionDao.kt
+│           │               │   │   └── entity
+│           │               │   │       ├── CartItemEntity.kt
+│           │               │   │       ├── CashierEntity.kt
+│           │               │   │       ├── DiscountType.kt
+│           │               │   │       ├── PaymentMethod.kt
+│           │               │   │       ├── PrinterEntity.kt
+│           │               │   │       ├── ProductEntity.kt
+│           │               │   │       ├── ReturnEntities.kt
+│           │               │   │       ├── ShiftEntity.kt
+│           │               │   │       ├── StoreProfileEntity.kt
+│           │               │   │       ├── TransactionEntities.kt
+│           │               │   │       └── TransactionStatus.kt
+│           │               │   └── repository
+│           │               │       ├── CartRepository.kt
+│           │               │       ├── CashierRepository.kt
+│           │               │       ├── PrinterRepository.kt
+│           │               │       ├── ProductRepository.kt
+│           │               │       ├
+│           │               │       ├── ReturnRepository.kt
+│           │               │       ├── ShiftRepository.kt
+│           │               │       ├── StoreProfileRepository.kt
+│           │               │       └── TransactionRepository.kt
+│           │               ├── ui
+│           │               │   ├── components
+│           │               │   │   ├── BarcodeScannerCamera.kt
+│           │               │   │   ├── BarcodeScannerCamera.kt.bak
+│           │               │   │   ├── GlassCard.kt
+│           │               │   │   ├── MoneyTransformation.kt
+│           │               │   │   └── TransactionFormatting.kt
+│           │               │   ├── inventory
+│           │               │   │   ├── InventoryScreen.kt
+│           │               │   │   ├
+│           │               │   │   ├
+│           │               │   │   ├── InventoryViewModel.kt
+│           │               │   │   └
+│           │               │   ├── pos
+│           │               │   │   ├── PosScreen.kt
+│           │               │   │   ├
+│           │               │   │   ├
+│           │               │   │   ├── PosViewModel.kt
+│           │               │   │   ├
+│           │               │   │   └
+│           │               │   ├── receipt
+│           │               │   │   ├── EscPosReceiptFormatter.kt
+│           │               │   │   ├── PrintUiState.kt
+│           │               │   │   ├── ReceiptManager.kt
+│           │               │   │   └
+│           │               │   ├── report
+│           │               │   │   ├── PrinterPickerDialog.kt
+│           │               │   │   ├── ReportScreen.kt
+│           │               │   │   ├
+│           │               │   │   ├
+│           │               │   │   └── ReportViewModel.kt
+│           │               │   ├── settings
+│           │               │   │   ├── BluetoothPickerDialog.kt
+│           │               │   │   ├── PrinterManagementDialog.kt
+│           │               │   │   ├── PrinterViewModel.kt
+│           │               │   │   ├── SettingsScreen.kt
+│           │               │   │   ├
+│           │               │   │   ├
+│           │               │   │   ├── SettingsViewModel.kt
+│           │               │   │   ├
+│           │               │   │   ├
+│           │               │   │   ├── StoreProfileDialog.kt
+│           │               │   │   ├── StoreProfileViewModel.kt
+│           │               │   │   └── UsbPickerDialog.kt
+│           │               │   └── theme
+│           │               │       └── Theme.kt
+│           │               └── util
+│           │                   ├── BluetoothPrinterHelper.kt
+│           │                   ├── CameraPermissionState.kt
+│           │                   ├── ExcelManager.kt
+│           │                   ├── HardwareScannerInterceptor.kt
+│           │                   ├── LogoImageProcessor.kt
+│           │                   ├── Money.kt
+│           │                   ├── PermissionUtils.kt
+│           │                   ├── PrintCoordinator.kt
+│           │                   ├── PrinterConnectionFactory.kt
+│           │                   ├── UsbPrinterHelper.kt
+│           │                   └
+│           └── res
+│               └── xml
+│                   └── file_paths.xml
+├── build.gradle.kts
+├── gradle
+│   └── wrapper
+│       ├── gradle-wrapper.jar
+│       ├── gradle-wrapper.properties
+│
+├── gradle.properties
+├
+├── gradlew
+├── gradlew.bat
+├
+├── settings.gradle.kts
+└
+```
