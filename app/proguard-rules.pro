@@ -14,24 +14,20 @@
 # =========================================================================
 # 2. MODEL DATABASE & REPOSITORY DTO (Spesifik POS Offline)
 # =========================================================================
-# --- [Grup 1] Model Database (Entity Room) ---
 # Memastikan tabel SQLite (ProductEntity, TransactionEntity, dll) tidak diacak namanya
 -keep class com.pos.offline.data.local.entity.** { *; }
 -keep @androidx.room.Entity class * { *; }
 
-# --- [Grup 2] DTO Hasil Repository ---
 # Memastikan kelas pembungkus hasil query (CheckoutResult, ShiftSummary, dll) tetap utuh
 -keep class com.pos.offline.data.repository.** { *; }
 
 # =========================================================================
 # 3. MODEL STATE UI & FORMS (Spesifik Jetpack Compose & ViewModel)
 # =========================================================================
-# --- [Grup 3] Model State UI ---
 # Sangat penting jika State UI disimpan menggunakan SavedStateHandle / Parcelable
 -keep class * implements android.os.Parcelable { *; }
 
-# Menjaga semua kelas yang berakhiran UiState, FormState, SortOption, dll, 
-# agar variabelnya tidak hilang saat dibaca oleh Jetpack Compose.
+# Menjaga semua kelas yang berakhiran UiState, FormState, SortOption, dll
 -keep class **.*UiState { *; }
 -keep class **.*FormState { *; }
 -keep class **.*SortOption { *; }
@@ -48,7 +44,6 @@
 # =========================================================================
 # 4. UTILLITAS & FITUR KHUSUS (Printer, Excel, dll)
 # =========================================================================
-# --- [Grup 4] Model Utilitas ---
 # Menjaga kelancaran parsing Excel (ImportedProductRow, ExcelImportResult) 
 # dan deteksi USB Printer (UsbDeviceInfo)
 -keep class com.pos.offline.util.** { *; }
@@ -66,10 +61,19 @@
 }
 
 # =========================================================================
-# 6. APACHE POI, XMLBEANS, & KETERGANTUNGANNYA
+# 6. APACHE POI, XMLBEANS, & KETERGANTUNGANNYA (Fokus Excel Saja)
 # =========================================================================
-# Mempertahankan struktur utama agar fungsi Excel tetap berjalan
--keep class org.apache.poi.** { *; }
+# Mempertahankan paket utama dan utilitas dasar
+-keep class org.apache.poi.* { *; }
+-keep class org.apache.poi.util.** { *; }
+-keep class org.apache.poi.poifs.** { *; }
+
+# HANYA mempertahankan modul Spreadsheet/Excel, mengabaikan PowerPoint & Word
+-keep class org.apache.poi.ss.** { *; }
+-keep class org.apache.poi.xssf.** { *; }
+-keep class org.apache.poi.hssf.** { *; }
+
+# Ketergantungan XML Excel
 -keep class org.apache.poi.ooxml.** { *; }
 -keep class org.apache.xmlbeans.** { *; }
 -keep class com.microsoft.schemas.** { *; }
@@ -81,40 +85,39 @@
 # =========================================================================
 # 7. MENGABAIKAN ERROR KELAS YANG HILANG (Missing Classes)
 # =========================================================================
-
-# --- [A] Skema Dokumen Microsoft & OpenXML ---
+# Skema Dokumen Microsoft & OpenXML
 -dontwarn com.microsoft.schemas.**
 -dontwarn org.openxmlformats.schemas.drawingml.**
 -dontwarn org.openxmlformats.**
 
-# --- [B] Pemrosesan W3C DOM (XML & Vektor SVG Desktop) ---
+# Pemrosesan W3C DOM (XML & Vektor SVG Desktop)
 -dontwarn org.w3c.dom.events.**
 -dontwarn org.w3c.dom.svg.**
 -dontwarn org.w3c.dom.traversal.**
 -dontwarn org.w3.**
 
-# --- [C] Kriptografi, Tanda Tangan Digital, & Keamanan (BouncyCastle & JCP) ---
+# Kriptografi, Tanda Tangan Digital, & Keamanan (BouncyCastle & JCP)
 -dontwarn org.bouncycastle.**
 -dontwarn org.apache.xml.security.**
 -dontwarn org.apache.jcp.xml.dsig.**
 -dontwarn org.w3.x2000.x09.xmldsig.**
 -dontwarn org.etsi.uri.x01903.v13.**
 
-# --- [D] Java GSS (Keamanan & Autentikasi Desktop) ---
+# Java GSS (Keamanan & Autentikasi Desktop)
 -dontwarn org.ietf.jgss.**
 
-# --- [E] Library PDF (PDFBox & Rototor) ---
+# Library PDF (PDFBox & Rototor)
 -dontwarn org.apache.pdfbox.**
 -dontwarn de.rototor.pdfbox.**
 
-# --- [F] Modul Desktop Java Standar (AWT, NIO, dll) ---
+# Modul Desktop Java Standar (AWT, NIO, dll)
 -dontwarn java.awt.**
 -dontwarn javax.**
 -dontwarn java.nio.file.**
 -dontwarn java.lang.invoke.**
 -dontwarn org.apache.jcp.**
 
-# --- [G] Peringatan Tambahan POI / Eksternal Lainnya ---
+# Peringatan Tambahan POI / Eksternal Lainnya
 -dontwarn org.apache.poi.**
 -dontwarn org.apache.xmlbeans.**
 -dontwarn schemaorg_apache_xmlbeans.**

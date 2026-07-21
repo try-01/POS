@@ -66,8 +66,9 @@
 }
 
 # =========================================================================
-# 6. APACHE POI & XMLBEANS (Modul Excel)
+# 6. APACHE POI, XMLBEANS, & KETERGANTUNGANNYA
 # =========================================================================
+# Mempertahankan struktur utama agar fungsi Excel tetap berjalan
 -keep class org.apache.poi.** { *; }
 -keep class org.apache.poi.ooxml.** { *; }
 -keep class org.apache.xmlbeans.** { *; }
@@ -77,17 +78,53 @@
 -keep class org.etsi.** { *; }
 -keep class org.w3.** { *; }
 
-# Mengabaikan warning kelas opsional yang absen saat build rilis
--dontwarn aQute.bnd.annotation.**
--dontwarn com.github.luben.zstd.**
--dontwarn com.github.javaparser.**             # Solusi error missing class javaparser
--dontwarn edu.umd.cs.findbugs.annotations.**
+# =========================================================================
+# 7. MENGABAIKAN ERROR KELAS YANG HILANG (Missing Classes)
+# =========================================================================
+
+# --- [A] Skema Dokumen Microsoft & OpenXML ---
+-dontwarn com.microsoft.schemas.**
+-dontwarn org.openxmlformats.schemas.drawingml.**
+-dontwarn org.openxmlformats.**
+
+# --- [B] Pemrosesan W3C DOM (XML & Vektor SVG Desktop) ---
+-dontwarn org.w3c.dom.events.**
+-dontwarn org.w3c.dom.svg.**
+-dontwarn org.w3c.dom.traversal.**
+-dontwarn org.w3.**
+
+# --- [C] Kriptografi, Tanda Tangan Digital, & Keamanan (BouncyCastle & JCP) ---
+-dontwarn org.bouncycastle.**
+-dontwarn org.apache.xml.security.**
+-dontwarn org.apache.jcp.xml.dsig.**
+-dontwarn org.w3.x2000.x09.xmldsig.**
+-dontwarn org.etsi.uri.x01903.v13.**
+
+# --- [D] Java GSS (Keamanan & Autentikasi Desktop) ---
+-dontwarn org.ietf.jgss.**
+
+# --- [E] Library PDF (PDFBox & Rototor) ---
+-dontwarn org.apache.pdfbox.**
+-dontwarn de.rototor.pdfbox.**
+
+# --- [F] Modul Desktop Java Standar (AWT, NIO, dll) ---
 -dontwarn java.awt.**
 -dontwarn javax.**
+-dontwarn java.nio.file.**
+-dontwarn java.lang.invoke.**
+-dontwarn org.apache.jcp.**
+
+# --- [G] Peringatan Tambahan POI / Eksternal Lainnya ---
+-dontwarn org.apache.poi.**
+-dontwarn org.apache.xmlbeans.**
+-dontwarn schemaorg_apache_xmlbeans.**
+-dontwarn aQute.bnd.annotation.**
+-dontwarn com.github.luben.zstd.**
+-dontwarn com.github.javaparser.**
+-dontwarn edu.umd.cs.findbugs.annotations.**
 -dontwarn net.sf.saxon.**
 -dontwarn org.apache.batik.**
 -dontwarn org.apache.commons.compress.compressors.xz.XZCompressorInputStream
--dontwarn org.apache.xmlbeans.**               # Solusi error missing class xmlbeans
 -dontwarn org.jspecify.annotations.**
 -dontwarn org.osgi.framework.**
 -dontwarn org.tukaani.xz.**
