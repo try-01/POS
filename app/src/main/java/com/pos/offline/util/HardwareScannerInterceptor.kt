@@ -22,27 +22,27 @@ class HardwareScannerInterceptor(
             event.keyCode == KeyEvent.KEYCODE_ENTER ||
                 event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
 
-            if (isEnter) {
-                val candidate = buffer.toString()
-                val lastGapFast = buffer.isNotEmpty() && (now - lastCharTime) <= maxCharGapMs
-                buffer.clear()
+        if (isEnter) {
+            val candidate = buffer.toString()
+            val lastGapFast = buffer.isNotEmpty() && (now - lastCharTime) <= maxCharGapMs
+            buffer.clear()
 
-                // FIX: Mengizinkan karakter alfanumerik (Code128) ditambah tanda hubung
-                val validBarcode =
-                    lastGapFast &&
-                        candidate.length in minLength..maxLength &&
-                        candidate.all { it.isLetterOrDigit() || it == '-' }
+            // FIX: Mengizinkan karakter alfanumerik (Code128) ditambah tanda hubung
+            val validBarcode =
+                lastGapFast &&
+                    candidate.length in minLength..maxLength &&
+                    candidate.all { it.isLetterOrDigit() || it == '-' }
 
-                if (validBarcode) onBarcodeDetected(candidate)
-                return
-            }
+            if (validBarcode) onBarcodeDetected(candidate)
+            return
+        }
 
-            val char = event.unicodeChar.toChar()
-            // FIX: Hanya terima huruf, angka, dan tanda hubung. Karakter lain (seperti spasi) membatalkan buffer.
-            if (!char.isLetterOrDigit() && char != '-') {
-                buffer.clear()
-                return
-            }
+        val char = event.unicodeChar.toChar()
+        // FIX: Hanya terima huruf, angka, dan tanda hubung. Karakter lain (seperti spasi) membatalkan buffer.
+        if (!char.isLetterOrDigit() && char != '-') {
+            buffer.clear()
+            return
+        }
 
         if (buffer.isNotEmpty() && (now - lastCharTime) > maxCharGapMs) {
             buffer.clear() // jeda kelamaan -> ini awal input baru
