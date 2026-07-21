@@ -179,7 +179,7 @@ object ReceiptManager {
         }
     }
     fun buildShareIntent(context: Context, result: CheckoutResult, storeProfile: StoreProfileEntity? = null): Intent {
-        val bitmap = renderToBitmap(result, storeProfile)
+        val bitmap = renderToBitmap(result, storeProfile = storeProfile)
         val dir = File(context.cacheDir, "shared_receipts").apply { mkdirs() }
         val file = File(dir, "${result.transaction.id}_${System.currentTimeMillis()}.png")
         FileOutputStream(file).use { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }
