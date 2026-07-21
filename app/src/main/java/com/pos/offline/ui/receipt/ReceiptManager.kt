@@ -320,15 +320,4 @@ object ReceiptManager {
             }
         return Intent.createChooser(sendIntent, "Bagikan Struk PDF")
     }
-
-    fun bondedPrinters(context: Context): List<BluetoothDevice> =
-        try {
-            context
-                .getSystemService(BluetoothManager::class.java)
-                ?.adapter
-                ?.bondedDevices
-                ?.toList() ?: emptyList()
-        } catch (e: SecurityException) {
-            emptyList() // BLUETOOTH_CONNECT belum diberikan (Android 12+)
-        }
 }

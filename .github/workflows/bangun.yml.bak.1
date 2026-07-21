@@ -7,10 +7,6 @@ jobs:
   build:
     name: Build Release APK
     runs-on: ubuntu-latest
-    
-    # TAMBAHAN: Izin agar GitHub Action bot bisa melakukan commit & push
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout Repository
@@ -21,21 +17,6 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-
-      # --- STEP BARU: Menjalankan Optimize Imports dengan Ktlint ---
-      - name: Download and run Ktlint (Optimize Imports)
-        run: |
-          curl -sSLO https://github.com/pinterest/ktlint/releases/latest/download/ktlint
-          chmod a+x ktlint
-          # Menjalankan format (termasuk hapus unused imports) untuk semua file Kotlin
-          ./ktlint --format "app/src/**/*.kt" || true
-
-      # --- STEP BARU: Commit file jika ada import yang dihapus/dirapikan ---
-      - name: Auto-Commit Optimized Code
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "style: optimize imports and format code"
-      # -----------------------------------------------------------
 
       # Menggunakan action resmi Gradle untuk caching otomatis
       - name: Setup Gradle
