@@ -80,36 +80,46 @@ object ServiceLocator {
     fun initialize(context: Context) {
         appContext = context.applicationContext
     }
-    fun posViewModelFactory(): ViewModelProvider.Factory = PosViewModelFactory(
-        productRepository,
-        cartRepository,
-        transactionRepository,
-        cashierRepository,
-        shiftRepository,
-        printCoordinator,
-        storeProfileRepository,
-        printerRepository,
-        printerConnectionFactory
-    )
 
-    fun inventoryViewModelFactory(): ViewModelProvider.Factory =
-        InventoryViewModelFactory(appContext, productRepository)
+    fun posViewModelFactory(): ViewModelProvider.Factory =
+        PosViewModelFactory(
+            productRepository,
+            cartRepository,
+            transactionRepository,
+            cashierRepository,
+            shiftRepository,
+            printCoordinator,
+            storeProfileRepository,
+            printerRepository,
+            printerConnectionFactory,
+        )
+
+    fun inventoryViewModelFactory(): ViewModelProvider.Factory = InventoryViewModelFactory(appContext, productRepository)
+
     fun reportViewModelFactory(): ViewModelProvider.Factory =
         ReportViewModelFactory(transactionRepository, shiftRepository, returnRepository, printCoordinator, printerRepository)
-    fun settingsViewModelFactory(): ViewModelProvider.Factory =
-        SettingsViewModelFactory(appContext, cashierRepository, shiftRepository)
+
+    fun settingsViewModelFactory(): ViewModelProvider.Factory = SettingsViewModelFactory(appContext, cashierRepository, shiftRepository)
+
     fun printerViewModelFactory(): ViewModelProvider.Factory =
         PrinterViewModelFactory(printerRepository, bluetoothPrinterHelper, usbPrinterHelper, printerConnectionFactory)
-    fun storeProfileViewModelFactory(): ViewModelProvider.Factory =
-        StoreProfileViewModelFactory(storeProfileRepository, logoImageProcessor)
+
+    fun storeProfileViewModelFactory(): ViewModelProvider.Factory = StoreProfileViewModelFactory(storeProfileRepository, logoImageProcessor)
 
     fun transactionRepository(): TransactionRepository = transactionRepository
+
     fun productRepository(): ProductRepository = productRepository
+
     fun cashierRepository(): CashierRepository = cashierRepository
+
     fun shiftRepository(): ShiftRepository = shiftRepository
+
     fun returnRepository(): ReturnRepository = returnRepository
+
     fun printerRepository(): PrinterRepository = printerRepository
+
     fun storeProfileRepository(): StoreProfileRepository = storeProfileRepository
+
     fun printCoordinator(): PrintCoordinator = printCoordinator
 }
 
@@ -122,7 +132,7 @@ class PosViewModelFactory(
     private val printCoordinator: PrintCoordinator,
     private val storeProfileRepository: StoreProfileRepository,
     private val printerRepository: PrinterRepository,
-    private val printerConnectionFactory: PrinterConnectionFactory
+    private val printerConnectionFactory: PrinterConnectionFactory,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
@@ -135,17 +145,16 @@ class PosViewModelFactory(
             printCoordinator,
             storeProfileRepository,
             printerRepository,
-            printerConnectionFactory
+            printerConnectionFactory,
         ) as T
 }
 
 class InventoryViewModelFactory(
     private val appContext: Context,
-    private val productRepository: ProductRepository
+    private val productRepository: ProductRepository,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        InventoryViewModel(appContext, productRepository) as T
+    override fun <T : ViewModel> create(modelClass: Class<T>): T = InventoryViewModel(appContext, productRepository) as T
 }
 
 class ReportViewModelFactory(
@@ -153,7 +162,7 @@ class ReportViewModelFactory(
     private val shiftRepository: ShiftRepository,
     private val returnRepository: ReturnRepository,
     private val printCoordinator: PrintCoordinator,
-    private val printerRepository: PrinterRepository
+    private val printerRepository: PrinterRepository,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
@@ -163,18 +172,17 @@ class ReportViewModelFactory(
 class SettingsViewModelFactory(
     private val appContext: Context,
     private val cashierRepository: CashierRepository,
-    private val shiftRepository: ShiftRepository
+    private val shiftRepository: ShiftRepository,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        SettingsViewModel(appContext, cashierRepository, shiftRepository) as T
+    override fun <T : ViewModel> create(modelClass: Class<T>): T = SettingsViewModel(appContext, cashierRepository, shiftRepository) as T
 }
 
 class PrinterViewModelFactory(
     private val printerRepository: PrinterRepository,
     private val bluetoothPrinterHelper: BluetoothPrinterHelper,
     private val usbPrinterHelper: UsbPrinterHelper,
-    private val printerConnectionFactory: PrinterConnectionFactory
+    private val printerConnectionFactory: PrinterConnectionFactory,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
@@ -183,9 +191,8 @@ class PrinterViewModelFactory(
 
 class StoreProfileViewModelFactory(
     private val storeProfileRepository: StoreProfileRepository,
-    private val logoImageProcessor: LogoImageProcessor
+    private val logoImageProcessor: LogoImageProcessor,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        StoreProfileViewModel(storeProfileRepository, logoImageProcessor) as T
+    override fun <T : ViewModel> create(modelClass: Class<T>): T = StoreProfileViewModel(storeProfileRepository, logoImageProcessor) as T
 }

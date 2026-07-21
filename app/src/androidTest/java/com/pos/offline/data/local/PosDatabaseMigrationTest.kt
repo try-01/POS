@@ -13,14 +13,14 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class PosDatabaseMigrationTest {
-
     private val testDbName = "migration-test.db"
 
     @get:Rule
-    val helper: MigrationTestHelper = MigrationTestHelper(
-        InstrumentationRegistry.getInstrumentation(),
-        PosDatabase::class.java
-    )
+    val helper: MigrationTestHelper =
+        MigrationTestHelper(
+            InstrumentationRegistry.getInstrumentation(),
+            PosDatabase::class.java,
+        )
 
     @Test
     fun migrate1To2_preservesDataAndAddsCostColumn() {
@@ -32,7 +32,7 @@ class PosDatabaseMigrationTest {
                 (id, name, sku, price, stock, active, createdAt, updatedAt)
             VALUES
                 (1, 'Kopi Test', 'SKU-TEST', 8000, 10, 1, 1700000000000, 1700000000000)
-            """.trimIndent()
+            """.trimIndent(),
         )
         v1.close()
 

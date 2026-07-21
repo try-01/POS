@@ -23,14 +23,14 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
-class CancellableBluetoothConnection(private val device: BluetoothDevice) : DeviceConnection() {
-
+class CancellableBluetoothConnection(
+    private val device: BluetoothDevice,
+) : DeviceConnection() {
     @Volatile private var socket: BluetoothSocket? = null
 
-    override fun isConnected(): Boolean =
-        socket?.isConnected == true && super.isConnected()
+    override fun isConnected(): Boolean = socket?.isConnected == true && super.isConnected()
 
-    @SuppressLint("MissingPermission") 
+    @SuppressLint("MissingPermission")
     @Suppress("DEPRECATION")
     override fun connect(): DeviceConnection {
         if (isConnected()) return this
@@ -79,31 +79,53 @@ class CancellableBluetoothConnection(private val device: BluetoothDevice) : Devi
 
 sealed class TestPrintResult {
     object Success : TestPrintResult()
-    data class Failure(val message: String) : TestPrintResult()
+
+    data class Failure(
+        val message: String,
+    ) : TestPrintResult()
 }
+
 sealed class PrintResult {
-    data class Success(val printer: PrinterEntity) : PrintResult()
-    data class Failure(val printer: PrinterEntity, val message: String) : PrintResult()
+    data class Success(
+        val printer: PrinterEntity,
+    ) : PrintResult()
+
+    data class Failure(
+        val printer: PrinterEntity,
+        val message: String,
+    ) : PrintResult()
 }
 
 sealed class CashDrawerResult {
     object Success : CashDrawerResult()
-    data class Failure(val message: String) : CashDrawerResult()
+
+    data class Failure(
+        val message: String,
+    ) : CashDrawerResult()
 }
 
 private sealed class ConnectionResolution {
-    data class Ready(val connection: DeviceConnection, val targetLabel: String) : ConnectionResolution()
-    data class Error(val message: String) : ConnectionResolution()
+    data class Ready(
+        val connection: DeviceConnection,
+        val targetLabel: String,
+    ) : ConnectionResolution()
+
+    data class Error(
+        val message: String,
+    ) : ConnectionResolution()
 }
 
 private sealed class JobOutcome {
     object Success : JobOutcome()
-    data class Failure(val message: String) : JobOutcome()
+
+    data class Failure(
+        val message: String,
+    ) : JobOutcome()
 }
 
 class PrinterConnectionFactory(
     private val bluetoothHelper: BluetoothPrinterHelper,
-    private val usbHelper: UsbPrinterHelper
+    private val usbHelper: UsbPrinterHelper,
 ) {
     suspend fun testPrint(printer: PrinterEntity): TestPrintResult {
         val outcome = executePrintJob(printer, false) { listOf(buildTestPrintMarkup(printer)) }
@@ -116,7 +138,7 @@ class PrinterConnectionFactory(
     suspend fun printReceipt(
         printer: PrinterEntity,
         openCashDrawer: Boolean = false,
-        markupBuilder: (EscPosPrinter) -> List<String>
+        markupBuilder: (EscPosPrinter) -> List<String>,
     ): PrintResult {
         val outcome = executePrintJob(printer, openCashDrawer, markupBuilder)
         return when (outcome) {
@@ -127,10 +149,11 @@ class PrinterConnectionFactory(
 
     suspend fun openCashDrawer(printer: PrinterEntity): CashDrawerResult {
         val resolution = resolveConnection(printer)
-        val ready = when (resolution) {
-            is ConnectionResolution.Error -> return CashDrawerResult.Failure(resolution.message)
-            is ConnectionResolution.Ready -> resolution
-        }
+        val ready =
+            when (resolution) {
+                is ConnectionResolution.Error -> return CashDrawerResult.Failure(resolution.message)
+                is ConnectionResolution.Ready -> resolution
+            }
 
         val genericErrorMessage = connectionErrorMessage(printer, ready.targetLabel)
 
@@ -153,7 +176,7 @@ class PrinterConnectionFactory(
             } catch (e: Exception) {
                 runCatching { ready.connection.disconnect() }
                 CashDrawerResult.Failure(
-                    "Gagal membuka laci: ${e.message ?: "kesalahan tidak diketahui"}"
+                    "Gagal membuka laci: ${e.message ?: "kesalahan tidak diketahui"}",
                 )
             }
         }
@@ -164,13 +187,14 @@ class PrinterConnectionFactory(
     private suspend fun executePrintJob(
         printer: PrinterEntity,
         openCashDrawer: Boolean = false,
-        markupBuilder: (EscPosPrinter) -> List<String>
+        markupBuilder: (EscPosPrinter) -> List<String>,
     ): JobOutcome {
         val resolution = resolveConnection(printer)
-        val ready = when (resolution) {
-            is ConnectionResolution.Error -> return JobOutcome.Failure(resolution.message)
-            is ConnectionResolution.Ready -> resolution
-        }
+        val ready =
+            when (resolution) {
+                is ConnectionResolution.Error -> return JobOutcome.Failure(resolution.message)
+                is ConnectionResolution.Ready -> resolution
+            }
 
         val genericErrorMessage = connectionErrorMessage(printer, ready.targetLabel)
 
@@ -183,22 +207,23 @@ class PrinterConnectionFactory(
             }
 
             return try {
-                val escPosPrinter = withContext(Dispatchers.IO) {
-                    if (openCashDrawer) {
-                        try {
-                            val commands = EscPosPrinterCommands(ready.connection)
-                            commands.openCashBox()
-                            Thread.sleep(250)
-                        } catch (e: Exception) {
+                val escPosPrinter =
+                    withContext(Dispatchers.IO) {
+                        if (openCashDrawer) {
+                            try {
+                                val commands = EscPosPrinterCommands(ready.connection)
+                                commands.openCashBox()
+                                Thread.sleep(250)
+                            } catch (e: Exception) {
+                            }
                         }
+                        EscPosPrinter(
+                            ready.connection,
+                            DEFAULT_PRINTER_DPI,
+                            printer.paperWidth.printableWidthMM(),
+                            printer.charPerLine,
+                        ).useEscAsteriskCommand(true)
                     }
-                    EscPosPrinter(
-                        ready.connection,
-                        DEFAULT_PRINTER_DPI,
-                        printer.paperWidth.printableWidthMM(),
-                        printer.charPerLine
-                    ).useEscAsteriskCommand(true)
-                }
 
                 val markups = markupBuilder(escPosPrinter)
                 withContext(Dispatchers.IO) {
@@ -211,7 +236,7 @@ class PrinterConnectionFactory(
                         }
                     }
                 }
-                
+
                 withContext(Dispatchers.IO) {
                     escPosPrinter.disconnectPrinter()
                 }
@@ -219,7 +244,7 @@ class PrinterConnectionFactory(
             } catch (e: Exception) {
                 runCatching { ready.connection.disconnect() }
                 JobOutcome.Failure(
-                    "Terhubung ke printer, tetapi gagal mencetak: ${e.message ?: "kesalahan tidak diketahui"}"
+                    "Terhubung ke printer, tetapi gagal mencetak: ${e.message ?: "kesalahan tidak diketahui"}",
                 )
             }
         }
@@ -242,7 +267,7 @@ class PrinterConnectionFactory(
         }
         return ConnectionResolution.Ready(
             TcpConnection(ip, port, CONNECT_TIMEOUT_MS.toInt()),
-            "$ip:$port"
+            "$ip:$port",
         )
     }
 
@@ -254,22 +279,24 @@ class PrinterConnectionFactory(
         }
         if (!bluetoothHelper.hasPermissions()) {
             return ConnectionResolution.Error(
-                "Izin Bluetooth tidak diberikan. Buka Pengaturan Aplikasi untuk mengaktifkan izin."
+                "Izin Bluetooth tidak diberikan. Buka Pengaturan Aplikasi untuk mengaktifkan izin.",
             )
         }
-        val adapter = BluetoothAdapter.getDefaultAdapter()
-            ?: return ConnectionResolution.Error("Perangkat ini tidak mendukung Bluetooth.")
+        val adapter =
+            BluetoothAdapter.getDefaultAdapter()
+                ?: return ConnectionResolution.Error("Perangkat ini tidak mendukung Bluetooth.")
         if (!adapter.isEnabled) {
             return ConnectionResolution.Error(
-                "Bluetooth ponsel sedang mati. Nyalakan Bluetooth terlebih dahulu."
+                "Bluetooth ponsel sedang mati. Nyalakan Bluetooth terlebih dahulu.",
             )
         }
 
-        val device = try {
-            adapter.getRemoteDevice(address)
-        } catch (e: IllegalArgumentException) {
-            return ConnectionResolution.Error("Alamat Bluetooth pada printer ini tidak valid.")
-        }
+        val device =
+            try {
+                adapter.getRemoteDevice(address)
+            } catch (e: IllegalArgumentException) {
+                return ConnectionResolution.Error("Alamat Bluetooth pada printer ini tidak valid.")
+            }
         return ConnectionResolution.Ready(CancellableBluetoothConnection(device), printer.label)
     }
 
@@ -279,49 +306,62 @@ class PrinterConnectionFactory(
         if (vendorId == null || productId == null) {
             return ConnectionResolution.Error("Konfigurasi perangkat USB printer ini tidak lengkap.")
         }
-        val usbManager = usbHelper.getSystemUsbManager()
-            ?: return ConnectionResolution.Error("USB tidak didukung pada perangkat ini.")
-        val device = usbHelper.findDeviceByVendorProduct(vendorId, productId)
-            ?: return ConnectionResolution.Error("Perangkat USB tidak ditemukan. Pastikan kabel tersambung.")
+        val usbManager =
+            usbHelper.getSystemUsbManager()
+                ?: return ConnectionResolution.Error("USB tidak didukung pada perangkat ini.")
+        val device =
+            usbHelper.findDeviceByVendorProduct(vendorId, productId)
+                ?: return ConnectionResolution.Error("Perangkat USB tidak ditemukan. Pastikan kabel tersambung.")
 
         val permissionResult = usbHelper.requestPermission(device)
         if (permissionResult != UsbPermissionResult.Granted) {
             return ConnectionResolution.Error(
-                "Izin akses USB tidak diberikan. Pastikan kabel tersambung dan izinkan akses saat diminta."
+                "Izin akses USB tidak diberikan. Pastikan kabel tersambung dan izinkan akses saat diminta.",
             )
         }
 
         return ConnectionResolution.Ready(UsbConnection(usbManager, device), printer.label)
     }
 
-    private suspend fun connectWithTimeout(connection: DeviceConnection): Boolean = supervisorScope {
-        val connectJob = async(Dispatchers.IO) { connection.connect() }
-        val watchdog = launch(Dispatchers.IO) {
-            delay(CONNECT_TIMEOUT_MS)
-            if (connectJob.isActive) {
-                (connection as? CancellableBluetoothConnection)?.forceCloseIfStuck()
-            }
+    private suspend fun connectWithTimeout(connection: DeviceConnection): Boolean =
+        supervisorScope {
+            val connectJob = async(Dispatchers.IO) { connection.connect() }
+            val watchdog =
+                launch(Dispatchers.IO) {
+                    delay(CONNECT_TIMEOUT_MS)
+                    if (connectJob.isActive) {
+                        (connection as? CancellableBluetoothConnection)?.forceCloseIfStuck()
+                    }
+                }
+            val success =
+                try {
+                    connectJob.await()
+                    true
+                } catch (e: Exception) {
+                    false
+                }
+            watchdog.cancel()
+            success
         }
-        val success = try {
-            connectJob.await()
-            true
-        } catch (e: Exception) {
-            false
-        }
-        watchdog.cancel()
-        success
-    }
 
-    private fun connectionErrorMessage(printer: PrinterEntity, targetLabel: String): String =
+    private fun connectionErrorMessage(
+        printer: PrinterEntity,
+        targetLabel: String,
+    ): String =
         when (printer.connectionType) {
-            PrinterConnectionType.WIFI ->
+            PrinterConnectionType.WIFI -> {
                 "Tidak dapat terhubung ke $targetLabel. Pastikan printer menyala dan alamat IP " +
                     "masih sama (IP printer bisa berubah jika direstart tanpa IP statis)."
-            PrinterConnectionType.BLUETOOTH ->
+            }
+
+            PrinterConnectionType.BLUETOOTH -> {
                 "Tidak dapat terhubung ke \"$targetLabel\". Pastikan printer menyala dan dalam jangkauan."
-            PrinterConnectionType.USB ->
+            }
+
+            PrinterConnectionType.USB -> {
                 "Tidak dapat terhubung ke perangkat USB. Pastikan kabel tersambung dengan baik, " +
                     "izin akses masih diberikan, dan printer mendukung mode USB Printer Class standar."
+            }
         }
 
     private fun buildTestPrintMarkup(printer: PrinterEntity): String {

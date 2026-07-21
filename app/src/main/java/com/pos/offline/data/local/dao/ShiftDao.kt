@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ShiftDao {
-
     @Query("SELECT * FROM shifts WHERE endedAt IS NULL ORDER BY startedAt DESC LIMIT 1")
     fun observeOpenShift(): Flow<ShiftEntity?>
 
@@ -18,16 +17,21 @@ interface ShiftDao {
 
     @Query("SELECT * FROM shifts ORDER BY startedAt DESC")
     fun observeAll(): Flow<List<ShiftEntity>>
+
     @Query("SELECT * FROM shifts WHERE endedAt IS NULL ORDER BY startedAt ASC")
     fun observeOpenShifts(): Flow<List<ShiftEntity>>
+
     @Query(
         """
         SELECT * FROM shifts
         WHERE endedAt >= :start AND endedAt < :end
         ORDER BY endedAt DESC
-        """
+        """,
     )
-    fun observeClosedShiftsBetween(start: Long, end: Long): Flow<List<ShiftEntity>>
+    fun observeClosedShiftsBetween(
+        start: Long,
+        end: Long,
+    ): Flow<List<ShiftEntity>>
 
     @Insert
     suspend fun insert(shift: ShiftEntity): Long
@@ -37,20 +41,23 @@ interface ShiftDao {
 
     @Query("SELECT * FROM shifts WHERE id = :id")
     suspend fun getById(id: Long): ShiftEntity?
+
     @Query("SELECT EXISTS(SELECT 1 FROM shifts WHERE cashierId = :cashierId AND endedAt IS NULL)")
     suspend fun hasOpenShiftForCashier(cashierId: Long): Boolean
+
     @Query(
         """
         SELECT COALESCE(SUM(total), 0) FROM transactions
         WHERE shiftId = :shiftId AND paymentMethod = 'CASH' AND status = 'COMPLETED'
-        """
+        """,
     )
     suspend fun cashRevenueForShift(shiftId: Long): Long
+
     @Query(
         """
         SELECT COALESCE(SUM(total), 0) FROM transactions
         WHERE shiftId = :shiftId AND paymentMethod = 'QRIS' AND status = 'COMPLETED'
-        """
+        """,
     )
     suspend fun qrisRevenueForShift(shiftId: Long): Long
 
@@ -60,7 +67,7 @@ interface ShiftDao {
         FROM transaction_items ti
         INNER JOIN transactions t ON t.id = ti.transactionId
         WHERE t.shiftId = :shiftId AND t.status = 'COMPLETED'
-        """
+        """,
     )
     suspend fun totalCostForShift(shiftId: Long): Long
 
@@ -68,7 +75,7 @@ interface ShiftDao {
         """
         SELECT COALESCE(SUM(refundAmount), 0) FROM returns
         WHERE shiftId = :shiftId AND refundMethod = 'CASH'
-        """
+        """,
     )
     suspend fun cashRefundsForShift(shiftId: Long): Long
 }

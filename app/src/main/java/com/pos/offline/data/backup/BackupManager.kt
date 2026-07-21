@@ -14,28 +14,49 @@ import java.io.FileOutputStream
 
 sealed class BackupOutcome {
     object Success : BackupOutcome()
-    data class Error(val throwable: Throwable) : BackupOutcome()
+
+    data class Error(
+        val throwable: Throwable,
+    ) : BackupOutcome()
 }
 
 sealed class RestoreOutcome {
     object Success : RestoreOutcome()
-    data class InvalidFile(val reason: String) : RestoreOutcome()
-    data class Error(val throwable: Throwable) : RestoreOutcome()
-}
-sealed class ShareOutcome {
-    data class Success(val file: File) : ShareOutcome()
-    data class Error(val throwable: Throwable) : ShareOutcome()
-}
-object BackupManager {
 
+    data class InvalidFile(
+        val reason: String,
+    ) : RestoreOutcome()
+
+    data class Error(
+        val throwable: Throwable,
+    ) : RestoreOutcome()
+}
+
+sealed class ShareOutcome {
+    data class Success(
+        val file: File,
+    ) : ShareOutcome()
+
+    data class Error(
+        val throwable: Throwable,
+    ) : ShareOutcome()
+}
+
+object BackupManager {
     private const val DB_NAME = "pos.db"
 
     fun suggestedBackupFileName(): String {
-        val ts = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
-            .format(java.util.Date())
+        val ts =
+            java.text
+                .SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
+                .format(java.util.Date())
         return "kasir-offline-backup-$ts.db"
     }
-    suspend fun exportDatabase(context: Context, destinationUri: Uri): BackupOutcome =
+
+    suspend fun exportDatabase(
+        context: Context,
+        destinationUri: Uri,
+    ): BackupOutcome =
         withContext(Dispatchers.IO) {
             try {
                 checkpointWal(context)
@@ -43,15 +64,16 @@ object BackupManager {
                 val dbFile = context.getDatabasePath(DB_NAME)
                 if (!dbFile.exists()) {
                     return@withContext BackupOutcome.Error(
-                        IllegalStateException("File database tidak ditemukan di ${dbFile.absolutePath}")
+                        IllegalStateException("File database tidak ditemukan di ${dbFile.absolutePath}"),
                     )
                 }
 
                 val resolver = context.contentResolver
-                val output = resolver.openOutputStream(destinationUri, "rwt")
-                    ?: return@withContext BackupOutcome.Error(
-                        IllegalStateException("Tidak bisa membuka tujuan (Uri tidak valid)")
-                    )
+                val output =
+                    resolver.openOutputStream(destinationUri, "rwt")
+                        ?: return@withContext BackupOutcome.Error(
+                            IllegalStateException("Tidak bisa membuka tujuan (Uri tidak valid)"),
+                        )
 
                 output.use { out ->
                     FileInputStream(dbFile).use { input -> input.copyTo(out) }
@@ -62,19 +84,25 @@ object BackupManager {
                 BackupOutcome.Error(t)
             }
         }
+
     private fun checkpointWal(context: Context) {
         val writable = PosDatabase.getInstance(context).openHelper.writableDatabase
         writable.query("PRAGMA wal_checkpoint(FULL)").use { it.moveToFirst() }
     }
-    suspend fun validateAndRestore(context: Context, sourceUri: Uri): RestoreOutcome =
+
+    suspend fun validateAndRestore(
+        context: Context,
+        sourceUri: Uri,
+    ): RestoreOutcome =
         withContext(Dispatchers.IO) {
             val tempFile = File(context.cacheDir, "restore_candidate.db")
             try {
                 val resolver = context.contentResolver
-                val input = resolver.openInputStream(sourceUri)
-                    ?: return@withContext RestoreOutcome.Error(
-                        IllegalStateException("Tidak bisa membaca file sumber (Uri tidak valid)")
-                    )
+                val input =
+                    resolver.openInputStream(sourceUri)
+                        ?: return@withContext RestoreOutcome.Error(
+                            IllegalStateException("Tidak bisa membaca file sumber (Uri tidak valid)"),
+                        )
                 input.use { inp ->
                     FileOutputStream(tempFile).use { out -> inp.copyTo(out) }
                 }
@@ -96,7 +124,6 @@ object BackupManager {
                 }
                 tempFile.delete()
 
-
                 RestoreOutcome.Success
             } catch (t: Throwable) {
                 tempFile.delete()
@@ -104,29 +131,35 @@ object BackupManager {
             }
         }
 
-    private fun validateCandidate(context: Context, candidate: File): String? {
+    private fun validateCandidate(
+        context: Context,
+        candidate: File,
+    ): String? {
         if (!hasSqliteHeader(candidate)) {
             return "File yang dipilih bukan berkas database SQLite yang valid."
         }
 
-        val candidateVersion = try {
-            readUserVersion(candidate.absolutePath)
-        } catch (t: Throwable) {
-            return "File tidak bisa dibuka sebagai database (rusak/korup)."
-        }
+        val candidateVersion =
+            try {
+                readUserVersion(candidate.absolutePath)
+            } catch (t: Throwable) {
+                return "File tidak bisa dibuka sebagai database (rusak/korup)."
+            }
 
-        val candidateHash = try {
-            readIdentityHash(candidate.absolutePath)
-        } catch (t: Throwable) {
-            return "File tidak bisa dibuka sebagai database (rusak/korup)."
-        } ?: return "File database tidak memiliki tabel internal Room yang dikenali."
+        val candidateHash =
+            try {
+                readIdentityHash(candidate.absolutePath)
+            } catch (t: Throwable) {
+                return "File tidak bisa dibuka sebagai database (rusak/korup)."
+            } ?: return "File database tidak memiliki tabel internal Room yang dikenali."
 
         val activeDbPath = context.getDatabasePath(DB_NAME).absolutePath
-        val activeVersion = try {
-            readUserVersion(activeDbPath)
-        } catch (t: Throwable) {
-            null // db aktif belum ada/tidak terbaca -> lewati pengecekan kompatibilitas versi
-        }
+        val activeVersion =
+            try {
+                readUserVersion(activeDbPath)
+            } catch (t: Throwable) {
+                null // db aktif belum ada/tidak terbaca -> lewati pengecekan kompatibilitas versi
+            }
 
         if (activeVersion != null) {
             if (candidateVersion > activeVersion) {
@@ -134,11 +167,12 @@ object BackupManager {
                     "Perbarui aplikasi terlebih dahulu sebelum memulihkan."
             }
             if (candidateVersion == activeVersion) {
-                val activeHash = try {
-                    readIdentityHash(activeDbPath)
-                } catch (t: Throwable) {
-                    null
-                }
+                val activeHash =
+                    try {
+                        readIdentityHash(activeDbPath)
+                    } catch (t: Throwable) {
+                        null
+                    }
                 if (activeHash != null && candidateHash != activeHash) {
                     return "File backup ini berasal dari struktur database yang berbeda " +
                         "(kemungkinan bukan dari aplikasi ini)."
@@ -178,6 +212,7 @@ object BackupManager {
             File(parent, name).takeIf { it.exists() }?.delete()
         }
     }
+
     suspend fun prepareShareableCopy(context: Context): ShareOutcome =
         withContext(Dispatchers.IO) {
             try {
@@ -186,7 +221,7 @@ object BackupManager {
                 val dbFile = context.getDatabasePath(DB_NAME)
                 if (!dbFile.exists()) {
                     return@withContext ShareOutcome.Error(
-                        IllegalStateException("File database tidak ditemukan di ${dbFile.absolutePath}")
+                        IllegalStateException("File database tidak ditemukan di ${dbFile.absolutePath}"),
                     )
                 }
 
@@ -203,17 +238,23 @@ object BackupManager {
                 ShareOutcome.Error(t)
             }
         }
-    fun buildShareIntent(context: Context, file: File): Intent {
+
+    fun buildShareIntent(
+        context: Context,
+        file: File,
+    ): Intent {
         val authority = "${context.packageName}.fileprovider"
         val uri = FileProvider.getUriForFile(context, authority, file)
 
-        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/octet-stream"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
+        val sendIntent =
+            Intent(Intent.ACTION_SEND).apply {
+                type = "application/octet-stream"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
         return Intent.createChooser(sendIntent, "Bagikan Cadangan Database")
     }
+
     fun restartApp(context: Context) {
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
         val componentName = intent?.component

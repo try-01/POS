@@ -32,7 +32,7 @@ import com.pos.offline.util.UsbDeviceInfo
 @Composable
 fun UsbPickerDialog(
     viewModel: PrinterViewModel,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
 ) {
     val state by viewModel.usbUiState.collectAsState()
 
@@ -54,15 +54,16 @@ fun UsbPickerDialog(
         title = { Text("Pilih Printer USB", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
         text = {
             Column(
-                modifier = Modifier
-                    .heightIn(max = 380.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier =
+                    Modifier
+                        .heightIn(max = 380.dp)
+                        .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
                     "Pastikan printer tersambung via kabel USB/OTG ke perangkat ini.",
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 if (state.isRequestingPermission) {
@@ -77,21 +78,21 @@ fun UsbPickerDialog(
                     Text(
                         "Tidak ada perangkat USB terdeteksi.",
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
                     state.devices.forEach { device ->
                         UsbDeviceRow(
                             device = device,
                             enabled = !state.isRequestingPermission,
-                            onClick = { viewModel.selectUsbDevice(device) }
+                            onClick = { viewModel.selectUsbDevice(device) },
                         )
                     }
                 }
 
                 TextButton(
                     onClick = { viewModel.refreshUsbDevices() },
-                    enabled = !state.isRequestingPermission
+                    enabled = !state.isRequestingPermission,
                 ) {
                     Text("Segarkan Daftar", fontSize = 12.sp)
                 }
@@ -99,26 +100,31 @@ fun UsbPickerDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("Tutup", fontSize = 13.sp) }
-        }
+        },
     )
 }
 
 @Composable
-private fun UsbDeviceRow(device: UsbDeviceInfo, enabled: Boolean, onClick: () -> Unit) {
+private fun UsbDeviceRow(
+    device: UsbDeviceInfo,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 6.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Column {
             Text(device.label, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             Text(
                 String.format("VID:PID %04x:%04x", device.vendorId, device.productId),
                 fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Text("Pilih", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)

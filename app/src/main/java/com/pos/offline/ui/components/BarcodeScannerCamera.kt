@@ -29,15 +29,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.pos.offline.util.CameraPermissionState
 import com.pos.offline.util.openAppSettings
@@ -48,26 +48,27 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Composable
 fun BarcodeScannerCamera(
     onBarcodeScanned: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
     val executor = remember { Executors.newSingleThreadExecutor() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) } // Handler untuk pindah ke Main Thread
 
-    val scanner = remember {
-        BarcodeScanning.getClient(
-            BarcodeScannerOptions.Builder()
-                .setBarcodeFormats(
-                    Barcode.FORMAT_EAN_13,
-                    Barcode.FORMAT_EAN_8,
-                    Barcode.FORMAT_UPC_A,
-                    Barcode.FORMAT_UPC_E,
-                    Barcode.FORMAT_CODE_128
-                )
-                .build()
-        )
-    }
+    val scanner =
+        remember {
+            BarcodeScanning.getClient(
+                BarcodeScannerOptions
+                    .Builder()
+                    .setBarcodeFormats(
+                        Barcode.FORMAT_EAN_13,
+                        Barcode.FORMAT_EAN_8,
+                        Barcode.FORMAT_UPC_A,
+                        Barcode.FORMAT_UPC_E,
+                        Barcode.FORMAT_CODE_128,
+                    ).build(),
+            )
+        }
     val scanned = remember { AtomicBoolean(false) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
 
@@ -87,12 +88,15 @@ fun BarcodeScannerCamera(
             providerFuture.addListener({
                 val provider = providerFuture.get()
                 cameraProvider = provider
-                val preview = Preview.Builder().build().also {
-                    it.setSurfaceProvider(previewView.surfaceProvider)
-                }
-                val analysis = ImageAnalysis.Builder()
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
+                val preview =
+                    Preview.Builder().build().also {
+                        it.setSurfaceProvider(previewView.surfaceProvider)
+                    }
+                val analysis =
+                    ImageAnalysis
+                        .Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
                 analysis.setAnalyzer(executor) { proxy ->
                     val mediaImage = proxy.image
                     if (mediaImage == null || scanned.get()) {
@@ -100,15 +104,15 @@ fun BarcodeScannerCamera(
                         return@setAnalyzer
                     }
                     val input = InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
-                    scanner.process(input)
+                    scanner
+                        .process(input)
                         .addOnSuccessListener { barcodes ->
                             barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }?.rawValue?.let { code ->
                                 if (scanned.compareAndSet(false, true)) {
                                     mainHandler.post { onBarcodeScanned(code) }
                                 }
                             }
-                        }
-                        .addOnCompleteListener { proxy.close() }
+                        }.addOnCompleteListener { proxy.close() }
                 }
                 try {
                     provider.unbindAll()
@@ -116,13 +120,13 @@ fun BarcodeScannerCamera(
                         lifecycleOwner,
                         CameraSelector.DEFAULT_BACK_CAMERA,
                         preview,
-                        analysis
+                        analysis,
                     )
                 } catch (e: Exception) {
                 }
             }, ContextCompat.getMainExecutor(c))
             previewView
-        }
+        },
     )
 }
 
@@ -143,11 +147,15 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
                     showScanner = true
                     pendingOpen = false
                 }
+
                 CameraPermissionState.PERMANENTLY_DENIED -> {
                     showDeniedDialog = true
                     pendingOpen = false
                 }
-                else -> Unit
+
+                else -> {
+                    Unit
+                }
             }
         }
     }
@@ -165,7 +173,7 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
                         "Akses kamera untuk scan barcode ditolak permanen. Aktifkan manual lewat Pengaturan aplikasi."
                     } else {
                         "Akses kamera dibutuhkan untuk memindai barcode secara langsung."
-                    }
+                    },
                 )
             },
             confirmButton = {
@@ -183,16 +191,17 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
             },
             dismissButton = {
                 TextButton(onClick = { showDeniedDialog = false }) { Text("Tutup") }
-            }
+            },
         )
     }
 
     if (showScanner) {
         Dialog(
             onDismissRequest = { showScanner = false },
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false
-            )
+            properties =
+                DialogProperties(
+                    usePlatformDefaultWidth = false,
+                ),
         ) {
             Box(Modifier.fillMaxSize()) {
                 BarcodeScannerCamera(
@@ -200,11 +209,11 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
                         showScanner = false
                         onScannedState.value(code)
                     },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
                 )
                 IconButton(
                     onClick = { showScanner = false },
-                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
+                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
                 ) {
                     Icon(Icons.Rounded.Close, contentDescription = "Tutup")
                 }
@@ -214,10 +223,14 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
 
     return {
         when (permState) {
-            CameraPermissionState.GRANTED -> showScanner = true
+            CameraPermissionState.GRANTED -> {
+                showScanner = true
+            }
+
             CameraPermissionState.SHOW_RATIONALE, CameraPermissionState.PERMANENTLY_DENIED -> {
                 showDeniedDialog = true
             }
+
             else -> {
                 pendingOpen = true
                 requestPermission()

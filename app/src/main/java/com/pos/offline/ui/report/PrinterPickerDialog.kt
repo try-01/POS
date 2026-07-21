@@ -21,7 +21,7 @@ import com.pos.offline.data.local.entity.PrinterEntity
 fun PrinterPickerDialog(
     printers: List<PrinterEntity>,
     onSelect: (PrinterEntity) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -32,21 +32,22 @@ fun PrinterPickerDialog(
                     "Struk akan dicetak ulang ke printer yang dipilih. Jika gagal, sistem TIDAK " +
                         "akan mencoba printer lain secara otomatis.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 )
                 LazyColumn {
                     items(printers, key = { it.id }) { printer ->
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onSelect(printer) }
-                                .padding(vertical = 12.dp)
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSelect(printer) }
+                                    .padding(vertical = 12.dp),
                         ) {
                             Text(printer.label, style = MaterialTheme.typography.bodyMedium)
                             Text(
                                 connectionSummary(printer),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             )
                         }
                         HorizontalDivider()
@@ -56,12 +57,13 @@ fun PrinterPickerDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("Batal") }
-        }
+        },
     )
 }
 
-private fun connectionSummary(printer: PrinterEntity): String = when (printer.connectionType) {
-    PrinterConnectionType.WIFI -> "WiFi \u2022 ${printer.wifiIpAddress}:${printer.wifiPort}"
-    PrinterConnectionType.BLUETOOTH -> "Bluetooth"
-    PrinterConnectionType.USB -> "USB"
-}
+private fun connectionSummary(printer: PrinterEntity): String =
+    when (printer.connectionType) {
+        PrinterConnectionType.WIFI -> "WiFi \u2022 ${printer.wifiIpAddress}:${printer.wifiPort}"
+        PrinterConnectionType.BLUETOOTH -> "Bluetooth"
+        PrinterConnectionType.USB -> "USB"
+    }

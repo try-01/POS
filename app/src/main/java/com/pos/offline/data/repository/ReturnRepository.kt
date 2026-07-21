@@ -18,32 +18,42 @@ data class ReturnItemInput(
     val productName: String,
     val unitPrice: Long,
     val quantityReturned: Int,
-    val restocked: Boolean
+    val restocked: Boolean,
 )
 
 data class ReturnDetail(
     val header: ReturnEntity,
-    val items: List<ReturnItemEntity>
+    val items: List<ReturnItemEntity>,
 )
 
 sealed class ReturnOutcome {
-    data class Success(val returnId: Long) : ReturnOutcome()
+    data class Success(
+        val returnId: Long,
+    ) : ReturnOutcome()
+
     data object TransactionNotFound : ReturnOutcome()
+
     data object TransactionVoided : ReturnOutcome()
+
     data object AlreadyReturned : ReturnOutcome()
+
     data object NoItemsSelected : ReturnOutcome()
 
-    data class InvalidQuantity(val productName: String) : ReturnOutcome()
+    data class InvalidQuantity(
+        val productName: String,
+    ) : ReturnOutcome()
 }
 
 class ReturnRepository(
     private val database: PosDatabase,
     private val returnDao: ReturnDao,
     private val transactionDao: TransactionDao,
-    private val productDao: ProductDao
+    private val productDao: ProductDao,
 ) {
-    fun returnsBetween(start: Long, end: Long): Flow<List<ReturnEntity>> =
-        returnDao.observeReturnsBetween(start, end)
+    fun returnsBetween(
+        start: Long,
+        end: Long,
+    ): Flow<List<ReturnEntity>> = returnDao.observeReturnsBetween(start, end)
 
     suspend fun getDetail(returnId: Long): ReturnDetail? {
         val header = returnDao.getById(returnId) ?: return null
@@ -63,10 +73,11 @@ class ReturnRepository(
         shiftId: Long?,
         cashierId: Long?,
         cashierName: String,
-        note: String = ""
+        note: String = "",
     ): ReturnOutcome {
-        val transaction = transactionDao.getById(transactionId)
-            ?: return ReturnOutcome.TransactionNotFound
+        val transaction =
+            transactionDao.getById(transactionId)
+                ?: return ReturnOutcome.TransactionNotFound
         if (transaction.isVoid) return ReturnOutcome.TransactionVoided
         if (transaction.hasReturn) return ReturnOutcome.AlreadyReturned
         if (itemInputs.isEmpty()) return ReturnOutcome.NoItemsSelected
@@ -83,32 +94,34 @@ class ReturnRepository(
         }
 
         val now = System.currentTimeMillis()
-        val header = ReturnEntity(
-            transactionId = transactionId,
-            returnedAt = now,
-            shiftId = shiftId,
-            cashierId = cashierId,
-            cashierName = cashierName,
-            refundAmount = refundAmount,
-            refundMethod = refundMethod.name,
-            note = note
-        )
+        val header =
+            ReturnEntity(
+                transactionId = transactionId,
+                returnedAt = now,
+                shiftId = shiftId,
+                cashierId = cashierId,
+                cashierName = cashierName,
+                refundAmount = refundAmount,
+                refundMethod = refundMethod.name,
+                note = note,
+            )
 
         var newReturnId = 0L
         database.withTransaction {
             newReturnId = returnDao.insertReturn(header)
 
-            val itemEntities = itemInputs.map { input ->
-                ReturnItemEntity(
-                    returnId = newReturnId,
-                    transactionItemId = input.transactionItemId,
-                    productId = input.productId,
-                    productName = input.productName,
-                    unitPrice = input.unitPrice,
-                    quantityReturned = input.quantityReturned,
-                    restocked = input.restocked
-                )
-            }
+            val itemEntities =
+                itemInputs.map { input ->
+                    ReturnItemEntity(
+                        returnId = newReturnId,
+                        transactionItemId = input.transactionItemId,
+                        productId = input.productId,
+                        productName = input.productName,
+                        unitPrice = input.unitPrice,
+                        quantityReturned = input.quantityReturned,
+                        restocked = input.restocked,
+                    )
+                }
             returnDao.insertItems(itemEntities)
 
             itemInputs.forEach { input ->

@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PrinterDao {
-
     @Query("SELECT * FROM printers ORDER BY priority ASC")
     fun observeAll(): Flow<List<PrinterEntity>>
 

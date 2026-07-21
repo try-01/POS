@@ -12,39 +12,45 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
-class LogoImageProcessor(private val appContext: Context) {
+class LogoImageProcessor(
+    private val appContext: Context,
+) {
+    suspend fun process(uri: Uri): ByteArray? =
+        withContext(Dispatchers.IO) {
+            try {
+                val original = decodeBitmapSafely(uri) ?: return@withContext null
+                val resized = resizeToFit(original, MAX_DIMENSION)
+                val grayscale = toGrayscale(resized)
+                val output = ByteArrayOutputStream()
+                grayscale.compress(Bitmap.CompressFormat.PNG, 100, output)
+                output.toByteArray()
+            } catch (e: Exception) {
+                null
+            }
+        }
 
-    suspend fun process(uri: Uri): ByteArray? = withContext(Dispatchers.IO) {
-        try {
-            val original = decodeBitmapSafely(uri) ?: return@withContext null
-            val resized = resizeToFit(original, MAX_DIMENSION)
-            val grayscale = toGrayscale(resized)
-            val output = ByteArrayOutputStream()
-            grayscale.compress(Bitmap.CompressFormat.PNG, 100, output)
-            output.toByteArray()
-        } catch (e: Exception) {
-            null
+    private fun decodeBitmapSafely(uri: Uri): Bitmap? {
+        val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+
+        val boundsStream = appContext.contentResolver.openInputStream(uri) ?: return null
+        boundsStream.use { stream ->
+            BitmapFactory.decodeStream(stream, null, boundsOptions)
+        } // Tidak perlu ?: return null di sini, karena decodeStream memang pasti null
+
+        val sampleSize = calculateInSampleSize(boundsOptions, MAX_DIMENSION * 2, MAX_DIMENSION * 2)
+        val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+
+        val decodeStream = appContext.contentResolver.openInputStream(uri) ?: return null
+        return decodeStream.use { stream ->
+            BitmapFactory.decodeStream(stream, null, decodeOptions)
         }
     }
 
-private fun decodeBitmapSafely(uri: Uri): Bitmap? {
-    val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    
-    val boundsStream = appContext.contentResolver.openInputStream(uri) ?: return null
-    boundsStream.use { stream ->
-        BitmapFactory.decodeStream(stream, null, boundsOptions)
-    } // Tidak perlu ?: return null di sini, karena decodeStream memang pasti null
-
-    val sampleSize = calculateInSampleSize(boundsOptions, MAX_DIMENSION * 2, MAX_DIMENSION * 2)
-    val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
-    
-    val decodeStream = appContext.contentResolver.openInputStream(uri) ?: return null
-    return decodeStream.use { stream ->
-        BitmapFactory.decodeStream(stream, null, decodeOptions)
-    }
-}
-
-    private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+    private fun calculateInSampleSize(
+        options: BitmapFactory.Options,
+        reqWidth: Int,
+        reqHeight: Int,
+    ): Int {
         val height = options.outHeight
         val width = options.outWidth
         var inSampleSize = 1
@@ -58,7 +64,10 @@ private fun decodeBitmapSafely(uri: Uri): Bitmap? {
         return inSampleSize
     }
 
-    private fun resizeToFit(bitmap: Bitmap, maxDimension: Int): Bitmap {
+    private fun resizeToFit(
+        bitmap: Bitmap,
+        maxDimension: Int,
+    ): Bitmap {
         val width = bitmap.width
         val height = bitmap.height
         if (width <= maxDimension && height <= maxDimension) return bitmap
@@ -71,9 +80,10 @@ private fun decodeBitmapSafely(uri: Uri): Bitmap? {
     private fun toGrayscale(bitmap: Bitmap): Bitmap {
         val grayscaleBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(grayscaleBitmap)
-        val paint = Paint().apply {
-            colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) })
-        }
+        val paint =
+            Paint().apply {
+                colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) })
+            }
         canvas.drawBitmap(bitmap, 0f, 0f, paint)
         return grayscaleBitmap
     }

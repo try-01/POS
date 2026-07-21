@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface StoreProfileDao {
-
     @Query("SELECT * FROM store_profile WHERE id = 1 LIMIT 1")
     fun observe(): Flow<StoreProfileEntity?>
 

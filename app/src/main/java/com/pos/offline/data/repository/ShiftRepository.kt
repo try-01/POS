@@ -9,7 +9,7 @@ data class ShiftSummary(
     val cashRevenue: Long,
     val qrisRevenue: Long,
     val totalCost: Long,
-    val cashRefunds: Long
+    val cashRefunds: Long,
 ) {
     val totalRevenue: Long get() = cashRevenue + qrisRevenue
     val grossProfit: Long get() = totalRevenue - totalCost
@@ -17,28 +17,39 @@ data class ShiftSummary(
     val expectedCashInDrawer: Long get() = startingCash + cashRevenue - cashRefunds
 }
 
-class ShiftRepository(private val shiftDao: ShiftDao) {
-
+class ShiftRepository(
+    private val shiftDao: ShiftDao,
+) {
     val openShift: Flow<ShiftEntity?> = shiftDao.observeOpenShift()
     val allShifts: Flow<List<ShiftEntity>> = shiftDao.observeAll()
     val openShifts: Flow<List<ShiftEntity>> = shiftDao.observeOpenShifts()
 
     suspend fun getOpenShift(): ShiftEntity? = shiftDao.getOpenShift()
-    fun closedShiftsBetween(start: Long, end: Long): Flow<List<ShiftEntity>> =
-        shiftDao.observeClosedShiftsBetween(start, end)
-    suspend fun getById(shiftId: Long): ShiftEntity? = shiftDao.getById(shiftId)
-    suspend fun hasOpenShift(cashierId: Long): Boolean =
-        shiftDao.hasOpenShiftForCashier(cashierId)
 
-    suspend fun startShift(cashierId: Long, cashierName: String, startingCash: Long): Long {
-        val shift = ShiftEntity(
-            cashierId = cashierId,
-            cashierName = cashierName,
-            startingCash = startingCash,
-            startedAt = System.currentTimeMillis()
-        )
+    fun closedShiftsBetween(
+        start: Long,
+        end: Long,
+    ): Flow<List<ShiftEntity>> = shiftDao.observeClosedShiftsBetween(start, end)
+
+    suspend fun getById(shiftId: Long): ShiftEntity? = shiftDao.getById(shiftId)
+
+    suspend fun hasOpenShift(cashierId: Long): Boolean = shiftDao.hasOpenShiftForCashier(cashierId)
+
+    suspend fun startShift(
+        cashierId: Long,
+        cashierName: String,
+        startingCash: Long,
+    ): Long {
+        val shift =
+            ShiftEntity(
+                cashierId = cashierId,
+                cashierName = cashierName,
+                startingCash = startingCash,
+                startedAt = System.currentTimeMillis(),
+            )
         return shiftDao.insert(shift)
     }
+
     suspend fun getShiftSummary(shiftId: Long): ShiftSummary {
         val shift = shiftDao.getById(shiftId) ?: error("Shift #$shiftId tidak ditemukan")
         return ShiftSummary(
@@ -46,18 +57,24 @@ class ShiftRepository(private val shiftDao: ShiftDao) {
             cashRevenue = shiftDao.cashRevenueForShift(shiftId),
             qrisRevenue = shiftDao.qrisRevenueForShift(shiftId),
             totalCost = shiftDao.totalCostForShift(shiftId),
-            cashRefunds = shiftDao.cashRefundsForShift(shiftId)
+            cashRefunds = shiftDao.cashRefundsForShift(shiftId),
         )
     }
-    suspend fun endShift(shiftId: Long, actualCash: Long, note: String = ""): ShiftEntity {
+
+    suspend fun endShift(
+        shiftId: Long,
+        actualCash: Long,
+        note: String = "",
+    ): ShiftEntity {
         val shift = shiftDao.getById(shiftId) ?: error("Shift #$shiftId tidak ditemukan")
         val summary = getShiftSummary(shiftId)
-        val updated = shift.copy(
-            endingCashExpected = summary.expectedCashInDrawer,
-            endingCashActual = actualCash,
-            endedAt = System.currentTimeMillis(),
-            note = note
-        )
+        val updated =
+            shift.copy(
+                endingCashExpected = summary.expectedCashInDrawer,
+                endingCashActual = actualCash,
+                endedAt = System.currentTimeMillis(),
+                note = note,
+            )
         shiftDao.update(updated)
         return updated
     }

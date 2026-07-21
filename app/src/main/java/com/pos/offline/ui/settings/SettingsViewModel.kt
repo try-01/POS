@@ -27,7 +27,7 @@ data class SettingsUiState(
     val isSharing: Boolean = false,
     val isAddingCashier: Boolean = false,
     val pendingRestoreUri: Uri? = null,
-    val showAddCashierDialog: Boolean = false
+    val showAddCashierDialog: Boolean = false,
 ) {
     val isBusy: Boolean get() = isExporting || isImporting || isSharing
 }
@@ -35,9 +35,8 @@ data class SettingsUiState(
 class SettingsViewModel(
     private val appContext: Context,
     private val cashierRepository: CashierRepository,
-    private val shiftRepository: ShiftRepository
+    private val shiftRepository: ShiftRepository,
 ) : ViewModel() {
-
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
@@ -47,8 +46,9 @@ class SettingsViewModel(
     private val _shareIntent = MutableSharedFlow<android.content.Intent>(extraBufferCapacity = 1)
     val shareIntent: SharedFlow<android.content.Intent> = _shareIntent.asSharedFlow()
 
-    val cashiers: StateFlow<List<CashierEntity>> = cashierRepository.allCashiers
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val cashiers: StateFlow<List<CashierEntity>> =
+        cashierRepository.allCashiers
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun exportDatabase(destinationUri: Uri) {
         if (_uiState.value.isBusy) return
@@ -74,7 +74,10 @@ class SettingsViewModel(
                     is ShareOutcome.Success -> {
                         _shareIntent.emit(BackupManager.buildShareIntent(appContext, result.file))
                     }
-                    is ShareOutcome.Error -> _messages.emit("Gagal menyiapkan cadangan untuk dibagikan: ${result.throwable.message}")
+
+                    is ShareOutcome.Error -> {
+                        _messages.emit("Gagal menyiapkan cadangan untuk dibagikan: ${result.throwable.message}")
+                    }
                 }
             } finally {
                 _uiState.value = _uiState.value.copy(isSharing = false)
@@ -96,11 +99,15 @@ class SettingsViewModel(
             _uiState.value = _uiState.value.copy(isImporting = true, pendingRestoreUri = null)
             try {
                 when (val result = BackupManager.validateAndRestore(appContext, uri)) {
-                    is RestoreOutcome.Success -> onRestartRequired()
+                    is RestoreOutcome.Success -> {
+                        onRestartRequired()
+                    }
+
                     is RestoreOutcome.InvalidFile -> {
                         _messages.emit("File tidak valid: ${result.reason}")
                         _uiState.value = _uiState.value.copy(isImporting = false)
                     }
+
                     is RestoreOutcome.Error -> {
                         _messages.emit("Gagal memulihkan: ${result.throwable.message}")
                         _uiState.value = _uiState.value.copy(isImporting = false)
@@ -113,7 +120,6 @@ class SettingsViewModel(
         }
     }
 
-
     fun openAddCashierDialog() {
         _uiState.value = _uiState.value.copy(showAddCashierDialog = true)
     }
@@ -122,14 +128,14 @@ class SettingsViewModel(
         _uiState.value = _uiState.value.copy(showAddCashierDialog = false)
     }
 
-        fun addCashier(name: String) {
+    fun addCashier(name: String) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) {
             viewModelScope.launch { _messages.emit("Nama kasir tidak boleh kosong.") }
             return
         }
         if (_uiState.value.isAddingCashier) return
-        
+
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isAddingCashier = true)
             try {
@@ -144,12 +150,15 @@ class SettingsViewModel(
         }
     }
 
-    fun setCashierActive(id: Long, active: Boolean) {
+    fun setCashierActive(
+        id: Long,
+        active: Boolean,
+    ) {
         viewModelScope.launch {
             if (!active && shiftRepository.hasOpenShift(id)) {
                 _messages.emit(
                     "Tidak bisa menonaktifkan kasir ini karena masih memiliki " +
-                        "shift yang berjalan. Tutup shift-nya terlebih dahulu."
+                        "shift yang berjalan. Tutup shift-nya terlebih dahulu.",
                 )
                 return@launch
             }

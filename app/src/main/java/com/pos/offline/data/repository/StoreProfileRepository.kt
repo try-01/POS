@@ -5,10 +5,13 @@ import com.pos.offline.data.local.entity.StoreProfileEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-class StoreProfileRepository(private val storeProfileDao: StoreProfileDao) {
-
-    val profile: Flow<StoreProfileEntity> = storeProfileDao.observe()
-        .map { it ?: StoreProfileEntity() }
+class StoreProfileRepository(
+    private val storeProfileDao: StoreProfileDao,
+) {
+    val profile: Flow<StoreProfileEntity> =
+        storeProfileDao
+            .observe()
+            .map { it ?: StoreProfileEntity() }
 
     suspend fun get(): StoreProfileEntity = storeProfileDao.get() ?: StoreProfileEntity()
 

@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CartDao {
-
     @Query("SELECT * FROM cart_items ORDER BY id ASC")
     fun observeAll(): Flow<List<CartItemEntity>>
 
@@ -21,7 +20,10 @@ interface CartDao {
     suspend fun upsert(item: CartItemEntity)
 
     @Query("UPDATE cart_items SET quantity = :qty WHERE productId = :productId")
-    suspend fun updateQuantity(productId: Long, qty: Int)
+    suspend fun updateQuantity(
+        productId: Long,
+        qty: Int,
+    )
 
     @Query("DELETE FROM cart_items WHERE productId = :productId")
     suspend fun remove(productId: Long)
@@ -30,7 +32,11 @@ interface CartDao {
     suspend fun clear()
 
     @Transaction
-    suspend fun incrementQuantity(productId: Long, name: String, unitPrice: Long) {
+    suspend fun incrementQuantity(
+        productId: Long,
+        name: String,
+        unitPrice: Long,
+    ) {
         val existing = findByProduct(productId)
         if (existing == null) {
             upsert(CartItemEntity(productId = productId, name = name, unitPrice = unitPrice, quantity = 1))

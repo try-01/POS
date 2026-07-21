@@ -5,12 +5,12 @@ import com.pos.offline.data.local.entity.ProductEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
-class ProductRepository(private val productDao: ProductDao) {
-
+class ProductRepository(
+    private val productDao: ProductDao,
+) {
     val products: Flow<List<ProductEntity>> = productDao.observeAll()
 
-    fun search(query: String): Flow<List<ProductEntity>> =
-        if (query.isBlank()) productDao.observeAll() else productDao.search(query.trim())
+    fun search(query: String): Flow<List<ProductEntity>> = if (query.isBlank()) productDao.observeAll() else productDao.search(query.trim())
 
     suspend fun getById(id: Long): ProductEntity? = productDao.getById(id)
 
@@ -18,18 +18,16 @@ class ProductRepository(private val productDao: ProductDao) {
 
     suspend fun delete(product: ProductEntity) = productDao.delete(product)
 
-    suspend fun setActive(id: Long, active: Boolean) =
-        productDao.setActive(id, active, System.currentTimeMillis())
+    suspend fun setActive(
+        id: Long,
+        active: Boolean,
+    ) = productDao.setActive(id, active, System.currentTimeMillis())
 
     suspend fun softDelete(id: Long) = setActive(id, false)
 
-    suspend fun getProductByBarcode(barcode: String): ProductEntity? {
-        return productDao.getByBarcode(barcode)
-    }
-    
-    suspend fun getProductByBarcodeAny(barcode: String): ProductEntity? {
-        return productDao.getByBarcodeAny(barcode)
-    }
+    suspend fun getProductByBarcode(barcode: String): ProductEntity? = productDao.getByBarcode(barcode)
+
+    suspend fun getProductByBarcodeAny(barcode: String): ProductEntity? = productDao.getByBarcodeAny(barcode)
 
     fun observeCategories(): Flow<List<String>> = productDao.observeDistinctCategories()
 

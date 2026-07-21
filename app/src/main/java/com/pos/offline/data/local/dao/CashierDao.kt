@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CashierDao {
-
     @Query("SELECT * FROM cashiers WHERE active = 1 ORDER BY name ASC")
     fun observeActive(): Flow<List<CashierEntity>>
 
@@ -23,5 +22,8 @@ interface CashierDao {
     suspend fun upsert(cashier: CashierEntity): Long
 
     @Query("UPDATE cashiers SET active = :active WHERE id = :id")
-    suspend fun setActive(id: Long, active: Boolean)
+    suspend fun setActive(
+        id: Long,
+        active: Boolean,
+    )
 }

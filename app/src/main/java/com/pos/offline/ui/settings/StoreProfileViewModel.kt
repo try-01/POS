@@ -21,7 +21,7 @@ data class StoreProfileFormState(
     val address: String = "",
     val footerNote: String = "",
     val logoBytes: ByteArray? = null,
-    val autoPrintEnabled: Boolean = false
+    val autoPrintEnabled: Boolean = false,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -46,16 +46,16 @@ data class StoreProfileFormState(
 data class StoreProfileUiState(
     val formState: StoreProfileFormState = StoreProfileFormState(),
     val isProcessingLogo: Boolean = false,
-    val isSaving: Boolean = false
+    val isSaving: Boolean = false,
 )
 
 class StoreProfileViewModel(
     private val storeProfileRepository: StoreProfileRepository,
-    private val logoImageProcessor: LogoImageProcessor
+    private val logoImageProcessor: LogoImageProcessor,
 ) : ViewModel() {
-
-    val profile: StateFlow<StoreProfileEntity> = storeProfileRepository.profile
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StoreProfileEntity())
+    val profile: StateFlow<StoreProfileEntity> =
+        storeProfileRepository.profile
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StoreProfileEntity())
 
     private val _uiState = MutableStateFlow(StoreProfileUiState())
     val uiState: StateFlow<StoreProfileUiState> = _uiState.asStateFlow()
@@ -65,20 +65,25 @@ class StoreProfileViewModel(
 
     fun loadFormFromCurrentProfile() {
         val current = profile.value
-        _uiState.value = StoreProfileUiState(
-            formState = StoreProfileFormState(
-                storeName = current.storeName,
-                address = current.address,
-                footerNote = current.footerNote,
-                logoBytes = current.logoBytes,
-                autoPrintEnabled = current.autoPrintEnabled
+        _uiState.value =
+            StoreProfileUiState(
+                formState =
+                    StoreProfileFormState(
+                        storeName = current.storeName,
+                        address = current.address,
+                        footerNote = current.footerNote,
+                        logoBytes = current.logoBytes,
+                        autoPrintEnabled = current.autoPrintEnabled,
+                    ),
             )
-        )
     }
 
     fun updateStoreName(value: String) = updateForm { it.copy(storeName = value) }
+
     fun updateAddress(value: String) = updateForm { it.copy(address = value) }
+
     fun updateFooterNote(value: String) = updateForm { it.copy(footerNote = value) }
+
     fun updateAutoPrintEnabled(value: Boolean) = updateForm { it.copy(autoPrintEnabled = value) }
 
     fun pickLogo(uri: Uri) {
@@ -110,8 +115,8 @@ class StoreProfileViewModel(
                     address = form.address.trim(),
                     footerNote = form.footerNote.trim(),
                     logoBytes = form.logoBytes,
-                    autoPrintEnabled = form.autoPrintEnabled
-                )
+                    autoPrintEnabled = form.autoPrintEnabled,
+                ),
             )
             emitMessage("Profil toko disimpan.")
             _uiState.value = _uiState.value.copy(isSaving = false)

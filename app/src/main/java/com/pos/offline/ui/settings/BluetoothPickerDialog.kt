@@ -39,20 +39,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.pos.offline.util.BluetoothDeviceInfo
 import com.pos.offline.util.PermissionUtils
 
 @Composable
 fun BluetoothPickerDialog(
     viewModel: PrinterViewModel,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
 ) {
     val state by viewModel.bluetoothUiState.collectAsState()
     val context = LocalContext.current
@@ -63,24 +63,26 @@ fun BluetoothPickerDialog(
     }
     var btEnabled by remember { mutableStateOf(viewModel.isBluetoothEnabled()) }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) {
-        PermissionUtils.markBluetoothPermissionRequested(context)
-        permissionState = PermissionUtils.currentBluetoothPermissionState(context)
-        if (permissionState == PermissionUtils.BluetoothPermissionState.Granted) {
-            viewModel.refreshBondedDevices()
+    val permissionLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions(),
+        ) {
+            PermissionUtils.markBluetoothPermissionRequested(context)
+            permissionState = PermissionUtils.currentBluetoothPermissionState(context)
+            if (permissionState == PermissionUtils.BluetoothPermissionState.Granted) {
+                viewModel.refreshBondedDevices()
+            }
         }
-    }
 
-    val enableBtLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) {
-        btEnabled = viewModel.isBluetoothEnabled()
-        if (permissionState == PermissionUtils.BluetoothPermissionState.Granted && btEnabled) {
-            viewModel.refreshBondedDevices()
+    val enableBtLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.StartActivityForResult(),
+        ) {
+            btEnabled = viewModel.isBluetoothEnabled()
+            if (permissionState == PermissionUtils.BluetoothPermissionState.Granted && btEnabled) {
+                viewModel.refreshBondedDevices()
+            }
         }
-    }
 
     LaunchedEffect(Unit) {
         if (permissionState == PermissionUtils.BluetoothPermissionState.Granted) {
@@ -93,15 +95,16 @@ fun BluetoothPickerDialog(
     }
 
     DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                permissionState = PermissionUtils.currentBluetoothPermissionState(context)
-                btEnabled = viewModel.isBluetoothEnabled()
-                if (permissionState == PermissionUtils.BluetoothPermissionState.Granted && btEnabled) {
-                    viewModel.refreshBondedDevices()
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    permissionState = PermissionUtils.currentBluetoothPermissionState(context)
+                    btEnabled = viewModel.isBluetoothEnabled()
+                    if (permissionState == PermissionUtils.BluetoothPermissionState.Granted && btEnabled) {
+                        viewModel.refreshBondedDevices()
+                    }
                 }
             }
-        }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
@@ -115,10 +118,11 @@ fun BluetoothPickerDialog(
         title = { Text("Pilih Printer Bluetooth", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
         text = {
             Column(
-                modifier = Modifier
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier =
+                    Modifier
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 when (permissionState) {
                     PermissionUtils.BluetoothPermissionState.PermanentlyDenied -> {
@@ -127,45 +131,48 @@ fun BluetoothPickerDialog(
                                 "dialog ini. Aktifkan secara manual lewat Pengaturan " +
                                 "Aplikasi > Izin > Perangkat di Sekitar/Bluetooth.",
                             fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Button(
                             onClick = {
-                                val intent = Intent(
-                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                    Uri.fromParts("package", context.packageName, null)
-                                )
+                                val intent =
+                                    Intent(
+                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        Uri.fromParts("package", context.packageName, null),
+                                    )
                                 context.startActivity(intent)
                             },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text("Buka Pengaturan Aplikasi", fontSize = 13.sp)
                         }
                     }
+
                     PermissionUtils.BluetoothPermissionState.CanRequest -> {
                         Text(
                             "Aplikasi memerlukan izin Bluetooth untuk mencari & " +
                                 "memasangkan printer.",
                             fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Button(
                             onClick = { permissionLauncher.launch(PermissionUtils.requiredBluetoothPermissions()) },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text("Izinkan Akses Bluetooth", fontSize = 13.sp)
                         }
                     }
+
                     PermissionUtils.BluetoothPermissionState.Granted -> {
                         if (!btEnabled) {
                             Text(
                                 "Bluetooth perangkat sedang nonaktif. Aktifkan terlebih dahulu.",
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Button(
                                 onClick = { enableBtLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Text("Aktifkan Bluetooth", fontSize = 13.sp)
                             }
@@ -175,7 +182,7 @@ fun BluetoothPickerDialog(
                                 Text(
                                     "Belum ada printer ter-pairing di pengaturan Bluetooth HP ini.",
                                     fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             } else {
                                 state.bondedDevices.forEach { device ->
@@ -190,13 +197,13 @@ fun BluetoothPickerDialog(
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text("Perangkat Baru", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 TextButton(
                                     onClick = {
                                         if (state.isScanning) viewModel.stopDiscovery() else viewModel.startDiscovery()
-                                    }
+                                    },
                                 ) {
                                     Text(if (state.isScanning) "Berhenti" else "Cari Perangkat", fontSize = 11.sp)
                                 }
@@ -208,9 +215,10 @@ fun BluetoothPickerDialog(
                                     Text("Mencari perangkat di sekitar…", fontSize = 11.sp)
                                 }
                             }
-                            val newDevices = state.discoveredDevices.filterNot { found ->
-                                state.bondedDevices.any { it.address == found.address }
-                            }
+                            val newDevices =
+                                state.discoveredDevices.filterNot { found ->
+                                    state.bondedDevices.any { it.address == found.address }
+                                }
                             newDevices.forEach { device ->
                                 DeviceRow(device = device, trailing = "Pasang") {
                                     viewModel.requestPairing(device)
@@ -223,7 +231,7 @@ fun BluetoothPickerDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("Tutup", fontSize = 13.sp) }
-        }
+        },
     )
 
     state.pairingTarget?.let { target ->
@@ -231,20 +239,25 @@ fun BluetoothPickerDialog(
             device = target,
             isPairing = state.isPairing,
             onDismiss = { viewModel.cancelPairing() },
-            onConfirm = { pin -> viewModel.confirmPairing(pin) }
+            onConfirm = { pin -> viewModel.confirmPairing(pin) },
         )
     }
 }
 
 @Composable
-private fun DeviceRow(device: BluetoothDeviceInfo, trailing: String?, onClick: () -> Unit) {
+private fun DeviceRow(
+    device: BluetoothDeviceInfo,
+    trailing: String?,
+    onClick: () -> Unit,
+) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 6.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Column {
             Text(device.name, fontSize = 12.sp, fontWeight = FontWeight.Medium)
@@ -261,7 +274,7 @@ private fun BluetoothPinDialog(
     device: BluetoothDeviceInfo,
     isPairing: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
+    onConfirm: (String) -> Unit,
 ) {
     var pin by remember { mutableStateOf("") }
 
@@ -274,7 +287,7 @@ private fun BluetoothPinDialog(
                     "Pasangkan dengan \"${device.name}\". PIN printer thermal " +
                         "umumnya 0000 atau 1234, namun bisa berbeda tiap unit.",
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { pin = "0000" }, enabled = !isPairing) {
@@ -291,7 +304,7 @@ private fun BluetoothPinDialog(
                     singleLine = true,
                     enabled = !isPairing,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         },
@@ -301,7 +314,7 @@ private fun BluetoothPinDialog(
                     CircularProgressIndicator(
                         modifier = Modifier.size(14.dp),
                         strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
+                        color = MaterialTheme.colorScheme.onPrimary,
                     )
                 } else {
                     Text("Pasangkan", fontSize = 13.sp)
@@ -310,6 +323,6 @@ private fun BluetoothPinDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss, enabled = !isPairing) { Text("Batal", fontSize = 13.sp) }
-        }
+        },
     )
 }

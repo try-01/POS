@@ -39,42 +39,54 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
+
 data class DailyReport(
     val date: LocalDate,
     val transactions: List<TransactionEntity>, // SEMUA baris, termasuk VOID
-    val totalRevenue: Long,        // Σ total transaksi COMPLETED
-    val transactionCount: Int,     // jumlah transaksi COMPLETED
+    val totalRevenue: Long, // Σ total transaksi COMPLETED
+    val transactionCount: Int, // jumlah transaksi COMPLETED
     val averagePerTransaction: Long,
-    val totalDiscount: Long,       // Σ diskon transaksi COMPLETED
-    val totalTax: Long,            // Σ pajak transaksi COMPLETED
+    val totalDiscount: Long, // Σ diskon transaksi COMPLETED
+    val totalTax: Long, // Σ pajak transaksi COMPLETED
     val hourlyRevenue: List<Long>, // panjang 24; hanya dari transaksi COMPLETED
-    val voidedCount: Int,           // jumlah transaksi VOID hari ini
-    val cashRevenue: Long,         // BATCH G: Σ total transaksi COMPLETED metode CASH
-    val qrisRevenue: Long          // BATCH G: Σ total transaksi COMPLETED metode QRIS
+    val voidedCount: Int, // jumlah transaksi VOID hari ini
+    val cashRevenue: Long, // BATCH G: Σ total transaksi COMPLETED metode CASH
+    val qrisRevenue: Long, // BATCH G: Σ total transaksi COMPLETED metode QRIS
 ) {
     companion object {
-        fun empty(date: LocalDate) = DailyReport(
-            date = date,
-            transactions = emptyList(),
-            totalRevenue = 0L,
-            transactionCount = 0,
-            averagePerTransaction = 0L,
-            totalDiscount = 0L,
-            totalTax = 0L,
-            hourlyRevenue = List(24) { 0L },
-            voidedCount = 0,
-            cashRevenue = 0L,
-            qrisRevenue = 0L
-        )
+        fun empty(date: LocalDate) =
+            DailyReport(
+                date = date,
+                transactions = emptyList(),
+                totalRevenue = 0L,
+                transactionCount = 0,
+                averagePerTransaction = 0L,
+                totalDiscount = 0L,
+                totalTax = 0L,
+                hourlyRevenue = List(24) { 0L },
+                voidedCount = 0,
+                cashRevenue = 0L,
+                qrisRevenue = 0L,
+            )
     }
 }
-data class ReportMessage(val text: String, val isError: Boolean = false)
+
+data class ReportMessage(
+    val text: String,
+    val isError: Boolean = false,
+)
+
 enum class ReportTab { TRANSACTIONS, SHIFTS }
-data class ClosedShiftDetail(val shift: ShiftEntity, val summary: ShiftSummary)
+
+data class ClosedShiftDetail(
+    val shift: ShiftEntity,
+    val summary: ShiftSummary,
+)
+
 data class ReturnSummary(
     val returns: List<ReturnEntity>,
     val cashRefundTotal: Long,
-    val qrisRefundTotal: Long
+    val qrisRefundTotal: Long,
 ) {
     companion object {
         fun empty() = ReturnSummary(emptyList(), 0L, 0L)
@@ -83,7 +95,7 @@ data class ReturnSummary(
 
 data class PendingPrintTarget(
     val checkoutResult: CheckoutResult,
-    val availablePrinters: List<PrinterEntity>
+    val availablePrinters: List<PrinterEntity>,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -92,57 +104,62 @@ class ReportViewModel(
     private val shiftRepository: ShiftRepository,
     private val returnRepository: ReturnRepository,
     private val printCoordinator: PrintCoordinator,
-    private val printerRepository: PrinterRepository
+    private val printerRepository: PrinterRepository,
 ) : ViewModel() {
-
     private val zone: ZoneId = ZoneId.systemDefault()
     private val _selectedDate = MutableStateFlow(LocalDate.now(zone))
     val selectedDate: StateFlow<LocalDate> = _selectedDate.asStateFlow()
-    val isToday: StateFlow<Boolean> = _selectedDate
-        .map { it.isEqual(LocalDate.now(zone)) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
-    val report: StateFlow<DailyReport> = _selectedDate
-        .flatMapLatest { date ->
-            val (start, end) = dayBounds(date)
-            transactionRepository.dailyTransactions(start, end).map { aggregate(date, it) }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DailyReport.empty(LocalDate.now()))
+    val isToday: StateFlow<Boolean> =
+        _selectedDate
+            .map { it.isEqual(LocalDate.now(zone)) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val report: StateFlow<DailyReport> =
+        _selectedDate
+            .flatMapLatest { date ->
+                val (start, end) = dayBounds(date)
+                transactionRepository.dailyTransactions(start, end).map { aggregate(date, it) }
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DailyReport.empty(LocalDate.now()))
     private val _selectedTab = MutableStateFlow(ReportTab.TRANSACTIONS)
     val selectedTab: StateFlow<ReportTab> = _selectedTab.asStateFlow()
 
     fun selectTab(tab: ReportTab) {
         _selectedTab.value = tab
     }
-    val closedShifts: StateFlow<List<ShiftEntity>> = _selectedDate
-        .flatMapLatest { date ->
-            val (start, end) = dayBounds(date)
-            shiftRepository.closedShiftsBetween(start, end)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val closedShifts: StateFlow<List<ShiftEntity>> =
+        _selectedDate
+            .flatMapLatest { date ->
+                val (start, end) = dayBounds(date)
+                shiftRepository.closedShiftsBetween(start, end)
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _selectedShiftDetail = MutableStateFlow<ClosedShiftDetail?>(null)
     val selectedShiftDetail: StateFlow<ClosedShiftDetail?> = _selectedShiftDetail.asStateFlow()
+
     fun openShiftDetail(shift: ShiftEntity) {
         viewModelScope.launch {
-            _selectedShiftDetail.value = ClosedShiftDetail(
-                shift = shift,
-                summary = shiftRepository.getShiftSummary(shift.id)
-            )
+            _selectedShiftDetail.value =
+                ClosedShiftDetail(
+                    shift = shift,
+                    summary = shiftRepository.getShiftSummary(shift.id),
+                )
         }
     }
 
     fun closeShiftDetail() {
         _selectedShiftDetail.value = null
     }
-    val returnSummary: StateFlow<ReturnSummary> = _selectedDate
-        .flatMapLatest { date ->
-            val (start, end) = dayBounds(date)
-            returnRepository.returnsBetween(start, end).map { aggregateReturns(it) }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ReturnSummary.empty())
+
+    val returnSummary: StateFlow<ReturnSummary> =
+        _selectedDate
+            .flatMapLatest { date ->
+                val (start, end) = dayBounds(date)
+                returnRepository.returnsBetween(start, end).map { aggregateReturns(it) }
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ReturnSummary.empty())
 
     private val _selectedReturnDetail = MutableStateFlow<ReturnDetail?>(null)
     val selectedReturnDetail: StateFlow<ReturnDetail?> = _selectedReturnDetail.asStateFlow()
+
     fun openReturnDetail(returnId: Long) {
         viewModelScope.launch {
             _selectedReturnDetail.value = returnRepository.getDetail(returnId)
@@ -152,6 +169,7 @@ class ReportViewModel(
     fun closeReturnDetail() {
         _selectedReturnDetail.value = null
     }
+
     private val _selectedTransaction = MutableStateFlow<CheckoutResult?>(null)
     val selectedTransaction: StateFlow<CheckoutResult?> = _selectedTransaction.asStateFlow()
     private val _messages = MutableSharedFlow<ReportMessage>(extraBufferCapacity = 1)
@@ -176,6 +194,7 @@ class ReportViewModel(
         _printUiState.value = PrintUiState.Idle
         _pendingPrintTarget.value = null
     }
+
     fun voidSelectedTransaction() {
         val invoiceId = _selectedTransaction.value?.transaction?.id ?: return
         viewModelScope.launch {
@@ -184,24 +203,33 @@ class ReportViewModel(
                     _selectedTransaction.value = transactionRepository.loadReceipt(invoiceId)
                     _messages.emit(
                         ReportMessage(
-                            text = if (outcome.skippedStockCount > 0)
-                                "Transaksi dibatalkan. ${outcome.restoredStockCount} item stok dikembalikan, " +
-                                    "${outcome.skippedStockCount} item dilewati (data transaksi lama)."
-                            else
-                                "Transaksi dibatalkan. Stok ${outcome.restoredStockCount} item dikembalikan.",
-                            isError = false
-                        )
+                            text =
+                                if (outcome.skippedStockCount > 0) {
+                                    "Transaksi dibatalkan. ${outcome.restoredStockCount} item stok dikembalikan, " +
+                                        "${outcome.skippedStockCount} item dilewati (data transaksi lama)."
+                                } else {
+                                    "Transaksi dibatalkan. Stok ${outcome.restoredStockCount} item dikembalikan."
+                                },
+                            isError = false,
+                        ),
                     )
                 }
-                VoidOutcome.AlreadyVoided ->
+
+                VoidOutcome.AlreadyVoided -> {
                     _messages.emit(ReportMessage("Transaksi ini sudah dibatalkan sebelumnya.", isError = true))
-                VoidOutcome.ShiftClosed ->
+                }
+
+                VoidOutcome.ShiftClosed -> {
                     _messages.emit(ReportMessage("Tidak dapat membatalkan — shift transaksi ini sudah ditutup.", isError = true))
-                VoidOutcome.NotFound ->
+                }
+
+                VoidOutcome.NotFound -> {
                     _messages.emit(ReportMessage("Transaksi tidak ditemukan.", isError = true))
+                }
             }
         }
     }
+
     private val _showReturnDialog = MutableStateFlow(false)
     val showReturnDialog: StateFlow<Boolean> = _showReturnDialog.asStateFlow()
 
@@ -210,6 +238,7 @@ class ReportViewModel(
 
     private val _returnSubmitting = MutableStateFlow(false)
     val returnSubmitting: StateFlow<Boolean> = _returnSubmitting.asStateFlow()
+
     fun openReturnDialog() {
         _returnMessage.value = null
         _showReturnDialog.value = true
@@ -219,11 +248,12 @@ class ReportViewModel(
         _showReturnDialog.value = false
         _returnMessage.value = null
     }
+
     fun submitReturn(
         items: List<ReturnItemInput>,
         refundAmount: Long,
         refundMethod: PaymentMethod,
-        note: String
+        note: String,
     ) {
         val invoiceId = _selectedTransaction.value?.transaction?.id
         if (invoiceId == null) {
@@ -238,16 +268,17 @@ class ReportViewModel(
         viewModelScope.launch {
             _returnSubmitting.value = true
             val activeShift = shiftRepository.getOpenShift()
-            val outcome = returnRepository.processReturn(
-                transactionId = invoiceId,
-                itemInputs = items,
-                refundAmount = refundAmount,
-                refundMethod = refundMethod,
-                shiftId = activeShift?.id,
-                cashierId = activeShift?.cashierId,
-                cashierName = activeShift?.cashierName ?: "",
-                note = note
-            )
+            val outcome =
+                returnRepository.processReturn(
+                    transactionId = invoiceId,
+                    itemInputs = items,
+                    refundAmount = refundAmount,
+                    refundMethod = refundMethod,
+                    shiftId = activeShift?.id,
+                    cashierId = activeShift?.cashierId,
+                    cashierName = activeShift?.cashierName ?: "",
+                    note = note,
+                )
             _returnSubmitting.value = false
 
             when (outcome) {
@@ -261,27 +292,37 @@ class ReportViewModel(
                         ReportMessage(
                             "Retur berhasil diproses. $totalQty item · ${refundAmount.toRupiah()} " +
                                 "dikembalikan via $methodLabel.",
-                            isError = false
-                        )
+                            isError = false,
+                        ),
                     )
                 }
-                ReturnOutcome.TransactionNotFound ->
+
+                ReturnOutcome.TransactionNotFound -> {
                     _returnMessage.value = ReportMessage("Transaksi tidak ditemukan.", isError = true)
-                ReturnOutcome.TransactionVoided ->
+                }
+
+                ReturnOutcome.TransactionVoided -> {
                     _returnMessage.value = ReportMessage("Transaksi ini sudah dibatalkan, tidak dapat diretur.", isError = true)
-                ReturnOutcome.AlreadyReturned ->
+                }
+
+                ReturnOutcome.AlreadyReturned -> {
                     _returnMessage.value = ReportMessage("Transaksi ini sudah pernah diretur sebelumnya.", isError = true)
-                ReturnOutcome.NoItemsSelected ->
+                }
+
+                ReturnOutcome.NoItemsSelected -> {
                     _returnMessage.value = ReportMessage("Pilih minimal satu item untuk diretur.", isError = true)
-                is ReturnOutcome.InvalidQuantity ->
-                    _returnMessage.value = ReportMessage(
-                        "Jumlah retur untuk \"${outcome.productName}\" tidak valid.",
-                        isError = true
-                    )
+                }
+
+                is ReturnOutcome.InvalidQuantity -> {
+                    _returnMessage.value =
+                        ReportMessage(
+                            "Jumlah retur untuk \"${outcome.productName}\" tidak valid.",
+                            isError = true,
+                        )
+                }
             }
         }
     }
-
 
     fun printReceipt(result: CheckoutResult) {
         if (_printUiState.value is PrintUiState.Printing) return
@@ -289,13 +330,20 @@ class ReportViewModel(
             val printers = printerRepository.getAllOrderedByPriority()
             when {
                 printers.isEmpty() -> {
-                    _printUiState.value = PrintUiState.Result(
-                        com.pos.offline.util.ReceiptPrintOutcome.NoPrinterConfigured,
-                        result
-                    )
+                    _printUiState.value =
+                        PrintUiState.Result(
+                            com.pos.offline.util.ReceiptPrintOutcome.NoPrinterConfigured,
+                            result,
+                        )
                 }
-                printers.size == 1 -> executePrint(printers.first(), result)
-                else -> _pendingPrintTarget.value = PendingPrintTarget(result, printers)
+
+                printers.size == 1 -> {
+                    executePrint(printers.first(), result)
+                }
+
+                else -> {
+                    _pendingPrintTarget.value = PendingPrintTarget(result, printers)
+                }
             }
         }
     }
@@ -310,7 +358,10 @@ class ReportViewModel(
         _pendingPrintTarget.value = null
     }
 
-    private suspend fun executePrint(printer: PrinterEntity, result: CheckoutResult) {
+    private suspend fun executePrint(
+        printer: PrinterEntity,
+        result: CheckoutResult,
+    ) {
         _printUiState.value = PrintUiState.Printing(result)
         val outcome = printCoordinator.printReceiptToSpecific(printer, result)
         _printUiState.value = PrintUiState.Result(outcome, result)
@@ -318,10 +369,19 @@ class ReportViewModel(
 
     private fun dayBounds(date: LocalDate): Pair<Long, Long> {
         val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
-        val end = date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val end =
+            date
+                .plusDays(1)
+                .atStartOfDay(zone)
+                .toInstant()
+                .toEpochMilli()
         return start to end
     }
-    private fun aggregate(date: LocalDate, txs: List<TransactionEntity>): DailyReport {
+
+    private fun aggregate(
+        date: LocalDate,
+        txs: List<TransactionEntity>,
+    ): DailyReport {
         if (txs.isEmpty()) return DailyReport.empty(date)
 
         val completed = txs.filterNot { it.isVoid }
@@ -332,12 +392,14 @@ class ReportViewModel(
         val totalTax = completed.sumOf { it.tax }
         val count = completed.size
 
-        val cashRevenue = completed
-            .filter { it.paymentMethod == PaymentMethod.CASH.name }
-            .sumOf { it.total }
-        val qrisRevenue = completed
-            .filter { it.paymentMethod == PaymentMethod.QRIS.name }
-            .sumOf { it.total }
+        val cashRevenue =
+            completed
+                .filter { it.paymentMethod == PaymentMethod.CASH.name }
+                .sumOf { it.total }
+        val qrisRevenue =
+            completed
+                .filter { it.paymentMethod == PaymentMethod.QRIS.name }
+                .sumOf { it.total }
         val hourly = MutableList(24) { 0L }
         for (tx in completed) {
             val hour = Instant.ofEpochMilli(tx.createdAt).atZone(zone).hour
@@ -357,26 +419,35 @@ class ReportViewModel(
             hourlyRevenue = hourly,
             voidedCount = voidedCount,
             cashRevenue = cashRevenue,
-            qrisRevenue = qrisRevenue
+            qrisRevenue = qrisRevenue,
         )
     }
-   private fun aggregateReturns(returns: List<ReturnEntity>): ReturnSummary {
-        val cashRefundTotal = returns
-            .filter { it.refundMethod == PaymentMethod.CASH.name }
-            .sumOf { it.refundAmount }
-        val qrisRefundTotal = returns
-            .filter { it.refundMethod == PaymentMethod.QRIS.name }
-            .sumOf { it.refundAmount }
+
+    private fun aggregateReturns(returns: List<ReturnEntity>): ReturnSummary {
+        val cashRefundTotal =
+            returns
+                .filter { it.refundMethod == PaymentMethod.CASH.name }
+                .sumOf { it.refundAmount }
+        val qrisRefundTotal =
+            returns
+                .filter { it.refundMethod == PaymentMethod.QRIS.name }
+                .sumOf { it.refundAmount }
         return ReturnSummary(returns, cashRefundTotal, qrisRefundTotal)
     }
-    fun previousDay() { _selectedDate.value = _selectedDate.value.minusDays(1) }
+
+    fun previousDay() {
+        _selectedDate.value = _selectedDate.value.minusDays(1)
+    }
+
     fun nextDay() {
         val today = LocalDate.now(zone)
         val current = _selectedDate.value
         if (current.isBefore(today)) _selectedDate.value = current.plusDays(1)
     }
 
-    fun goToday() { _selectedDate.value = LocalDate.now(zone) }
+    fun goToday() {
+        _selectedDate.value = LocalDate.now(zone)
+    }
 
     companion object {
         val dateFmt: DateTimeFormatter =
@@ -385,7 +456,8 @@ class ReportViewModel(
         val timeFmt: DateTimeFormatter =
             DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
         val dateTimeFmt: DateTimeFormatter =
-            DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy · HH:mm:ss", Locale.forLanguageTag("id-ID"))
+            DateTimeFormatter
+                .ofPattern("EEEE, d MMMM yyyy · HH:mm:ss", Locale.forLanguageTag("id-ID"))
                 .withZone(ZoneId.systemDefault())
     }
 }

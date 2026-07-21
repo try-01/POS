@@ -8,31 +8,31 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Print
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Storefront
-import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -72,7 +72,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel,
     printerViewModel: PrinterViewModel,
     storeProfileViewModel: StoreProfileViewModel,
-    onExitClick: () -> Unit
+    onExitClick: () -> Unit,
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
@@ -82,13 +82,15 @@ fun SettingsScreen(
     var showPrinterDialog by remember { mutableStateOf(false) }
     var showStoreProfileDialog by remember { mutableStateOf(false) }
 
-    val exportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
-    ) { uri -> if (uri != null) viewModel.exportDatabase(uri) }
+    val exportLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.CreateDocument("application/octet-stream"),
+        ) { uri -> if (uri != null) viewModel.exportDatabase(uri) }
 
-    val importLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri -> if (uri != null) viewModel.requestRestore(uri) }
+    val importLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+        ) { uri -> if (uri != null) viewModel.requestRestore(uri) }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg ->
@@ -124,80 +126,83 @@ fun SettingsScreen(
             onConfirm = {
                 viewModel.confirmRestore {
                     // UI (Composable) tetap memegang Activity context-nya sendiri untuk melakukan restart aplikasi. Ini sangat aman.
-                    BackupManager.restartApp(context) 
+                    BackupManager.restartApp(context)
                 }
-            }
+            },
         )
     }
 
     if (uiState.showAddCashierDialog) {
         AddCashierDialog(
             onDismiss = { viewModel.closeAddCashierDialog() },
-            onConfirm = { name -> viewModel.addCashier(name) }
+            onConfirm = { name -> viewModel.addCashier(name) },
         )
     }
 
     if (showPrinterDialog) {
         PrinterManagementDialog(
             viewModel = printerViewModel,
-            onDismiss = { showPrinterDialog = false }
+            onDismiss = { showPrinterDialog = false },
         )
     }
 
     if (showStoreProfileDialog) {
         StoreProfileDialog(
             viewModel = storeProfileViewModel,
-            onDismiss = { showStoreProfileDialog = false }
+            onDismiss = { showStoreProfileDialog = false },
         )
     }
 
     Scaffold(
         topBar = {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(horizontal = 12.dp)
-            )    {
-                Row(
-                    modifier = Modifier
+                modifier =
+                    Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp, bottom = 4.dp),
-                 verticalAlignment = Alignment.CenterVertically
-            )    {
-                Icon(
-                    Icons.Rounded.Settings,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                        .statusBarsPadding()
+                        .padding(horizontal = 12.dp),
+            ) {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Rounded.Settings,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.primary,
                     )
-                Spacer(Modifier.width(6.dp))
-                     Text(
-                         "Pengaturan",
-                         style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
-                         fontWeight = FontWeight.SemiBold,
-                         modifier = Modifier.weight(1f)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Pengaturan",
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
-         },
-        contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars)
+        },
+        contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars),
     ) { innerPadding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .imePadding()
-                .padding(horizontal = 12.dp) // Hapus vertical 8.dp
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .imePadding()
+                    .padding(horizontal = 12.dp) // Hapus vertical 8.dp
+                    .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Spacer(Modifier.height(4.dp)) // Tambahkan spacer di atas saja
             SectionLabel("Cadangkan & Pulihkan")
 
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(14.dp)
+                contentPadding = PaddingValues(14.dp),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.Top) {
@@ -205,7 +210,7 @@ fun SettingsScreen(
                             Icons.Rounded.Info,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
@@ -214,23 +219,23 @@ fun SettingsScreen(
                                 "WhatsApp/Email/Drive — aplikasi tidak menyinkronkan " +
                                 "data secara otomatis.",
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Button(
                             onClick = { exportLauncher.launch(BackupManager.suggestedBackupFileName()) },
                             enabled = !uiState.isBusy,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         ) {
                             if (uiState.isExporting) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(14.dp),
                                     strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary
+                                    color = MaterialTheme.colorScheme.onPrimary,
                                 )
                             } else {
                                 Icon(Icons.Rounded.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -242,7 +247,7 @@ fun SettingsScreen(
                         OutlinedButton(
                             onClick = { viewModel.shareDatabase() },
                             enabled = !uiState.isBusy,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         ) {
                             if (uiState.isSharing) {
                                 CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
@@ -257,7 +262,7 @@ fun SettingsScreen(
                     OutlinedButton(
                         onClick = { importLauncher.launch(arrayOf("*/*")) },
                         enabled = !uiState.isBusy,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         if (uiState.isImporting) {
                             CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
@@ -276,7 +281,7 @@ fun SettingsScreen(
 
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(14.dp)
+                contentPadding = PaddingValues(14.dp),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (cashiers.isEmpty()) {
@@ -284,7 +289,7 @@ fun SettingsScreen(
                             "Belum ada kasir. Fitur ini opsional — aplikasi tetap " +
                                 "bisa dipakai tanpa memilih kasir/shift sama sekali.",
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
                         cashiers.forEach { cashier ->
@@ -292,14 +297,14 @@ fun SettingsScreen(
                                 cashier = cashier,
                                 onToggleActive = { active ->
                                     viewModel.setCashierActive(cashier.id, active)
-                                }
+                                },
                             )
                         }
                     }
 
                     OutlinedButton(
                         onClick = { viewModel.openAddCashierDialog() },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.Rounded.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
@@ -312,7 +317,7 @@ fun SettingsScreen(
 
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(14.dp)
+                contentPadding = PaddingValues(14.dp),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (storeProfile.storeName.isBlank() && storeProfile.logoBytes == null) {
@@ -320,27 +325,28 @@ fun SettingsScreen(
                             "Profil toko belum diatur. Nama toko, alamat, & logo akan " +
                                 "tampil di struk cetak.",
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             LogoPreview(
                                 logoBytes = storeProfile.logoBytes,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(6.dp))
+                                modifier =
+                                    Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(6.dp)),
                             )
                             Spacer(Modifier.width(10.dp))
                             Column {
                                 Text(
                                     storeProfile.storeName.ifBlank { "(Nama toko belum diisi)" },
                                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                                    fontWeight = FontWeight.Medium
+                                    fontWeight = FontWeight.Medium,
                                 )
                                 Text(
                                     if (storeProfile.autoPrintEnabled) "Cetak otomatis aktif" else "Cetak otomatis nonaktif",
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -348,7 +354,7 @@ fun SettingsScreen(
 
                     OutlinedButton(
                         onClick = { showStoreProfileDialog = true },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.Rounded.Storefront, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
@@ -361,7 +367,7 @@ fun SettingsScreen(
 
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(14.dp)
+                contentPadding = PaddingValues(14.dp),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (printers.isEmpty()) {
@@ -369,25 +375,25 @@ fun SettingsScreen(
                             "Belum ada printer thermal ditambahkan. Struk tetap bisa " +
                                 "dicetak/dibagikan sebagai PDF tanpa printer fisik.",
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
                         val defaultPrinter = printers.find { it.isDefault }
                         Text(
                             "Printer utama: ${defaultPrinter?.label ?: "-"}",
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
                         )
                         Text(
                             "${printers.size} printer tersimpan",
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
 
                     OutlinedButton(
                         onClick = { showPrinterDialog = true },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.Rounded.Print, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
@@ -400,25 +406,26 @@ fun SettingsScreen(
 
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(14.dp)
+                contentPadding = PaddingValues(14.dp),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         "Keluar dari aplikasi kasir dengan aman. Semua data penjualan Anda tetap tersimpan utuh di memori lokal perangkat.",
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Button(
                         onClick = onExitClick,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        ),
-                        modifier = Modifier.fillMaxWidth()
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                            ),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(
                             Icons.AutoMirrored.Rounded.Logout,
                             contentDescription = "Keluar Aplikasi",
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(16.dp),
                         )
                         Spacer(Modifier.width(8.dp))
                         Text("Keluar Aplikasi", fontSize = 13.sp)
@@ -433,40 +440,42 @@ fun SettingsScreen(
 @Composable
 private fun CashierRow(
     cashier: CashierEntity,
-    onToggleActive: (Boolean) -> Unit
+    onToggleActive: (Boolean) -> Unit,
 ) {
-    val contentColor = if (cashier.active) {
-        MaterialTheme.colorScheme.onSurface
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-    }
+    val contentColor =
+        if (cashier.active) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Column {
             Text(
                 text = cashier.name,
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                 fontWeight = FontWeight.Medium,
-                color = contentColor
+                color = contentColor,
             )
             Text(
                 text = if (cashier.active) "Aktif" else "Nonaktif",
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                color = if (cashier.active) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                }
+                color =
+                    if (cashier.active) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    },
             )
         }
         Switch(
             checked = cashier.active,
             onCheckedChange = onToggleActive,
-            colors = SwitchDefaults.colors()
+            colors = SwitchDefaults.colors(),
         )
     }
 }
@@ -474,7 +483,7 @@ private fun CashierRow(
 @Composable
 private fun AddCashierDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
+    onConfirm: (String) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
 
@@ -487,7 +496,7 @@ private fun AddCashierDialog(
                 onValueChange = { name = it },
                 label = { Text("Nama Kasir", fontSize = 12.sp) },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             )
         },
         confirmButton = {
@@ -499,7 +508,7 @@ private fun AddCashierDialog(
             TextButton(onClick = onDismiss) {
                 Text("Batal", fontSize = 13.sp)
             }
-        }
+        },
     )
 }
 
@@ -510,14 +519,14 @@ private fun SectionLabel(text: String) {
         style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 2.dp)
+        modifier = Modifier.padding(start = 2.dp),
     )
 }
 
 @Composable
 private fun RestoreConfirmDialog(
     onDismiss: () -> Unit,
-    onConfirm: () -> Unit
+    onConfirm: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -527,13 +536,13 @@ private fun RestoreConfirmDialog(
                 "Memulihkan cadangan akan MENGGANTI SELURUH data saat ini " +
                     "(produk, transaksi, kasir) dan menutup aplikasi. " +
                     "Tindakan ini tidak bisa dibatalkan. Lanjutkan?",
-                fontSize = 13.sp
+                fontSize = 13.sp,
             )
         },
         confirmButton = {
             Button(
                 onClick = onConfirm,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             ) {
                 Text("Ya, Timpa & Pulihkan", fontSize = 13.sp)
             }
@@ -542,6 +551,6 @@ private fun RestoreConfirmDialog(
             OutlinedButton(onClick = onDismiss) {
                 Text("Batal", fontSize = 13.sp)
             }
-        }
+        },
     )
 }

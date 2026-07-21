@@ -10,7 +10,7 @@ data class StoreProfileEntity(
     val address: String = "",
     val footerNote: String = "",
     val logoBytes: ByteArray? = null,
-    val autoPrintEnabled: Boolean = false
+    val autoPrintEnabled: Boolean = false,
 ) {
     companion object {
         const val SINGLETON_ID = 1L

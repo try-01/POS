@@ -25,33 +25,34 @@ fun GlassCard(
     contentPadding: PaddingValues = PaddingValues(0.dp),
     enabled: Boolean = true,
     onClick: (() -> Unit)? = null,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val tint = if (isDark) Color.White else Color.Black
     val shape: Shape = RoundedCornerShape(cornerRadius)
-    
-    var cardModifier = modifier
-        .clip(shape)
-        .background(
-            Brush.verticalGradient(
-                colors = listOf(
-                    tint.copy(alpha = 0.16f),
-                    tint.copy(alpha = 0.05f)
-                )
+
+    var cardModifier =
+        modifier
+            .clip(shape)
+            .background(
+                Brush.verticalGradient(
+                    colors =
+                        listOf(
+                            tint.copy(alpha = 0.16f),
+                            tint.copy(alpha = 0.05f),
+                        ),
+                ),
+            ).border(
+                BorderStroke(1.dp, tint.copy(alpha = 0.22f)),
+                shape = shape,
             )
-        )
-        .border(
-            BorderStroke(1.dp, tint.copy(alpha = 0.22f)),
-            shape = shape
-        )
-        
+
     if (onClick != null) {
         cardModifier = cardModifier.clickable(enabled = enabled, onClick = onClick)
     }
 
     Box(
-        modifier = cardModifier.padding(contentPadding)
+        modifier = cardModifier.padding(contentPadding),
     ) {
         content()
     }

@@ -13,15 +13,23 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
-data class PrintAttemptFailure(val printer: PrinterEntity, val message: String)
+data class PrintAttemptFailure(
+    val printer: PrinterEntity,
+    val message: String,
+)
 
 sealed class ReceiptPrintOutcome {
-    data class Success(val printer: PrinterEntity) : ReceiptPrintOutcome()
+    data class Success(
+        val printer: PrinterEntity,
+    ) : ReceiptPrintOutcome()
+
     data class Failed(
         val attempts: List<PrintAttemptFailure>,
-        val fallbackPdf: File?
+        val fallbackPdf: File?,
     ) : ReceiptPrintOutcome()
+
     object NoPrinterConfigured : ReceiptPrintOutcome()
+
     object AlreadyInProgress : ReceiptPrintOutcome()
 }
 
@@ -29,13 +37,13 @@ class PrintCoordinator(
     private val appContext: Context,
     private val printerRepository: PrinterRepository,
     private val storeProfileRepository: StoreProfileRepository,
-    private val connectionFactory: PrinterConnectionFactory
+    private val connectionFactory: PrinterConnectionFactory,
 ) {
     private val activeJobs = ConcurrentHashMap<String, Mutex>()
 
     suspend fun printReceiptAuto(
-        result: CheckoutResult, 
-        openCashDrawer: Boolean = false
+        result: CheckoutResult,
+        openCashDrawer: Boolean = false,
     ): ReceiptPrintOutcome =
         runGuarded(result.transaction.id) {
             val candidates = resolveCascadeOrder()
@@ -49,7 +57,7 @@ class PrintCoordinator(
     suspend fun printReceiptToSpecific(
         printer: PrinterEntity,
         result: CheckoutResult,
-        openCashDrawer: Boolean = false
+        openCashDrawer: Boolean = false,
     ): ReceiptPrintOutcome =
         runGuarded(result.transaction.id) {
             executeSequential(listOf(printer), result, openCashDrawer)
@@ -57,7 +65,7 @@ class PrintCoordinator(
 
     private suspend fun runGuarded(
         transactionId: String,
-        block: suspend () -> ReceiptPrintOutcome
+        block: suspend () -> ReceiptPrintOutcome,
     ): ReceiptPrintOutcome {
         val mutex = activeJobs.computeIfAbsent(transactionId) { Mutex() }
         if (!mutex.tryLock()) return ReceiptPrintOutcome.AlreadyInProgress
@@ -79,26 +87,28 @@ class PrintCoordinator(
     private suspend fun executeSequential(
         candidates: List<PrinterEntity>,
         result: CheckoutResult,
-        openCashDrawer: Boolean
+        openCashDrawer: Boolean,
     ): ReceiptPrintOutcome {
         val storeProfile = storeProfileRepository.get()
         val failures = mutableListOf<PrintAttemptFailure>()
 
         for (printer in candidates) {
-            val printResult = connectionFactory.printReceipt(printer, openCashDrawer) { escPosPrinter ->
-                EscPosReceiptFormatter.build(escPosPrinter, result, storeProfile)
-            }
+            val printResult =
+                connectionFactory.printReceipt(printer, openCashDrawer) { escPosPrinter ->
+                    EscPosReceiptFormatter.build(escPosPrinter, result, storeProfile)
+                }
             when (printResult) {
                 is PrintResult.Success -> return ReceiptPrintOutcome.Success(printer)
                 is PrintResult.Failure -> failures += PrintAttemptFailure(printer, printResult.message)
             }
         }
 
-        val fallbackPdf = try {
-            withContext(Dispatchers.IO) { ReceiptManager.exportToPdf(appContext, result) }
-        } catch (e: Exception) {
-            null
-        }
+        val fallbackPdf =
+            try {
+                withContext(Dispatchers.IO) { ReceiptManager.exportToPdf(appContext, result) }
+            } catch (e: Exception) {
+                null
+            }
         return ReceiptPrintOutcome.Failed(failures, fallbackPdf)
     }
 }

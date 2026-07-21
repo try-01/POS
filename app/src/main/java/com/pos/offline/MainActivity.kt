@@ -10,6 +10,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -56,13 +58,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -87,17 +87,23 @@ import com.pos.offline.ui.theme.PosTheme
 import com.pos.offline.util.HardwareScannerInterceptor
 import kotlinx.coroutines.launch
 
-private enum class Dest(val label: String) {
-    POS("Kasir"), INVENTORY("Inventaris"), REPORT("Laporan"), SETTINGS("Pengaturan")
+private enum class Dest(
+    val label: String,
+) {
+    POS("Kasir"),
+    INVENTORY("Inventaris"),
+    REPORT("Laporan"),
+    SETTINGS("Pengaturan"),
 }
 
 class MainActivity : ComponentActivity() {
     private val posViewModel: PosViewModel by viewModels {
         ServiceLocator.posViewModelFactory()
     }
-    private val scannerInterceptor = HardwareScannerInterceptor { barcode ->
-        posViewModel.onBarcodeScanned(barcode)
-    }
+    private val scannerInterceptor =
+        HardwareScannerInterceptor { barcode ->
+            posViewModel.onBarcodeScanned(barcode)
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -136,7 +142,7 @@ private fun AppRoot() {
 
     // Ambil profil toko terkini untuk diteruskan ke ReceiptManager saat ekspor PDF/Gambar
     val storeProfile by storeProfileViewModel.profile.collectAsStateWithLifecycle()
-    
+
     val pageAlpha = remember { Animatable(1f) }
     var isJumping by remember { mutableStateOf(false) }
 
@@ -168,7 +174,7 @@ private fun AppRoot() {
                         Icons.Rounded.Warning,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(28.dp),
                     )
                 },
                 title = { Text("Ada Shift Kasir Aktif!", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
@@ -178,39 +184,42 @@ private fun AppRoot() {
                             "Shift kasir atas nama ${shift.cashierName} masih berjalan. " +
                                 "Untuk keakuratan laporan keuangan dan laci kas (rekonsiliasi uang fisik), " +
                                 "sangat disarankan untuk menutup shift terlebih dahulu di tab Kasir.",
-                            fontSize = 13.sp
+                            fontSize = 13.sp,
                         )
                         Text(
                             "Catatan: Jika Anda memilih 'Tetap Keluar', sesi shift akan tetap aktif menggantung " +
                                 "dan harus ditutup secara normal saat aplikasi dibuka kembali.",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
                         )
                     }
                 },
                 confirmButton = {
-                    Button(onClick = { showExitDialog = false; goTo(Dest.POS) }) {
+                    Button(onClick = {
+                        showExitDialog = false
+                        goTo(Dest.POS)
+                    }) {
                         Text("Tutup Shift Dulu", fontSize = 13.sp)
                     }
                 },
                 dismissButton = {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         TextButton(
                             onClick = {
                                 showExitDialog = false
                                 (context as? android.app.Activity)?.finishAndRemoveTask()
                             },
-                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                         ) { Text("Tetap Keluar", fontSize = 13.sp) }
                         OutlinedButton(onClick = { showExitDialog = false }) {
                             Text("Batal", fontSize = 13.sp)
                         }
                     }
-                }
+                },
             )
         } else {
             AlertDialog(
@@ -220,7 +229,7 @@ private fun AppRoot() {
                     Text(
                         "Semua data transaksi dan laci kas Anda telah tersimpan dengan aman di database lokal. " +
                             "Sesi kasir Anda saat ini bersih (tidak ada shift berjalan). Keluar sekarang?",
-                        fontSize = 13.sp
+                        fontSize = 13.sp,
                     )
                 },
                 confirmButton = {
@@ -229,12 +238,12 @@ private fun AppRoot() {
                             showExitDialog = false
                             (context as? android.app.Activity)?.finishAndRemoveTask()
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                     ) { Text("Keluar", fontSize = 13.sp) }
                 },
                 dismissButton = {
                     TextButton(onClick = { showExitDialog = false }) { Text("Batal", fontSize = 13.sp) }
-                }
+                },
             )
         }
     }
@@ -253,62 +262,75 @@ private fun AppRoot() {
     val hideFab = imeVisible || (!isLandscape && currentDest == Dest.POS && isCartExpanded)
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
     ) {
         HorizontalPager(
             state = pagerState,
-            // BEST PRACTICE 1: imePadding Dihapus dari Pager. 
+            // BEST PRACTICE 1: imePadding Dihapus dari Pager.
             // Pager tetap full screen, inset keyboard diurus oleh layar masing-masing.
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = pageAlpha.value }, 
-            userScrollEnabled = !menuExpanded && !imeVisible && !isJumping
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = pageAlpha.value },
+            userScrollEnabled = !menuExpanded && !imeVisible && !isJumping,
         ) { page ->
             val dest = Dest.entries[page]
             when (dest) {
-                Dest.POS -> PosScreen(
-                    viewModel = posViewModel,
-                    forceWideLayout = isLandscape,
-                    onNavigateToSettings = { goTo(Dest.SETTINGS) },
-                    onSharePdfFile = { file ->
-                        context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
-                    },
-                    onExportPdf = { result ->
-                        // Pindahkan ke background thread mencegah ANR
-                        scope.launch {
-                            val file = ReceiptManager.exportToPdf(context, result, storeProfile)
-                            Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
-                        }
-                    },
-                    isCartExpanded = if (isLandscape) false else isCartExpanded,
-                    onCartExpandedChange = if (isLandscape) ({}) else ({ v: Boolean -> isCartExpanded = v })
-                )
-                Dest.INVENTORY -> InventoryScreen(viewModel = inventoryViewModel)
-                Dest.REPORT -> ReportScreen(
-                    viewModel = reportViewModel,
-                    onNavigateToSettings = { goTo(Dest.SETTINGS) },
-                    onSharePdfFile = { file ->
-                        context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
-                    },
-                    onExportPdf = { result ->
-                        // Pindahkan ke background thread mencegah ANR
-                        scope.launch {
-                            val file = ReceiptManager.exportToPdf(context, result, storeProfile)
-                            Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
-                        }
-                    },
-                    onShare = { result ->
-                        context.startActivity(ReceiptManager.buildShareIntent(context, result))
-                    }
-                )
-                Dest.SETTINGS -> SettingsScreen(
-                    viewModel = settingsViewModel,
-                    printerViewModel = printerViewModel,
-                    storeProfileViewModel = storeProfileViewModel,
-                    onExitClick = { showExitDialog = true }
-                )
+                Dest.POS -> {
+                    PosScreen(
+                        viewModel = posViewModel,
+                        forceWideLayout = isLandscape,
+                        onNavigateToSettings = { goTo(Dest.SETTINGS) },
+                        onSharePdfFile = { file ->
+                            context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
+                        },
+                        onExportPdf = { result ->
+                            // Pindahkan ke background thread mencegah ANR
+                            scope.launch {
+                                val file = ReceiptManager.exportToPdf(context, result, storeProfile)
+                                Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        isCartExpanded = if (isLandscape) false else isCartExpanded,
+                        onCartExpandedChange = if (isLandscape) ({}) else ({ v: Boolean -> isCartExpanded = v }),
+                    )
+                }
+
+                Dest.INVENTORY -> {
+                    InventoryScreen(viewModel = inventoryViewModel)
+                }
+
+                Dest.REPORT -> {
+                    ReportScreen(
+                        viewModel = reportViewModel,
+                        onNavigateToSettings = { goTo(Dest.SETTINGS) },
+                        onSharePdfFile = { file ->
+                            context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
+                        },
+                        onExportPdf = { result ->
+                            // Pindahkan ke background thread mencegah ANR
+                            scope.launch {
+                                val file = ReceiptManager.exportToPdf(context, result, storeProfile)
+                                Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        onShare = { result ->
+                            context.startActivity(ReceiptManager.buildShareIntent(context, result))
+                        },
+                    )
+                }
+
+                Dest.SETTINGS -> {
+                    SettingsScreen(
+                        viewModel = settingsViewModel,
+                        printerViewModel = printerViewModel,
+                        storeProfileViewModel = storeProfileViewModel,
+                        onExitClick = { showExitDialog = true },
+                    )
+                }
             }
         }
 
@@ -316,16 +338,17 @@ private fun AppRoot() {
             visible = menuExpanded,
             enter = fadeIn(),
             exit = fadeOut(),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.35f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { menuExpanded = false }
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.35f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { menuExpanded = false },
             )
         }
 
@@ -333,16 +356,20 @@ private fun AppRoot() {
             visible = !hideFab,
             enter = fadeIn(),
             exit = fadeOut(),
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 16.dp, bottom = 8.dp)
-                .navigationBarsPadding()
+            modifier =
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 16.dp, bottom = 8.dp)
+                    .navigationBarsPadding(),
         ) {
             ExpandableMenuFab(
                 expanded = menuExpanded,
                 onToggle = { menuExpanded = !menuExpanded },
                 selected = currentDest,
-                onSelect = { dest -> goTo(dest); menuExpanded = false }
+                onSelect = { dest ->
+                    goTo(dest)
+                    menuExpanded = false
+                },
             )
         }
     }
@@ -353,26 +380,26 @@ private fun ExpandableMenuFab(
     expanded: Boolean,
     onToggle: () -> Unit,
     selected: Dest,
-    onSelect: (Dest) -> Unit
+    onSelect: (Dest) -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         AnimatedVisibility(
             visible = expanded,
             enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom),
-            exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom)
+            exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom),
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Dest.entries.forEach { item ->
                     MiniMenuItem(
                         dest = item,
                         isSelected = item == selected,
-                        onClick = { onSelect(item) }
+                        onClick = { onSelect(item) },
                     )
                 }
             }
@@ -381,14 +408,14 @@ private fun ExpandableMenuFab(
             modifier = Modifier.size(40.dp).shadow(6.dp, CircleShape),
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primary,
-            onClick = onToggle
+            onClick = onToggle,
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = if (expanded) Icons.Rounded.Close else Icons.Rounded.Menu,
                     contentDescription = if (expanded) "Tutup menu" else "Buka menu",
                     tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(20.dp),
                 )
             }
         }
@@ -396,27 +423,32 @@ private fun ExpandableMenuFab(
 }
 
 @Composable
-private fun MiniMenuItem(dest: Dest, isSelected: Boolean, onClick: () -> Unit) {
+private fun MiniMenuItem(
+    dest: Dest,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
     Surface(
         modifier = Modifier.size(36.dp).shadow(4.dp, CircleShape),
         shape = CircleShape,
         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-        onClick = onClick
+        onClick = onClick,
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = dest.icon(),
                 contentDescription = dest.label,
                 tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(18.dp),
             )
         }
     }
 }
 
-private fun Dest.icon() = when (this) {
-    Dest.POS -> Icons.Rounded.ShoppingCart
-    Dest.INVENTORY -> Icons.Rounded.Inventory2
-    Dest.REPORT -> Icons.Rounded.Assessment
-    Dest.SETTINGS -> Icons.Rounded.Settings
-}
+private fun Dest.icon() =
+    when (this) {
+        Dest.POS -> Icons.Rounded.ShoppingCart
+        Dest.INVENTORY -> Icons.Rounded.Inventory2
+        Dest.REPORT -> Icons.Rounded.Assessment
+        Dest.SETTINGS -> Icons.Rounded.Settings
+    }

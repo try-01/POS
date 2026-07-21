@@ -11,8 +11,8 @@ import androidx.room.PrimaryKey
         Index(value = ["sku"], unique = true),
         Index(value = ["name"]),
         Index(value = ["barcode"], unique = true),
-        Index(value = ["category"]) // BARU: mempercepat query DISTINCT kategori & filter
-    ]
+        Index(value = ["category"]), // BARU: mempercepat query DISTINCT kategori & filter
+    ],
 )
 data class ProductEntity(
     @PrimaryKey(autoGenerate = true)
@@ -28,5 +28,5 @@ data class ProductEntity(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "category", defaultValue = "''")
-    val category: String = ""
+    val category: String = "",
 )

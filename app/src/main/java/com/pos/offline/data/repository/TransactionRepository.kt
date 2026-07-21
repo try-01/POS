@@ -17,14 +17,21 @@ import kotlinx.coroutines.flow.Flow
 
 data class CheckoutResult(
     val transaction: TransactionEntity,
-    val items: List<TransactionItemEntity>
+    val items: List<TransactionItemEntity>,
 )
 
-class InsufficientStockException(val productName: String) : RuntimeException()
+class InsufficientStockException(
+    val productName: String,
+) : RuntimeException()
 
 sealed class VoidOutcome {
-    data class Success(val restoredStockCount: Int, val skippedStockCount: Int) : VoidOutcome()
+    data class Success(
+        val restoredStockCount: Int,
+        val skippedStockCount: Int,
+    ) : VoidOutcome()
+
     data object AlreadyVoided : VoidOutcome()
+
     data object NotFound : VoidOutcome()
 
     data object ShiftClosed : VoidOutcome()
@@ -35,18 +42,21 @@ class TransactionRepository(
     private val transactionDao: TransactionDao,
     private val cartDao: CartDao,
     private val productDao: ProductDao,
-    private val shiftRepository: ShiftRepository
+    private val shiftRepository: ShiftRepository,
 ) {
     val transactions: Flow<List<TransactionEntity>> = transactionDao.observeAll()
 
-    fun dailyTransactions(startOfDay: Long, endOfDay: Long): Flow<List<TransactionEntity>> =
-        transactionDao.observeByDateRange(startOfDay, endOfDay)
+    fun dailyTransactions(
+        startOfDay: Long,
+        endOfDay: Long,
+    ): Flow<List<TransactionEntity>> = transactionDao.observeByDateRange(startOfDay, endOfDay)
 
-    fun dailyRevenue(startOfDay: Long, endOfDay: Long): Flow<Long> =
-        transactionDao.observeDailyRevenue(startOfDay, endOfDay)
+    fun dailyRevenue(
+        startOfDay: Long,
+        endOfDay: Long,
+    ): Flow<Long> = transactionDao.observeDailyRevenue(startOfDay, endOfDay)
 
-    fun transactionsByShift(shiftId: Long): Flow<List<TransactionEntity>> =
-        transactionDao.observeByShift(shiftId)
+    fun transactionsByShift(shiftId: Long): Flow<List<TransactionEntity>> = transactionDao.observeByShift(shiftId)
 
     suspend fun checkout(
         cart: List<CartItemEntity>,
@@ -57,16 +67,19 @@ class TransactionRepository(
         paymentMethod: PaymentMethod = PaymentMethod.CASH,
         cashierId: Long? = null,
         cashierName: String = "",
-        shiftId: Long? = null
+        shiftId: Long? = null,
     ): CheckoutResult {
         require(cart.isNotEmpty()) { "Keranjang kosong" }
 
         val subtotal = cart.sumOf { it.unitPrice * it.quantity.toLong() }
 
-        val rawDiscountAmount = (when (discountType) {
-            DiscountType.NOMINAL -> discountValue.roundToRupiah()
-            DiscountType.PERCENT -> (subtotal * (discountValue / 100.0)).roundToRupiah()
-        }).coerceAtLeast(0L)
+        val rawDiscountAmount =
+            (
+                when (discountType) {
+                    DiscountType.NOMINAL -> discountValue.roundToRupiah()
+                    DiscountType.PERCENT -> (subtotal * (discountValue / 100.0)).roundToRupiah()
+                }
+            ).coerceAtLeast(0L)
         val discountAmount = rawDiscountAmount.coerceAtMost(subtotal)
 
         val taxableBase = (subtotal - discountAmount).coerceAtLeast(0L) // DPP
@@ -77,35 +90,37 @@ class TransactionRepository(
         val invoiceId = "INV-${System.currentTimeMillis()}"
         val now = System.currentTimeMillis()
 
-        val transaction = TransactionEntity(
-            id = invoiceId,
-            createdAt = now,
-            subtotal = subtotal,
-            discount = discountAmount,
-            tax = tax,
-            total = total,
-            paidAmount = paid,
-            change = change,
-            paymentMethod = paymentMethod.name,
-            cashierId = cashierId,
-            cashierName = cashierName,
-            shiftId = shiftId,
-            discountType = discountType.name,
-            discountValue = discountValue
-        )
-
-        val items = cart.map { cartItem ->
-            val unitCost = productDao.getById(cartItem.productId)?.cost ?: 0L
-            TransactionItemEntity(
-                transactionId = invoiceId,
-                productId = cartItem.productId,
-                productName = cartItem.name,
-                unitPrice = cartItem.unitPrice,
-                quantity = cartItem.quantity,
-                lineTotal = cartItem.unitPrice * cartItem.quantity.toLong(),
-                unitCost = unitCost
+        val transaction =
+            TransactionEntity(
+                id = invoiceId,
+                createdAt = now,
+                subtotal = subtotal,
+                discount = discountAmount,
+                tax = tax,
+                total = total,
+                paidAmount = paid,
+                change = change,
+                paymentMethod = paymentMethod.name,
+                cashierId = cashierId,
+                cashierName = cashierName,
+                shiftId = shiftId,
+                discountType = discountType.name,
+                discountValue = discountValue,
             )
-        }
+
+        val items =
+            cart.map { cartItem ->
+                val unitCost = productDao.getById(cartItem.productId)?.cost ?: 0L
+                TransactionItemEntity(
+                    transactionId = invoiceId,
+                    productId = cartItem.productId,
+                    productName = cartItem.name,
+                    unitPrice = cartItem.unitPrice,
+                    quantity = cartItem.quantity,
+                    lineTotal = cartItem.unitPrice * cartItem.quantity.toLong(),
+                    unitCost = unitCost,
+                )
+            }
 
         database.withTransaction {
             cart.forEach { item ->
@@ -156,7 +171,7 @@ class TransactionRepository(
                 id = invoiceId,
                 status = TransactionStatus.VOID.name,
                 voidedAt = now,
-                reason = null
+                reason = null,
             )
         }
 

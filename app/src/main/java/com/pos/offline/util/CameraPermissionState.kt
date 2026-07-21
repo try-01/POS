@@ -24,14 +24,18 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 
 enum class CameraPermissionState {
-    NOT_REQUESTED, GRANTED, SHOW_RATIONALE, PERMANENTLY_DENIED
+    NOT_REQUESTED,
+    GRANTED,
+    SHOW_RATIONALE,
+    PERMANENTLY_DENIED,
 }
 
-tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
-}
+tailrec fun Context.findActivity(): Activity? =
+    when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
 
 @Composable
 fun rememberCameraPermissionState(): Pair<CameraPermissionState, () -> Unit> {
@@ -42,31 +46,44 @@ fun rememberCameraPermissionState(): Pair<CameraPermissionState, () -> Unit> {
         mutableStateOf(
             if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED
-            ) CameraPermissionState.GRANTED
-            else CameraPermissionState.NOT_REQUESTED
+            ) {
+                CameraPermissionState.GRANTED
+            } else {
+                CameraPermissionState.NOT_REQUESTED
+            },
         )
     }
 
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        state = when {
-            granted -> CameraPermissionState.GRANTED
-            act != null && ActivityCompat.shouldShowRequestPermissionRationale(act, Manifest.permission.CAMERA) ->
-                CameraPermissionState.SHOW_RATIONALE
-            else -> CameraPermissionState.PERMANENTLY_DENIED
+    val launcher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            state =
+                when {
+                    granted -> {
+                        CameraPermissionState.GRANTED
+                    }
+
+                    act != null && ActivityCompat.shouldShowRequestPermissionRationale(act, Manifest.permission.CAMERA) -> {
+                        CameraPermissionState.SHOW_RATIONALE
+                    }
+
+                    else -> {
+                        CameraPermissionState.PERMANENTLY_DENIED
+                    }
+                }
         }
-    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME &&
-                ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-            ) {
-                state = CameraPermissionState.GRANTED
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME &&
+                    ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    state = CameraPermissionState.GRANTED
+                }
             }
-        }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
@@ -75,9 +92,10 @@ fun rememberCameraPermissionState(): Pair<CameraPermissionState, () -> Unit> {
 }
 
 fun openAppSettings(context: Context) {
-    val intent = Intent(
-        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-        Uri.fromParts("package", context.packageName, null)
-    )
+    val intent =
+        Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", context.packageName, null),
+        )
     context.startActivity(intent)
 }

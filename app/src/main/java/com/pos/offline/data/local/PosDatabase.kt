@@ -25,7 +25,10 @@ import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.TransactionItemEntity
 
 private data class SeedProduct(
-    val name: String, val sku: String, val price: Long, val cost: Long
+    val name: String,
+    val sku: String,
+    val price: Long,
+    val cost: Long,
 )
 
 @Database(
@@ -39,19 +42,26 @@ private data class SeedProduct(
         ReturnEntity::class,
         ReturnItemEntity::class,
         PrinterEntity::class,
-        StoreProfileEntity::class
+        StoreProfileEntity::class,
     ],
     version = 10,
-    exportSchema = true
+    exportSchema = true,
 )
 abstract class PosDatabase : RoomDatabase() {
     abstract fun productDao(): ProductDao
+
     abstract fun cartDao(): CartDao
+
     abstract fun transactionDao(): TransactionDao
+
     abstract fun cashierDao(): CashierDao
+
     abstract fun shiftDao(): ShiftDao
+
     abstract fun returnDao(): ReturnDao
+
     abstract fun printerDao(): PrinterDao
+
     abstract fun storeProfileDao(): StoreProfileDao
 
     companion object {
@@ -60,12 +70,12 @@ abstract class PosDatabase : RoomDatabase() {
 
         fun getInstance(context: Context): PosDatabase =
             INSTANCE ?: synchronized(this) {
-                INSTANCE ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    PosDatabase::class.java,
-                    "pos.db"
-                )
-                    .addCallback(SEED_CALLBACK)
+                INSTANCE ?: Room
+                    .databaseBuilder(
+                        context.applicationContext,
+                        PosDatabase::class.java,
+                        "pos.db",
+                    ).addCallback(SEED_CALLBACK)
                     .addMigrations(*Migrations.ALL)
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
@@ -79,35 +89,37 @@ abstract class PosDatabase : RoomDatabase() {
             }
         }
 
-        private val SEED_CALLBACK = object : RoomDatabase.Callback() {
-            override fun onCreate(db: SupportSQLiteDatabase) {
-                super.onCreate(db)
-                val now = System.currentTimeMillis()
-                val samples = listOf(
-                    SeedProduct("Kopi Hitam", "SKU-001", 8_000L, 3_000L),
-                    SeedProduct("Kopi Susu", "SKU-002", 12_000L, 5_000L),
-                    SeedProduct("Es Teh Manis", "SKU-003", 5_000L, 1_500L),
-                    SeedProduct("Roti Bakar", "SKU-004", 15_000L, 7_000L),
-                    SeedProduct("Mie Goreng", "SKU-005", 18_000L, 9_000L),
-                    SeedProduct("Nasi Goreng", "SKU-006", 20_000L, 10_000L),
-                    SeedProduct("Air Mineral", "SKU-007", 4_000L, 2_000L),
-                    SeedProduct("Gorengan", "SKU-008", 3_000L, 1_000L)
-                )
-                samples.forEach { s ->
+        private val SEED_CALLBACK =
+            object : RoomDatabase.Callback() {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    super.onCreate(db)
+                    val now = System.currentTimeMillis()
+                    val samples =
+                        listOf(
+                            SeedProduct("Kopi Hitam", "SKU-001", 8_000L, 3_000L),
+                            SeedProduct("Kopi Susu", "SKU-002", 12_000L, 5_000L),
+                            SeedProduct("Es Teh Manis", "SKU-003", 5_000L, 1_500L),
+                            SeedProduct("Roti Bakar", "SKU-004", 15_000L, 7_000L),
+                            SeedProduct("Mie Goreng", "SKU-005", 18_000L, 9_000L),
+                            SeedProduct("Nasi Goreng", "SKU-006", 20_000L, 10_000L),
+                            SeedProduct("Air Mineral", "SKU-007", 4_000L, 2_000L),
+                            SeedProduct("Gorengan", "SKU-008", 3_000L, 1_000L),
+                        )
+                    samples.forEach { s ->
+                        db.execSQL(
+                            "INSERT INTO products " +
+                                "(name, sku, barcode, category, price, cost, stock, active, createdAt, updatedAt) " +
+                                "VALUES (?, ?, NULL, '', ?, ?, ?, 1, ?, ?)",
+                            arrayOf<Any>(s.name, s.sku, s.price, s.cost, 25, now, now),
+                        )
+                    }
+
                     db.execSQL(
-                        "INSERT INTO products " +
-                            "(name, sku, barcode, category, price, cost, stock, active, createdAt, updatedAt) " +
-                            "VALUES (?, ?, NULL, '', ?, ?, ?, 1, ?, ?)",
-                        arrayOf<Any>(s.name, s.sku, s.price, s.cost, 25, now, now)
+                        "INSERT OR IGNORE INTO store_profile " +
+                            "(id, storeName, address, footerNote, logoBytes, autoPrintEnabled) " +
+                            "VALUES (1, '', '', '', NULL, 0)",
                     )
                 }
-
-                db.execSQL(
-                    "INSERT OR IGNORE INTO store_profile " +
-                        "(id, storeName, address, footerNote, logoBytes, autoPrintEnabled) " +
-                        "VALUES (1, '', '', '', NULL, 0)"
-                )
             }
-        }
     }
 }

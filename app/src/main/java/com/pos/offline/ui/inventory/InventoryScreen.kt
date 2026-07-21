@@ -1,6 +1,8 @@
 package com.pos.offline.ui.inventory
 
 import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,6 +16,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -22,37 +26,37 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.Inventory2
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.FileUpload
-import androidx.compose.material.icons.automirrored.rounded.Sort
+import androidx.compose.material.icons.rounded.Inventory2
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.QrCodeScanner
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -68,30 +72,26 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.material3.IconButton
-import androidx.compose.material.icons.rounded.QrCodeScanner
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.pos.offline.ui.components.rememberBarcodeScanner
 import com.pos.offline.data.local.entity.ProductEntity
-import com.pos.offline.util.toRupiah
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.ThousandsSeparatorTransformation
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import com.pos.offline.ui.components.rememberBarcodeScanner
 import com.pos.offline.util.ExcelManager
+import com.pos.offline.util.toRupiah
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -108,20 +108,24 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
     val sortOption by viewModel.sortOption.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
-    val hasCamera = remember {
-        context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
-    }
+    val hasCamera =
+        remember {
+            context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+        }
     val launchMainScanner = rememberBarcodeScanner(onScanned = viewModel::onBarcodeScanned)
 
-    val excelExportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    ) { uri -> if (uri != null) viewModel.exportToExcel(uri) }
+    val excelExportLauncher =
+        rememberLauncherForActivityResult(
+            contract =
+                ActivityResultContracts.CreateDocument(
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ),
+        ) { uri -> if (uri != null) viewModel.exportToExcel(uri) }
 
-    val excelImportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri -> if (uri != null) viewModel.importFromExcel(uri) }
+    val excelImportLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+        ) { uri -> if (uri != null) viewModel.importFromExcel(uri) }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg -> snackbarHostState.showSnackbar(msg) }
@@ -131,48 +135,51 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
         Scaffold(
             topBar = {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 12.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding()
+                            .padding(horizontal = 12.dp),
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp, bottom = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
                             Icons.Rounded.Inventory2,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = MaterialTheme.colorScheme.primary,
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
                             "Inventaris",
                             style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
                             fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
                         if (products.isNotEmpty()) {
                             Text(
                                 "${products.size} produk",
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             )
                         }
                     }
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         CompactInventorySearchBar(
                             query = query,
                             onQueryChange = viewModel::search,
-                            modifier = Modifier.weight(1f).height(34.dp)
+                            modifier = Modifier.weight(1f).height(34.dp),
                         )
                         Spacer(Modifier.width(6.dp))
                         if (hasCamera) {
@@ -184,18 +191,20 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                             desc = "Import Excel",
                             loading = excelState.isImporting,
                             onClick = {
-                                excelImportLauncher.launch(arrayOf(
-                                    "application/vnd.ms-excel",
-                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                ))
-                            }
+                                excelImportLauncher.launch(
+                                    arrayOf(
+                                        "application/vnd.ms-excel",
+                                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    ),
+                                )
+                            },
                         )
                         Spacer(Modifier.width(6.dp))
                         ExcelIconButton(
                             icon = Icons.Rounded.FileDownload,
                             desc = "Export Excel",
                             loading = excelState.isExporting,
-                            onClick = { excelExportLauncher.launch(ExcelManager.suggestedExportFileName()) }
+                            onClick = { excelExportLauncher.launch(ExcelManager.suggestedExportFileName()) },
                         )
                         Spacer(Modifier.width(6.dp))
                         SortMenuButton(current = sortOption, onSelect = viewModel::setSortOption)
@@ -203,29 +212,29 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                 }
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },
-            contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars)
+            contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars),
         ) { inner ->
             Column(
-            Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .imePadding()
-        )    {
+                Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .imePadding(),
+            ) {
                 if (products.isEmpty()) {
                     EmptyInventory(hasQuery = query.isNotEmpty())
                 } else {
                     LazyColumn(
                         contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 96.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         items(
                             items = products,
                             key = { it.id },
-                            contentType = { "product" }
+                            contentType = { "product" },
                         ) { product ->
                             ProductRow(
                                 product = product,
-                                onEdit = { viewModel.startEdit(product) }
+                                onEdit = { viewModel.startEdit(product) },
                             )
                         }
                     }
@@ -235,11 +244,12 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
 
         SmallFloatingActionButton(
             onClick = viewModel::startAdd,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = 8.dp)
-                .navigationBarsPadding()
-                .imePadding()
+            modifier =
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 8.dp)
+                    .navigationBarsPadding()
+                    .imePadding(),
         ) {
             Icon(Icons.Rounded.Add, contentDescription = "Tambah Produk", modifier = Modifier.size(20.dp))
         }
@@ -252,7 +262,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             onSave = viewModel::save,
             onDismiss = viewModel::dismissForm,
             checkBarcodeConflict = viewModel::checkBarcodeConflict,
-            onDeleteRequest = { viewModel.requestDeleteFromForm(state.id) }
+            onDeleteRequest = { viewModel.requestDeleteFromForm(state.id) },
         )
     }
 
@@ -268,7 +278,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                 TextButton(onClick = viewModel::cancelDelete) { Text("Batal") }
             },
             title = { Text("Hapus Produk?") },
-            text = { Text("\"${target.name}\" akan dihapus dari katalog.") }
+            text = { Text("\"${target.name}\" akan dihapus dari katalog.") },
         )
     }
 
@@ -288,7 +298,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             },
             dismissButton = {
                 TextButton(onClick = viewModel::dismissScanNotFound) { Text("Batal") }
-            }
+            },
         )
     }
 
@@ -298,7 +308,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             parseErrors = excelState.parseErrors,
             isCommitting = excelState.isCommitting,
             onConfirm = viewModel::commitImport,
-            onDismiss = viewModel::dismissReviewDialog
+            onDismiss = viewModel::dismissReviewDialog,
         )
     }
 }
@@ -308,15 +318,16 @@ private fun ExcelIconButton(
     icon: ImageVector,
     desc: String,
     loading: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Box(
-        modifier = Modifier
-            .size(34.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
-            .clickable(enabled = !loading, onClick = onClick),
-        contentAlignment = Alignment.Center
+        modifier =
+            Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                .clickable(enabled = !loading, onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
         if (loading) {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -325,7 +336,7 @@ private fun ExcelIconButton(
                 icon,
                 contentDescription = desc,
                 modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.primary
+                tint = MaterialTheme.colorScheme.primary,
             )
         }
     }
@@ -337,7 +348,7 @@ private fun ImportReviewDialog(
     parseErrors: List<String>,
     isCommitting: Boolean,
     onConfirm: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
 ) {
     val newCount = reviewItems.count { it.status == InventoryViewModel.ImportStatus.NEW }
     val conflictCount = reviewItems.count { it.status == InventoryViewModel.ImportStatus.CONFLICT }
@@ -348,11 +359,12 @@ private fun ImportReviewDialog(
         title = { Text("Tinjau Impor Produk", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
         text = {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 400.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     ImportStatBadge("Baru: $newCount", MaterialTheme.colorScheme.primary)
@@ -363,7 +375,7 @@ private fun ImportReviewDialog(
                 Text(
                     "Hanya produk berstatus \"Baru\" yang akan ditambahkan. Konflik & duplikat dilewati demi menjaga data lama.",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
@@ -372,13 +384,13 @@ private fun ImportReviewDialog(
                         "⚠ ${parseErrors.size} baris gagal dibaca:",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                     parseErrors.take(10).forEach { err ->
                         Text(
                             err,
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            color = MaterialTheme.colorScheme.error
+                            color = MaterialTheme.colorScheme.error,
                         )
                     }
                     HorizontalDivider(Modifier.padding(vertical = 4.dp))
@@ -392,13 +404,13 @@ private fun ImportReviewDialog(
         confirmButton = {
             Button(
                 onClick = onConfirm,
-                enabled = !isCommitting && newCount > 0
+                enabled = !isCommitting && newCount > 0,
             ) {
                 if (isCommitting) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
+                        color = MaterialTheme.colorScheme.onPrimary,
                     )
                 } else {
                     Text("Impor $newCount Produk", fontSize = 13.sp)
@@ -409,33 +421,37 @@ private fun ImportReviewDialog(
             TextButton(onClick = onDismiss, enabled = !isCommitting) {
                 Text("Batal", fontSize = 13.sp)
             }
-        }
+        },
     )
 }
 
 @Composable
-private fun ImportStatBadge(text: String, color: Color) {
+private fun ImportStatBadge(
+    text: String,
+    color: Color,
+) {
     Surface(color = color.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
         Text(
             text,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
             color = color,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
         )
     }
 }
 
 @Composable
 private fun ImportReviewRow(item: InventoryViewModel.ImportReviewItem) {
-    val (label, color) = when (item.status) {
-        InventoryViewModel.ImportStatus.NEW -> "BARU" to MaterialTheme.colorScheme.primary
-        InventoryViewModel.ImportStatus.CONFLICT -> "KONFLIK" to Color(0xFFF5A623)
-        InventoryViewModel.ImportStatus.DUPLICATE_IN_FILE -> "DOBEL" to MaterialTheme.colorScheme.error
-    }
+    val (label, color) =
+        when (item.status) {
+            InventoryViewModel.ImportStatus.NEW -> "BARU" to MaterialTheme.colorScheme.primary
+            InventoryViewModel.ImportStatus.CONFLICT -> "KONFLIK" to Color(0xFFF5A623)
+            InventoryViewModel.ImportStatus.DUPLICATE_IN_FILE -> "DOBEL" to MaterialTheme.colorScheme.error
+        }
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
             Text(
@@ -443,20 +459,20 @@ private fun ImportReviewRow(item: InventoryViewModel.ImportReviewItem) {
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 "SKU: ${item.row.sku}${item.row.barcode?.let { " · $it" } ?: ""}",
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
             if (item.status == InventoryViewModel.ImportStatus.CONFLICT && item.conflictWith != null) {
                 Text(
                     "Bentrok dg: ${item.conflictWith.name}",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                    color = color
+                    color = color,
                 )
             }
         }
@@ -466,7 +482,7 @@ private fun ImportReviewRow(item: InventoryViewModel.ImportReviewItem) {
                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
                 color = color,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
             )
         }
     }
@@ -475,13 +491,13 @@ private fun ImportReviewRow(item: InventoryViewModel.ImportReviewItem) {
 @Composable
 private fun ProductRow(
     product: ProductEntity,
-    onEdit: () -> Unit
+    onEdit: () -> Unit,
 ) {
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 14.dp,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        onClick = null
+        onClick = null,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -490,12 +506,12 @@ private fun ProductRow(
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     product.sku,
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -503,7 +519,7 @@ private fun ProductRow(
                         product.price.toRupiah(),
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(Modifier.width(8.dp))
                     StockBadge(stock = product.stock)
@@ -514,7 +530,7 @@ private fun ProductRow(
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -530,7 +546,7 @@ private fun ProductRow(
                 contentDescription = "Edit ${product.name}",
                 tint = MaterialTheme.colorScheme.primary,
                 background = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                onClick = onEdit
+                onClick = onEdit,
             )
         }
     }
@@ -546,7 +562,7 @@ private fun CategoryBadge(category: String) {
             color = MaterialTheme.colorScheme.tertiary,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -557,15 +573,16 @@ private fun CompactIconAction(
     contentDescription: String,
     tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     background: Color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Box(
-        modifier = Modifier
-            .size(32.dp)
-            .clip(CircleShape)
-            .background(background)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
+        modifier =
+            Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(background)
+                .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(16.dp))
     }
@@ -573,18 +590,19 @@ private fun CompactIconAction(
 
 @Composable
 private fun StockBadge(stock: Int) {
-    val color = when {
-        stock <= 0 -> MaterialTheme.colorScheme.error
-        stock <= 5 -> Color(0xFFF5A623)
-        else -> MaterialTheme.colorScheme.primary
-    }
+    val color =
+        when {
+            stock <= 0 -> MaterialTheme.colorScheme.error
+            stock <= 5 -> Color(0xFFF5A623)
+            else -> MaterialTheme.colorScheme.primary
+        }
     Surface(color = color.copy(alpha = 0.16f), shape = RoundedCornerShape(6.dp)) {
         Text(
             text = if (stock <= 0) "Habis" else "Stok $stock",
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
             color = color,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
         )
     }
 }
@@ -597,19 +615,19 @@ private fun EmptyInventory(hasQuery: Boolean) {
                 Icons.Rounded.Inventory2,
                 contentDescription = null,
                 modifier = Modifier.size(40.dp),
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
             )
             Spacer(Modifier.height(8.dp))
             Text(
                 if (hasQuery) "Produk tidak ditemukan" else "Belum ada produk",
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             )
             if (!hasQuery) {
                 Text(
                     "Ketuk tombol + untuk mulai",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                 )
             }
         }
@@ -620,31 +638,33 @@ private fun EmptyInventory(hasQuery: Boolean) {
 private fun CompactInventorySearchBar(
     query: String,
     onQueryChange: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     BasicTextField(
         value = query,
         onValueChange = onQueryChange,
         singleLine = true,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 13.sp
-        ),
+        textStyle =
+            MaterialTheme.typography.bodyMedium.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 13.sp,
+            ),
         modifier = modifier,
         decorationBox = { innerTextField ->
             Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(10.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
-                    .padding(horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
                     Icons.Rounded.Search,
                     contentDescription = "Cari",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(16.dp),
                 )
                 Spacer(Modifier.width(6.dp))
                 Box(Modifier.weight(1f)) {
@@ -652,54 +672,56 @@ private fun CompactInventorySearchBar(
                         Text(
                             text = "Cari nama / SKU…",
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         )
                     }
                     innerTextField()
                 }
                 if (query.isNotEmpty()) {
                     Box(
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clip(CircleShape)
-                            .clickable { onQueryChange("") },
-                        contentAlignment = Alignment.Center
+                        modifier =
+                            Modifier
+                                .size(18.dp)
+                                .clip(CircleShape)
+                                .clickable { onQueryChange("") },
+                        contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             Icons.Rounded.Close,
                             contentDescription = "Hapus pencarian",
                             modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
             }
-        }
+        },
     )
 }
 
 @Composable
 private fun SortMenuButton(
     current: ProductSortOption,
-    onSelect: (ProductSortOption) -> Unit
+    onSelect: (ProductSortOption) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         Row(
-            modifier = Modifier
-                .height(34.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
-                .clickable { expanded = true }
-                .padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier =
+                Modifier
+                    .height(34.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                    .clickable { expanded = true }
+                    .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.AutoMirrored.Rounded.Sort, contentDescription = "Urutkan", modifier = Modifier.size(15.dp))
             Spacer(Modifier.width(4.dp))
             Text(
                 current.label,
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                maxLines = 1
+                maxLines = 1,
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -716,7 +738,7 @@ private fun SortMenuButton(
                         if (option == current) {
                             Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                         }
-                    }
+                    },
                 )
             }
         }
@@ -726,18 +748,19 @@ private fun SortMenuButton(
 @Composable
 private fun ScanIconButton(onClick: () -> Unit) {
     Box(
-        modifier = Modifier
-            .size(34.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
+        modifier =
+            Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
         Icon(
             Icons.Rounded.QrCodeScanner,
             contentDescription = "Scan barcode produk",
             modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.primary
+            tint = MaterialTheme.colorScheme.primary,
         )
     }
 }
@@ -749,7 +772,7 @@ private fun ProductFormDialog(
     onSave: (ProductFormState) -> Unit,
     onDismiss: () -> Unit,
     checkBarcodeConflict: suspend (String, Long) -> String?,
-    onDeleteRequest: () -> Unit
+    onDeleteRequest: () -> Unit,
 ) {
     var name by remember(state.id) { mutableStateOf(state.name) }
     var sku by remember(state.id) { mutableStateOf(state.sku) }
@@ -768,9 +791,10 @@ private fun ProductFormDialog(
     var barcodeConflict by remember(state.id) { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
-    val hasCamera = remember {
-        context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
-    }
+    val hasCamera =
+        remember {
+            context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+        }
 
     val launchScanner = rememberBarcodeScanner(onScanned = { code -> barcode = code })
 
@@ -780,7 +804,10 @@ private fun ProductFormDialog(
 
     LaunchedEffect(barcode) {
         val trimmed = barcode.trim()
-        if (trimmed.isBlank()) { barcodeConflict = null; return@LaunchedEffect }
+        if (trimmed.isBlank()) {
+            barcodeConflict = null
+            return@LaunchedEffect
+        }
         barcodeConflict = checkBarcodeConflict(trimmed, state.id)
     }
 
@@ -791,10 +818,11 @@ private fun ProductFormDialog(
             val priceLong = price.toLongOrNull() ?: 0L
             val costLong = cost.toLongOrNull() ?: 0L
             Column(
-                modifier = Modifier
-                    .heightIn(max = maxContentHeight)
-                    .verticalScroll(scrollState),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier =
+                    Modifier
+                        .heightIn(max = maxContentHeight)
+                        .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OutlinedTextField(
                     value = name,
@@ -803,7 +831,7 @@ private fun ProductFormDialog(
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                     shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -814,7 +842,7 @@ private fun ProductFormDialog(
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
 
                     OutlinedTextField(
@@ -823,9 +851,18 @@ private fun ProductFormDialog(
                         label = { Text("Barcode", style = MaterialTheme.typography.bodySmall) },
                         singleLine = true,
                         isError = barcodeConflict != null,
-                        supportingText = if (barcodeConflict != null) {
-                            { Text("Dipakai oleh: $barcodeConflict", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) }
-                        } else null,
+                        supportingText =
+                            if (barcodeConflict != null) {
+                                {
+                                    Text(
+                                        "Dipakai oleh: $barcodeConflict",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            } else {
+                                null
+                            },
                         textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1.2f),
@@ -838,18 +875,23 @@ private fun ProductFormDialog(
                                 }
                                 if (hasCamera) {
                                     IconButton(onClick = launchScanner, modifier = Modifier.size(24.dp)) {
-                                        Icon(Icons.Rounded.QrCodeScanner, contentDescription = "Scan", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                                        Icon(
+                                            Icons.Rounded.QrCodeScanner,
+                                            contentDescription = "Scan",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(14.dp),
+                                        )
                                     }
                                 }
                             }
-                        }
+                        },
                     )
                 }
 
                 CategoryField(
                     value = category,
                     suggestions = categories,
-                    onValueChange = { category = it }
+                    onValueChange = { category = it },
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -866,24 +908,28 @@ private fun ProductFormDialog(
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                 }
                 Spacer(Modifier.height(2.dp))
             }
         },
-        dismissButton = if (!state.isNew) {
-            {
-                Button(
-                    onClick = onDeleteRequest,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Hapus", color = MaterialTheme.colorScheme.onError)
+        dismissButton =
+            if (!state.isNew) {
+                {
+                    Button(
+                        onClick = onDeleteRequest,
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                            ),
+                    ) {
+                        Text("Hapus", color = MaterialTheme.colorScheme.onError)
+                    }
                 }
-            }
-        } else null,
+            } else {
+                null
+            },
         confirmButton = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onDismiss) { Text("Batal") }
@@ -901,13 +947,13 @@ private fun ProductFormDialog(
                                 price = price.toLongOrNull() ?: 0L,
                                 cost = cost.toLongOrNull() ?: 0L,
                                 stock = stock.toIntOrNull() ?: 0,
-                                createdAt = state.createdAt
-                            )
+                                createdAt = state.createdAt,
+                            ),
                         )
-                    }
+                    },
                 ) { Text("Simpan") }
             }
-        }
+        },
     )
 }
 
@@ -916,7 +962,7 @@ private fun NumberField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     OutlinedTextField(
         value = value,
@@ -926,7 +972,7 @@ private fun NumberField(
         textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         shape = RoundedCornerShape(10.dp),
-        modifier = modifier
+        modifier = modifier,
     )
 }
 
@@ -934,13 +980,17 @@ private fun NumberField(
 private fun CategoryField(
     value: String,
     suggestions: List<String>,
-    onValueChange: (String) -> Unit
+    onValueChange: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val filtered = remember(value, suggestions) {
-        if (value.isBlank()) suggestions
-        else suggestions.filter { it.contains(value, ignoreCase = true) }
-    }
+    val filtered =
+        remember(value, suggestions) {
+            if (value.isBlank()) {
+                suggestions
+            } else {
+                suggestions.filter { it.contains(value, ignoreCase = true) }
+            }
+        }
     Box(Modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = value,
@@ -958,18 +1008,19 @@ private fun CategoryField(
                         Icon(
                             Icons.Rounded.KeyboardArrowDown,
                             contentDescription = "Pilih kategori",
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(16.dp),
                         )
                     }
                 }
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { if (it.isFocused) expanded = suggestions.isNotEmpty() }
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { if (it.isFocused) expanded = suggestions.isNotEmpty() },
         )
         DropdownMenu(
             expanded = expanded && filtered.isNotEmpty(),
-            onDismissRequest = { expanded = false }
+            onDismissRequest = { expanded = false },
         ) {
             filtered.forEach { cat ->
                 DropdownMenuItem(
@@ -977,7 +1028,7 @@ private fun CategoryField(
                     onClick = {
                         onValueChange(cat)
                         expanded = false
-                    }
+                    },
                 )
             }
         }
@@ -989,7 +1040,7 @@ private fun MoneyNumberField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     OutlinedTextField(
         value = value,
@@ -1001,6 +1052,6 @@ private fun MoneyNumberField(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         visualTransformation = ThousandsSeparatorTransformation,
         shape = RoundedCornerShape(10.dp),
-        modifier = modifier
+        modifier = modifier,
     )
 }

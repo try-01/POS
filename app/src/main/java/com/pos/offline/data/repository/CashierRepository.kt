@@ -4,8 +4,9 @@ import com.pos.offline.data.local.dao.CashierDao
 import com.pos.offline.data.local.entity.CashierEntity
 import kotlinx.coroutines.flow.Flow
 
-class CashierRepository(private val cashierDao: CashierDao) {
-
+class CashierRepository(
+    private val cashierDao: CashierDao,
+) {
     val activeCashiers: Flow<List<CashierEntity>> = cashierDao.observeActive()
     val allCashiers: Flow<List<CashierEntity>> = cashierDao.observeAll()
 
@@ -13,5 +14,8 @@ class CashierRepository(private val cashierDao: CashierDao) {
 
     suspend fun save(cashier: CashierEntity): Long = cashierDao.upsert(cashier)
 
-    suspend fun setActive(id: Long, active: Boolean) = cashierDao.setActive(id, active)
+    suspend fun setActive(
+        id: Long,
+        active: Boolean,
+    ) = cashierDao.setActive(id, active)
 }

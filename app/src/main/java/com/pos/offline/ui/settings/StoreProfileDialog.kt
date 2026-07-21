@@ -58,7 +58,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun StoreProfileDialog(
     viewModel: StoreProfileViewModel,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val form = uiState.formState
@@ -67,29 +67,31 @@ fun StoreProfileDialog(
         viewModel.loadFormFromCurrentProfile()
     }
 
-    val pickImageLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null) viewModel.pickLogo(uri)
-    }
+    val pickImageLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.GetContent(),
+        ) { uri ->
+            if (uri != null) viewModel.pickLogo(uri)
+        }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
+            color = MaterialTheme.colorScheme.background,
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
                         "Profil Toko & Struk",
                         style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Rounded.Close, contentDescription = "Tutup")
@@ -97,35 +99,39 @@ fun StoreProfileDialog(
                 }
 
                 Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .verticalScroll(rememberScrollState())
-                        .imePadding(), // FIX UX: Mencegah textfield tertutup oleh keyboard
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .verticalScroll(rememberScrollState())
+                            .imePadding(),
+                    // FIX UX: Mencegah textfield tertutup oleh keyboard
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     Text("Logo Toko", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(contentAlignment = Alignment.Center) {
                             LogoPreview(
                                 logoBytes = form.logoBytes,
-                                modifier = Modifier
-                                    .size(72.dp)
-                                    .clip(RoundedCornerShape(10.dp))
+                                modifier =
+                                    Modifier
+                                        .size(72.dp)
+                                        .clip(RoundedCornerShape(10.dp)),
                             )
                             if (uiState.isProcessingLogo) {
                                 Box(
-                                    modifier = Modifier
-                                        .size(72.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.4f)),
-                                    contentAlignment = Alignment.Center
+                                    modifier =
+                                        Modifier
+                                            .size(72.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.4f)),
+                                    contentAlignment = Alignment.Center,
                                 ) {
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(20.dp),
                                         strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.onPrimary
+                                        color = MaterialTheme.colorScheme.onPrimary,
                                     )
                                 }
                             }
@@ -134,7 +140,7 @@ fun StoreProfileDialog(
                         Column {
                             OutlinedButton(
                                 onClick = { pickImageLauncher.launch("image/*") },
-                                enabled = !uiState.isProcessingLogo
+                                enabled = !uiState.isProcessingLogo,
                             ) {
                                 Icon(Icons.Rounded.Image, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
@@ -144,13 +150,13 @@ fun StoreProfileDialog(
                                 Spacer(Modifier.height(6.dp))
                                 OutlinedButton(
                                     onClick = { viewModel.clearLogo() },
-                                    enabled = !uiState.isProcessingLogo
+                                    enabled = !uiState.isProcessingLogo,
                                 ) {
                                     Icon(
                                         Icons.Rounded.Delete,
                                         contentDescription = null,
                                         modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.error
+                                        tint = MaterialTheme.colorScheme.error,
                                     )
                                     Spacer(Modifier.width(6.dp))
                                     Text("Hapus Logo", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
@@ -162,7 +168,7 @@ fun StoreProfileDialog(
                         "Logo akan otomatis disesuaikan ukurannya & diubah ke hitam-putih " +
                             "untuk dicetak di struk thermal.",
                         fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
                     OutlinedTextField(
@@ -170,14 +176,14 @@ fun StoreProfileDialog(
                         onValueChange = viewModel::updateStoreName,
                         label = { Text("Nama Toko", fontSize = 12.sp) },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
                         value = form.address,
                         onValueChange = viewModel::updateAddress,
                         label = { Text("Alamat", fontSize = 12.sp) },
                         minLines = 2,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
                         value = form.footerNote,
@@ -185,38 +191,38 @@ fun StoreProfileDialog(
                         label = { Text("Catatan Footer Struk", fontSize = 12.sp) },
                         placeholder = { Text("mis. Terima kasih telah berbelanja!", fontSize = 12.sp) },
                         minLines = 2,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Cetak Otomatis", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                             Text(
                                 "Otomatis cetak struk ke printer utama setiap transaksi selesai.",
                                 fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Switch(
                             checked = form.autoPrintEnabled,
-                            onCheckedChange = viewModel::updateAutoPrintEnabled
+                            onCheckedChange = viewModel::updateAutoPrintEnabled,
                         )
                     }
 
                     Button(
                         onClick = { viewModel.save() },
                         enabled = !uiState.isSaving && !uiState.isProcessingLogo,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         if (uiState.isSaving) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(14.dp),
                                 strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
+                                color = MaterialTheme.colorScheme.onPrimary,
                             )
                         } else {
                             Text("Simpan", fontSize = 13.sp)
@@ -231,17 +237,21 @@ fun StoreProfileDialog(
 }
 
 @Composable
-fun LogoPreview(logoBytes: ByteArray?, modifier: Modifier = Modifier) {
+fun LogoPreview(
+    logoBytes: ByteArray?,
+    modifier: Modifier = Modifier,
+) {
     val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = logoBytes) {
-        value = if (logoBytes != null) {
-            withContext(Dispatchers.IO) {
-                runCatching { 
-                    BitmapFactory.decodeByteArray(logoBytes, 0, logoBytes.size)?.asImageBitmap() 
-                }.getOrNull()
+        value =
+            if (logoBytes != null) {
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        BitmapFactory.decodeByteArray(logoBytes, 0, logoBytes.size)?.asImageBitmap()
+                    }.getOrNull()
+                }
+            } else {
+                null
             }
-        } else {
-            null
-        }
     }
 
     bitmap?.let { nonNullBitmap ->
@@ -249,17 +259,17 @@ fun LogoPreview(logoBytes: ByteArray?, modifier: Modifier = Modifier) {
             bitmap = nonNullBitmap, // Sekarang menggunakan nonNullBitmap yang dijamin tidak null
             contentDescription = "Logo toko",
             contentScale = ContentScale.Crop,
-            modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+            modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
         )
     } ?: run {
         Box(
             modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
             Icon(
                 Icons.Rounded.Storefront,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

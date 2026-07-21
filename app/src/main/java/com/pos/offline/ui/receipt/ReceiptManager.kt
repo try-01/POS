@@ -1,16 +1,19 @@
 package com.pos.offline.ui.receipt
 
-//import android.bluetooth.BluetoothDevice
-//import android.bluetooth.BluetoothManager
+// import android.bluetooth.BluetoothDevice
+// import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
+import com.pos.offline.data.local.entity.StoreProfileEntity
+import com.pos.offline.data.local.entity.isVoid
+import com.pos.offline.data.repository.CheckoutResult
+import com.pos.offline.ui.components.paymentMethodLabel
 import com.pos.offline.util.toRupiah
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,23 +24,25 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.pos.offline.data.local.entity.StoreProfileEntity
-import com.pos.offline.data.local.entity.isVoid
-import com.pos.offline.data.repository.CheckoutResult
-import com.pos.offline.ui.components.paymentMethodLabel
+import android.graphics.Color as AndroidColor
 
 enum class ReceiptAlign { LEFT, CENTER, RIGHT }
+
 data class ReceiptLine(
     val left: String = "",
     val right: String = "",
     val align: ReceiptAlign = ReceiptAlign.LEFT,
     val bold: Boolean = false,
-    val large: Boolean = false
+    val large: Boolean = false,
 )
-object ReceiptManager {
 
+object ReceiptManager {
     private val dateFmt = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("id-ID"))
-    fun buildLines(result: CheckoutResult, storeProfile: StoreProfileEntity? = null): List<ReceiptLine> {
+
+    fun buildLines(
+        result: CheckoutResult,
+        storeProfile: StoreProfileEntity? = null,
+    ): List<ReceiptLine> {
         val tx = result.transaction
         val lines = mutableListOf<ReceiptLine>()
 
@@ -130,19 +135,32 @@ object ReceiptManager {
         return lines
     }
 
-    private fun divider(): ReceiptLine =
-        ReceiptLine(left = "--------------------------------", align = ReceiptAlign.CENTER)
-    fun toEscPosBytes(lines: List<ReceiptLine>, paperChars: Int = 32): ByteArray {
+    private fun divider(): ReceiptLine = ReceiptLine(left = "--------------------------------", align = ReceiptAlign.CENTER)
+
+    fun toEscPosBytes(
+        lines: List<ReceiptLine>,
+        paperChars: Int = 32,
+    ): ByteArray {
         val os = ByteArrayOutputStream()
-        fun cmd(vararg b: Int) = b.forEach { os.write(it) }       // perintah kontrol
+
+        fun cmd(vararg b: Int) = b.forEach { os.write(it) } // perintah kontrol
+
         fun txt(t: String) = os.write(t.toByteArray(Charsets.UTF_8)) // teks UTF-8
         cmd(0x1B, 0x40) // ESC @ : reset printer
         lines.forEach { line ->
-            cmd(0x1B, 0x45, if (line.bold) 0x01 else 0x00)        // ESC E : bold on/off
-            cmd(0x1D, 0x21, if (line.large) 0x11 else 0x00)       // GS !  : double width+height
-            cmd(0x1B, 0x61, when (line.align) {                   // ESC a : alignment
-                ReceiptAlign.LEFT -> 0x00; ReceiptAlign.CENTER -> 0x01; ReceiptAlign.RIGHT -> 0x02
-            })
+            cmd(0x1B, 0x45, if (line.bold) 0x01 else 0x00) // ESC E : bold on/off
+            cmd(0x1D, 0x21, if (line.large) 0x11 else 0x00) // GS !  : double width+height
+            cmd(
+                0x1B,
+                0x61,
+                when (line.align) { // ESC a : alignment
+                    ReceiptAlign.LEFT -> 0x00
+
+                    ReceiptAlign.CENTER -> 0x01
+
+                    ReceiptAlign.RIGHT -> 0x02
+                },
+            )
             val body = if (line.right.isNotEmpty()) twoColumn(line.left, line.right, paperChars) else line.left
             txt(body)
             cmd(0x0A) // LF : cetak baris
@@ -151,43 +169,59 @@ object ReceiptManager {
         cmd(0x1D, 0x56, 0x00) // GS V 0  : potong kertas
         return os.toByteArray()
     }
-    private fun twoColumn(left: String, right: String, width: Int): String {
+
+    private fun twoColumn(
+        left: String,
+        right: String,
+        width: Int,
+    ): String {
         val gap = 2
         val maxLeft = (width - right.length - gap).coerceAtLeast(0)
         val l = if (left.length > maxLeft) left.take(maxLeft) else left
         val pad = (width - right.length - l.length).coerceAtLeast(0)
         return l + " ".repeat(pad) + right
     }
-    suspend fun exportToPdf(context: Context, result: CheckoutResult, storeProfile: StoreProfileEntity? = null): File = withContext(Dispatchers.IO) {
-        val lines = buildLines(result, storeProfile)
-        val pageWidth = 240               // ~3,3 inci (lebar struk)
-        val margin = 14f
-        val lineHeight = 20f
-        val pageHeight = (lines.size * lineHeight + 2 * margin).toInt().coerceAtLeast(320)
 
-        val document = PdfDocument()
-        try {
-            val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
-            val page = document.startPage(pageInfo)
-            val canvas = page.canvas
+    suspend fun exportToPdf(
+        context: Context,
+        result: CheckoutResult,
+        storeProfile: StoreProfileEntity? = null,
+    ): File =
+        withContext(Dispatchers.IO) {
+            val lines = buildLines(result, storeProfile)
+            val pageWidth = 240 // ~3,3 inci (lebar struk)
+            val margin = 14f
+            val lineHeight = 20f
+            val pageHeight = (lines.size * lineHeight + 2 * margin).toInt().coerceAtLeast(320)
 
-            var y = margin + 14f
-            for (line in lines) {
-                drawLine(canvas, line, pageWidth.toFloat(), margin, y)
-                y += lineHeight
+            val document = PdfDocument()
+            try {
+                val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
+                val page = document.startPage(pageInfo)
+                val canvas = page.canvas
+
+                var y = margin + 14f
+                for (line in lines) {
+                    drawLine(canvas, line, pageWidth.toFloat(), margin, y)
+                    y += lineHeight
+                }
+                document.finishPage(page)
+
+                val dir = File(context.getExternalFilesDir(null) ?: context.filesDir, "receipts").apply { mkdirs() }
+                val file = File(dir, "${result.transaction.id}.pdf")
+                FileOutputStream(file).use { document.writeTo(it) }
+                return@withContext file
+            } finally {
+                // Pastikan document selalu ditutup walau terjadi error saat rendering/write
+                document.close()
             }
-            document.finishPage(page)
-
-            val dir = File(context.getExternalFilesDir(null) ?: context.filesDir, "receipts").apply { mkdirs() }
-            val file = File(dir, "${result.transaction.id}.pdf")
-            FileOutputStream(file).use { document.writeTo(it) }
-            return@withContext file
-        } finally {
-            // Pastikan document selalu ditutup walau terjadi error saat rendering/write
-            document.close()
         }
-    }
-    fun renderToBitmap(result: CheckoutResult, scale: Int = 3, storeProfile: StoreProfileEntity? = null): Bitmap {
+
+    fun renderToBitmap(
+        result: CheckoutResult,
+        scale: Int = 3,
+        storeProfile: StoreProfileEntity? = null,
+    ): Bitmap {
         val lines = buildLines(result, storeProfile)
         val w = 240 * scale
         val lineHeight = 22f * scale
@@ -203,20 +237,28 @@ object ReceiptManager {
         }
         return bmp
     }
+
     private fun drawLine(
-        canvas: Canvas, line: ReceiptLine, pageWidth: Float, margin: Float, y: Float, scale: Float = 1f
+        canvas: Canvas,
+        line: ReceiptLine,
+        pageWidth: Float,
+        margin: Float,
+        y: Float,
+        scale: Float = 1f,
     ) {
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = AndroidColor.BLACK
-            textSize = (if (line.large) 16f else 11f) * scale
-            typeface = if (line.bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-        }
-        
-        val rightPaint = if (line.bold && line.right.isNotEmpty()) {
-            Paint(paint).apply { typeface = Typeface.DEFAULT }
-        } else {
-            paint
-        }
+        val paint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = AndroidColor.BLACK
+                textSize = (if (line.large) 16f else 11f) * scale
+                typeface = if (line.bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            }
+
+        val rightPaint =
+            if (line.bold && line.right.isNotEmpty()) {
+                Paint(paint).apply { typeface = Typeface.DEFAULT }
+            } else {
+                paint
+            }
 
         if (line.right.isNotEmpty()) {
             canvas.drawText(line.left, margin, y, paint)
@@ -224,11 +266,15 @@ object ReceiptManager {
             canvas.drawText(line.right, pageWidth - margin - rightW, y, rightPaint)
         } else {
             when (line.align) {
-                ReceiptAlign.LEFT -> canvas.drawText(line.left, margin, y, paint)
+                ReceiptAlign.LEFT -> {
+                    canvas.drawText(line.left, margin, y, paint)
+                }
+
                 ReceiptAlign.CENTER -> {
                     val tw = paint.measureText(line.left)
                     canvas.drawText(line.left, (pageWidth - tw) / 2f, y, paint)
                 }
+
                 ReceiptAlign.RIGHT -> {
                     val tw = paint.measureText(line.left)
                     canvas.drawText(line.left, pageWidth - margin - tw, y, paint)
@@ -236,7 +282,12 @@ object ReceiptManager {
             }
         }
     }
-    fun buildShareIntent(context: Context, result: CheckoutResult, storeProfile: StoreProfileEntity? = null): Intent {
+
+    fun buildShareIntent(
+        context: Context,
+        result: CheckoutResult,
+        storeProfile: StoreProfileEntity? = null,
+    ): Intent {
         val bitmap = renderToBitmap(result, storeProfile = storeProfile)
         val dir = File(context.cacheDir, "shared_receipts").apply { mkdirs() }
         val file = File(dir, "${result.transaction.id}_${System.currentTimeMillis()}.png")
@@ -245,30 +296,39 @@ object ReceiptManager {
         val authority = "${context.packageName}.fileprovider"
         val uri = FileProvider.getUriForFile(context, authority, file)
 
-        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "image/png"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
+        val sendIntent =
+            Intent(Intent.ACTION_SEND).apply {
+                type = "image/png"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
         return Intent.createChooser(sendIntent, "Bagikan Struk")
     }
 
-    fun buildPdfShareIntent(context: Context, file: File): Intent {
+    fun buildPdfShareIntent(
+        context: Context,
+        file: File,
+    ): Intent {
         val authority = "${context.packageName}.fileprovider"
         val uri = FileProvider.getUriForFile(context, authority, file)
 
-        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/pdf"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
+        val sendIntent =
+            Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
         return Intent.createChooser(sendIntent, "Bagikan Struk PDF")
     }
 
-    fun bondedPrinters(context: Context): List<BluetoothDevice> = try {
-        context.getSystemService(BluetoothManager::class.java)
-            ?.adapter?.bondedDevices?.toList() ?: emptyList()
-    } catch (e: SecurityException) {
-        emptyList() // BLUETOOTH_CONNECT belum diberikan (Android 12+)
-    }
+    fun bondedPrinters(context: Context): List<BluetoothDevice> =
+        try {
+            context
+                .getSystemService(BluetoothManager::class.java)
+                ?.adapter
+                ?.bondedDevices
+                ?.toList() ?: emptyList()
+        } catch (e: SecurityException) {
+            emptyList() // BLUETOOTH_CONNECT belum diberikan (Android 12+)
+        }
 }

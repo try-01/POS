@@ -12,18 +12,18 @@ import androidx.room.PrimaryKey
             entity = ProductEntity::class,
             parentColumns = ["id"],
             childColumns = ["productId"],
-            onDelete = ForeignKey.CASCADE // produk dihapus → item keranjang ikut terhapus
-        )
+            onDelete = ForeignKey.CASCADE, // produk dihapus → item keranjang ikut terhapus
+        ),
     ],
-    indices = [Index(value = ["productId"], unique = true)] // 1 produk = 1 baris di keranjang
+    indices = [Index(value = ["productId"], unique = true)], // 1 produk = 1 baris di keranjang
 )
 data class CartItemEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val productId: Long,
-    val name: String,       // snapshot nama produk
-    val unitPrice: Long,    // snapshot harga saat ditambahkan (Rupiah)
-    val quantity: Int = 1
+    val name: String, // snapshot nama produk
+    val unitPrice: Long, // snapshot harga saat ditambahkan (Rupiah)
+    val quantity: Int = 1,
 ) {
     val lineTotal: Long get() = unitPrice * quantity.toLong()
 }

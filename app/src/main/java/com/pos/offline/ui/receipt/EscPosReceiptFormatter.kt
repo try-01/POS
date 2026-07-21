@@ -16,7 +16,6 @@ import java.util.Date
 import java.util.Locale
 
 object EscPosReceiptFormatter {
-
     private const val MAX_IMAGE_HEIGHT_PX = 256
     private val RESERVED_CHARS_REGEX = Regex("[\\[\\]<>]")
 
@@ -27,14 +26,14 @@ object EscPosReceiptFormatter {
     fun build(
         printer: EscPosPrinter,
         checkoutResult: CheckoutResult,
-        storeProfile: StoreProfileEntity
+        storeProfile: StoreProfileEntity,
     ): List<String> = build(printer, checkoutResult.transaction, checkoutResult.items, storeProfile)
 
     fun build(
         printer: EscPosPrinter,
         transaction: TransactionEntity,
         items: List<TransactionItemEntity>,
-        storeProfile: StoreProfileEntity
+        storeProfile: StoreProfileEntity,
     ): List<String> {
         val logoHex = buildLogoHex(printer, storeProfile.logoBytes)
         val logoMarkup = logoHex?.let { "[C]<img>$it</img>\n" }
@@ -56,8 +55,13 @@ object EscPosReceiptFormatter {
         val dateFormatter = SimpleDateFormat(dateFormatterPattern, Locale.forLanguageTag("id-ID"))
         val dateStr = dateFormatter.format(Date(transaction.createdAt))
         val invStr = sanitize(transaction.id)
-        
-        sb.append("[L]").append(dateStr).append("[R]").append(invStr).append("\n")
+
+        sb
+            .append("[L]")
+            .append(dateStr)
+            .append("[R]")
+            .append(invStr)
+            .append("\n")
 
         val cashier = sanitize(transaction.cashierName).trim()
         val shiftId = transaction.shiftId?.toString() ?: ""
@@ -67,7 +71,12 @@ object EscPosReceiptFormatter {
             val right = if (shiftId.isNotEmpty()) "Shift ID: $shiftId" else ""
 
             if (left.isNotEmpty() && right.isNotEmpty()) {
-                sb.append("[L]").append(left).append("[R]").append(right).append("\n")
+                sb
+                    .append("[L]")
+                    .append(left)
+                    .append("[R]")
+                    .append(right)
+                    .append("\n")
             } else if (left.isNotEmpty()) {
                 sb.append("[L]").append(left).append("\n")
             } else if (right.isNotEmpty()) {
@@ -85,10 +94,21 @@ object EscPosReceiptFormatter {
             val name = sanitize(item.productName).trim().ifEmpty { "(Tanpa nama)" }
             if (item.quantity > 1) {
                 sb.append("[L]<b>").append(name).append("</b>\n")
-                sb.append("[L]  ").append(item.quantity).append(" x ").append(item.unitPrice.toRupiah())
-                  .append("[R]").append(item.lineTotal.toRupiah()).append("\n")
+                sb
+                    .append("[L]  ")
+                    .append(item.quantity)
+                    .append(" x ")
+                    .append(item.unitPrice.toRupiah())
+                    .append("[R]")
+                    .append(item.lineTotal.toRupiah())
+                    .append("\n")
             } else {
-                sb.append("[L]<b>").append(name).append("</b>[R]").append(item.lineTotal.toRupiah()).append("\n")
+                sb
+                    .append("[L]<b>")
+                    .append(name)
+                    .append("</b>[R]")
+                    .append(item.lineTotal.toRupiah())
+                    .append("\n")
             }
         }
 
@@ -97,7 +117,7 @@ object EscPosReceiptFormatter {
         sb.append(divider(charsPerLine))
 
         val gridItems = mutableListOf<Pair<String, String>>()
-        
+
         val payLabel = paymentMethodLabel(transaction.paymentMethod)
         gridItems.add(Pair(payLabel, transaction.paidAmount.toRupiah()))
 
@@ -114,10 +134,24 @@ object EscPosReceiptFormatter {
         val chunks = gridItems.chunked(2)
         for (chunk in chunks) {
             if (chunk.size == 2) {
-                sb.append("[L]").append(chunk[0].first).append(": ").append(chunk[0].second)
-                sb.append("[R]").append(chunk[1].first).append(": ").append(chunk[1].second).append("\n")
+                sb
+                    .append("[L]")
+                    .append(chunk[0].first)
+                    .append(": ")
+                    .append(chunk[0].second)
+                sb
+                    .append("[R]")
+                    .append(chunk[1].first)
+                    .append(": ")
+                    .append(chunk[1].second)
+                    .append("\n")
             } else {
-                sb.append("[L]").append(chunk[0].first).append(": ").append(chunk[0].second).append("\n")
+                sb
+                    .append("[L]")
+                    .append(chunk[0].first)
+                    .append(": ")
+                    .append(chunk[0].second)
+                    .append("\n")
             }
         }
 
@@ -137,7 +171,10 @@ object EscPosReceiptFormatter {
         return "[C]" + "-".repeat(safeLength) + "\n"
     }
 
-    private fun appendCenteredMultiline(sb: StringBuilder, rawText: String) {
+    private fun appendCenteredMultiline(
+        sb: StringBuilder,
+        rawText: String,
+    ) {
         if (rawText.isBlank()) return
         rawText.split("\n").forEach { rawLine ->
             val line = sanitize(rawLine).trim()
@@ -147,25 +184,30 @@ object EscPosReceiptFormatter {
         }
     }
 
-    private fun buildLogoHex(printer: EscPosPrinter, logoBytes: ByteArray?): String? {
+    private fun buildLogoHex(
+        printer: EscPosPrinter,
+        logoBytes: ByteArray?,
+    ): String? {
         if (logoBytes == null) return null
-        val original = try {
-            BitmapFactory.decodeByteArray(logoBytes, 0, logoBytes.size)
-        } catch (e: Exception) {
-            null
-        } ?: return null
-
-        val resized = if (original.height > MAX_IMAGE_HEIGHT_PX) {
-            val ratio = MAX_IMAGE_HEIGHT_PX.toFloat() / original.height
-            val newWidth = (original.width * ratio).toInt().coerceAtLeast(1)
+        val original =
             try {
-                Bitmap.createScaledBitmap(original, newWidth, MAX_IMAGE_HEIGHT_PX, true)
+                BitmapFactory.decodeByteArray(logoBytes, 0, logoBytes.size)
             } catch (e: Exception) {
+                null
+            } ?: return null
+
+        val resized =
+            if (original.height > MAX_IMAGE_HEIGHT_PX) {
+                val ratio = MAX_IMAGE_HEIGHT_PX.toFloat() / original.height
+                val newWidth = (original.width * ratio).toInt().coerceAtLeast(1)
+                try {
+                    Bitmap.createScaledBitmap(original, newWidth, MAX_IMAGE_HEIGHT_PX, true)
+                } catch (e: Exception) {
+                    original
+                }
+            } else {
                 original
             }
-        } else {
-            original
-        }
 
         return try {
             PrinterTextParserImg.bitmapToHexadecimalString(printer, resized, true)

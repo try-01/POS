@@ -10,13 +10,14 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
 object PermissionUtils {
-
     private const val PREFS_NAME = "permission_prefs"
     private const val KEY_BLUETOOTH_REQUESTED = "bluetooth_permission_requested"
 
     sealed class BluetoothPermissionState {
         object Granted : BluetoothPermissionState()
+
         object CanRequest : BluetoothPermissionState()
+
         object PermanentlyDenied : BluetoothPermissionState()
     }
 
@@ -37,8 +38,7 @@ object PermissionUtils {
         prefs(context).edit().putBoolean(KEY_BLUETOOTH_REQUESTED, true).apply()
     }
 
-    fun wasBluetoothPermissionRequestedBefore(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_BLUETOOTH_REQUESTED, false)
+    fun wasBluetoothPermissionRequestedBefore(context: Context): Boolean = prefs(context).getBoolean(KEY_BLUETOOTH_REQUESTED, false)
 
     fun currentBluetoothPermissionState(context: Context): BluetoothPermissionState {
         if (hasBluetoothPermissions(context)) return BluetoothPermissionState.Granted
@@ -46,12 +46,14 @@ object PermissionUtils {
         val required = requiredBluetoothPermissions()
         if (required.isEmpty()) return BluetoothPermissionState.Granted // API < 31
 
-        val activity = findActivity(context)
-            ?: return BluetoothPermissionState.CanRequest // fallback aman
+        val activity =
+            findActivity(context)
+                ?: return BluetoothPermissionState.CanRequest // fallback aman
 
-        val canShowRationale = required.any {
-            ActivityCompat.shouldShowRequestPermissionRationale(activity, it)
-        }
+        val canShowRationale =
+            required.any {
+                ActivityCompat.shouldShowRequestPermissionRationale(activity, it)
+            }
         val requestedBefore = wasBluetoothPermissionRequestedBefore(context)
 
         return when {
@@ -70,6 +72,5 @@ object PermissionUtils {
         return null
     }
 
-    private fun prefs(context: Context) =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 }

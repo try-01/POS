@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ReturnDao {
-
     @Insert
     suspend fun insertReturn(ret: ReturnEntity): Long
 
@@ -30,7 +29,10 @@ interface ReturnDao {
         SELECT * FROM returns
         WHERE returnedAt >= :start AND returnedAt < :end
         ORDER BY returnedAt DESC
-        """
+        """,
     )
-    fun observeReturnsBetween(start: Long, end: Long): Flow<List<ReturnEntity>>
+    fun observeReturnsBetween(
+        start: Long,
+        end: Long,
+    ): Flow<List<ReturnEntity>>
 }

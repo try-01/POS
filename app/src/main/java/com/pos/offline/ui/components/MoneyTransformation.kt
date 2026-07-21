@@ -30,12 +30,12 @@ object ThousandsSeparatorTransformation : VisualTransformation {
             trans2Orig[t] = origIdx.coerceAtMost(n)
         }
 
-        val offsetMapping = object : OffsetMapping {
-            override fun originalToTransformed(offset: Int): Int =
-                orig2Trans[offset.coerceIn(0, n)]
-            override fun transformedToOriginal(offset: Int): Int =
-                trans2Orig[offset.coerceIn(0, formatted.length)]
-        }
+        val offsetMapping =
+            object : OffsetMapping {
+                override fun originalToTransformed(offset: Int): Int = orig2Trans[offset.coerceIn(0, n)]
+
+                override fun transformedToOriginal(offset: Int): Int = trans2Orig[offset.coerceIn(0, formatted.length)]
+            }
 
         return TransformedText(AnnotatedString(formatted), offsetMapping)
     }
