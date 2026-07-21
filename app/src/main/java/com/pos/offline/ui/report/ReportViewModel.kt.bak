@@ -226,10 +226,6 @@ class ReportViewModel(
                 VoidOutcome.NotFound -> {
                     _messages.emit(ReportMessage("Transaksi tidak ditemukan.", isError = true))
                 }
-
-                VoidOutcome.HasReturn -> {
-                    _messages.emit(ReportMessage("Tidak dapat membatalkan — transaksi ini sudah memiliki riwayat retur.", isError = true))
-                }
             }
         }
     }

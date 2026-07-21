@@ -266,7 +266,7 @@ fun PosScreen(
                 Modifier
                     .fillMaxSize()
                     .padding(inner)
-                    .imePadding(),
+                    .imePadding()
                     .navigationBarsPadding(),
         ) {
             val isWide = forceWideLayout || maxWidth >= 840.dp

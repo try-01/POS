@@ -18,9 +18,7 @@ class StoreProfileRepository(
     suspend fun ensureInitialized() = storeProfileDao.insertDefaultIfAbsent()
 
     suspend fun save(profile: StoreProfileEntity) {
-        // Paksa ID = 1 karena tabel ini dirancang sebagai singleton profil toko
-        val singletonProfile = profile.copy(id = 1L)
-        storeProfileDao.insertDefaultIfAbsent(singletonProfile)
-        storeProfileDao.update(singletonProfile)
+        storeProfileDao.insertDefaultIfAbsent(profile) // no-op kalau baris id=1 sudah ada
+        storeProfileDao.update(profile)
     }
 }

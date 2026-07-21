@@ -407,4 +407,14 @@ class InventoryViewModel(
         val existing = productRepository.getProductByBarcodeAny(trimmed)
         return if (existing != null && existing.id != excludeId) existing.name else null
     }
+
+    suspend fun checkSkuConflict(
+        sku: String,
+        excludeId: Long,
+    ): String? {
+        val trimmed = sku.trim()
+        if (trimmed.isBlank()) return null
+        val existing = productRepository.getProductBySku(trimmed)
+        return if (existing != null && existing.id != excludeId) existing.name else null
+    }
 }

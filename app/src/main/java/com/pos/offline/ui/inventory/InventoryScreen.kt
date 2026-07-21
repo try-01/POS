@@ -262,6 +262,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             onSave = viewModel::save,
             onDismiss = viewModel::dismissForm,
             checkBarcodeConflict = viewModel::checkBarcodeConflict,
+            checkSkuConflict = viewModel::checkSkuConflict,
             onDeleteRequest = { viewModel.requestDeleteFromForm(state.id) },
         )
     }
@@ -772,6 +773,7 @@ private fun ProductFormDialog(
     onSave: (ProductFormState) -> Unit,
     onDismiss: () -> Unit,
     checkBarcodeConflict: suspend (String, Long) -> String?,
+    checkSkuConflict: suspend (String, Long) -> String?,
     onDeleteRequest: () -> Unit,
 ) {
     var name by remember(state.id) { mutableStateOf(state.name) }
@@ -789,6 +791,7 @@ private fun ProductFormDialog(
     }
 
     var barcodeConflict by remember(state.id) { mutableStateOf<String?>(null) }
+    var skuConflict by remember(state.id) { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
     val hasCamera =
@@ -809,6 +812,15 @@ private fun ProductFormDialog(
             return@LaunchedEffect
         }
         barcodeConflict = checkBarcodeConflict(trimmed, state.id)
+    }
+
+    LaunchedEffect(sku) {
+        val trimmed = sku.trim()
+        if (trimmed.isBlank()) {
+            skuConflict = null
+            return@LaunchedEffect
+        }
+        skuConflict = checkSkuConflict(trimmed, state.id)
     }
 
     AlertDialog(
@@ -840,6 +852,19 @@ private fun ProductFormDialog(
                         onValueChange = { sku = it },
                         label = { Text("SKU", style = MaterialTheme.typography.bodySmall) },
                         singleLine = true,
+                        isError = skuConflict != null,
+                        supportingText =
+                            if (skuConflict != null) {
+                                {
+                                    Text(
+                                        "Dipakai oleh: $skuConflict",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            } else {
+                                null
+                            },
                         textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f),
@@ -935,7 +960,7 @@ private fun ProductFormDialog(
                 TextButton(onClick = onDismiss) { Text("Batal") }
                 Spacer(Modifier.width(4.dp))
                 Button(
-                    enabled = barcodeConflict == null,
+                    enabled = name.isNotBlank() && barcodeConflict == null && skuConflict == null,
                     onClick = {
                         onSave(
                             ProductFormState(

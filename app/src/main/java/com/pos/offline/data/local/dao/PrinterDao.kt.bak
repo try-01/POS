@@ -36,28 +36,4 @@ interface PrinterDao {
 
     @Query("UPDATE printers SET isDefault = 0")
     suspend fun clearAllDefault()
-
-    // FIX: Transaksi DB atomik untuk mencegah inkonsistensi jika app crash di tengah operasi
-    @Transaction
-    suspend fun insertAndSyncDefault(printer: PrinterEntity): Long {
-        val id = insert(printer)
-        if (printer.isDefault) {
-            clearDefaultExcept(id)
-        }
-        return id
-    }
-
-    @Transaction
-    suspend fun updateAndSyncDefault(printer: PrinterEntity) {
-        update(printer)
-        if (printer.isDefault) {
-            clearDefaultExcept(printer.id)
-        }
-    }
-
-    @Transaction
-    suspend fun setAsDefault(printer: PrinterEntity) {
-        clearAllDefault()
-        update(printer.copy(isDefault = true))
-    }
 }

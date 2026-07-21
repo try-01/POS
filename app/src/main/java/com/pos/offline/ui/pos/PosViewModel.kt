@@ -381,6 +381,8 @@ class PosViewModel(
 
     fun checkout() =
         viewModelScope.launch {
+            if (_checkoutState.value is CheckoutState.Processing) return@launch
+
             val currentCart = cart.value
             if (currentCart.isEmpty()) return@launch
 

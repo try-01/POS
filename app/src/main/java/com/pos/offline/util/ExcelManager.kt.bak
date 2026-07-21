@@ -70,6 +70,7 @@ object ExcelManager {
             } catch (e: Exception) {
                 ExcelOutcome.Error(e)
             } finally {
+                workbook.dispose()
                 workbook.close()
             }
         }

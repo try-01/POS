@@ -35,8 +35,6 @@ sealed class VoidOutcome {
     data object NotFound : VoidOutcome()
 
     data object ShiftClosed : VoidOutcome()
-
-    data object HasReturn : VoidOutcome()
 }
 
 class TransactionRepository(
@@ -147,7 +145,6 @@ class TransactionRepository(
     suspend fun voidTransaction(invoiceId: String): VoidOutcome {
         val tx = transactionDao.getById(invoiceId) ?: return VoidOutcome.NotFound
         if (tx.isVoid) return VoidOutcome.AlreadyVoided
-        if (tx.returnId != null) return VoidOutcome.HasReturn
 
         val shiftId = tx.shiftId
         if (shiftId != null) {

@@ -15,11 +15,25 @@ class PrinterRepository(
 
     suspend fun getAllOrderedByPriority(): List<PrinterEntity> = printerDao.getAllOrderedByPriority()
 
-    suspend fun add(printer: PrinterEntity): Long = printerDao.insertAndSyncDefault(printer)
+    suspend fun add(printer: PrinterEntity): Long {
+        val id = printerDao.insert(printer)
+        if (printer.isDefault) {
+            printerDao.clearDefaultExcept(id)
+        }
+        return id
+    }
 
-    suspend fun update(printer: PrinterEntity) = printerDao.updateAndSyncDefault(printer)
+    suspend fun update(printer: PrinterEntity) {
+        printerDao.update(printer)
+        if (printer.isDefault) {
+            printerDao.clearDefaultExcept(printer.id)
+        }
+    }
 
     suspend fun delete(printer: PrinterEntity) = printerDao.delete(printer)
 
-    suspend fun setAsDefault(printer: PrinterEntity) = printerDao.setAsDefault(printer)
+    suspend fun setAsDefault(printer: PrinterEntity) {
+        printerDao.clearAllDefault()
+        printerDao.update(printer.copy(isDefault = true))
+    }
 }

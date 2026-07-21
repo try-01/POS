@@ -21,7 +21,7 @@
 
     <application
         android:name="com.pos.offline.data.di.PosApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="Kasir Offline"
         android:supportsRtl="true"
         android:icon="@android:drawable/ic_menu_manage"

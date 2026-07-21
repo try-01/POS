@@ -193,10 +193,7 @@ fun ReportScreen(
                     .fillMaxSize()
                     .padding(inner)
                     .imePadding(),
-            contentPadding =
-                PaddingValues(horizontal = 10.dp, vertical = 6.dp).let {
-                    PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp)
-                },
+            contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item(key = "date_navigator") {
@@ -1628,7 +1625,7 @@ private fun ReturnItemDialog(
                         onToggleIncluded = { checked ->
                             rows =
                                 rows.toMutableList().also {
-                                    it[index] = row.copy(included = checked, quantity = row.maxQuantity)
+                                    it[index] = row.copy(included = checked)
                                 }
                         },
                         onQuantityChange = { qty ->
