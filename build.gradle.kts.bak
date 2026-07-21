@@ -5,14 +5,3 @@ plugins {
     id("com.google.devtools.ksp") version "2.0.21-1.0.27" apply false
     id("androidx.room") version "2.6.1" apply false
 }
-
-buildTypes {
-    release {
-        isMinifyEnabled = true
-        isShrinkResources = true
-        proguardFiles(
-            getDefaultProguardFile("proguard-android-optimize.txt"),
-            "proguard-rules.pro" // Pastikan baris ini ada
-        )
-    }
-}
