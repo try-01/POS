@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import com.pos.offline.data.local.entity.PrinterEntity
 import kotlinx.coroutines.flow.Flow
@@ -37,7 +38,6 @@ interface PrinterDao {
     @Query("UPDATE printers SET isDefault = 0")
     suspend fun clearAllDefault()
 
-    // FIX: Transaksi DB atomik untuk mencegah inkonsistensi jika app crash di tengah operasi
     @Transaction
     suspend fun insertAndSyncDefault(printer: PrinterEntity): Long {
         val id = insert(printer)

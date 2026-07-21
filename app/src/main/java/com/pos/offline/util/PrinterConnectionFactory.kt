@@ -327,7 +327,6 @@ class PrinterConnectionFactory(
         supervisorScope {
             val connectJob = async(Dispatchers.IO) { connection.connect() }
             val watchdog =
-            val watchdog =
                 launch(Dispatchers.IO) {
                     delay(CONNECT_TIMEOUT_MS)
                     if (connectJob.isActive) {
