@@ -10,12 +10,14 @@
 
 -dontwarn aQute.bnd.annotation.**
 -dontwarn com.github.luben.zstd.**
+-dontwarn com.github.javaparser.**             # <-- TAMBAHKAN BARIS INI
 -dontwarn edu.umd.cs.findbugs.annotations.**
 -dontwarn java.awt.**
 -dontwarn javax.**
 -dontwarn net.sf.saxon.**
 -dontwarn org.apache.batik.**
 -dontwarn org.apache.commons.compress.compressors.xz.XZCompressorInputStream
+-dontwarn org.apache.xmlbeans.**               # <-- TAMBAHKAN BARIS INI
 -dontwarn org.jspecify.annotations.**
 -dontwarn org.osgi.framework.**
 -dontwarn org.tukaani.xz.**

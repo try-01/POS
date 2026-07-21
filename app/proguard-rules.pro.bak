@@ -8,8 +8,6 @@
 -keep class org.etsi.** { *; }
 -keep class org.w3.** { *; }
 
-# Suppress warnings for missing classes that don't exist on Android
-# (POI references AWT, SVG, Saxon, etc., which we never call at runtime)
 -dontwarn aQute.bnd.annotation.**
 -dontwarn com.github.luben.zstd.**
 -dontwarn edu.umd.cs.findbugs.annotations.**
@@ -22,7 +20,6 @@
 -dontwarn org.osgi.framework.**
 -dontwarn org.tukaani.xz.**
 
-# Keep generic signatures for POI reflection
 -keepattributes Signature, InnerClasses, EnclosingMethod
 -keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations, RuntimeVisibleTypeAnnotations
 # =========================================================
