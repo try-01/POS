@@ -118,3 +118,10 @@
 -dontwarn org.osgi.framework.**
 -dontwarn org.tukaani.xz.**
 # =========================================================================
+
+# =========================================================================
+# TAMBAHAN: Mengabaikan sisa Missing Class Maven, Ant, & XML Resolver
+# =========================================================================
+-dontwarn com.sun.org.apache.xml.**
+-dontwarn org.apache.maven.**
+-dontwarn org.apache.tools.ant.**
