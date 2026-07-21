@@ -4,6 +4,7 @@ distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-bin.zip
 networkTimeout=10000
 zipStoreBase=GRADLE_USER_HOME
 zipStorePath=wrapper/dists
-org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8 -XX:MaxMetaspaceSize=512m -XX:+UseParallelGC -XX:+HeapDumpOnOutOfMemoryError
+org.gradle.jvmargs=-Xmx5120m -Dfile.encoding=UTF-8 -XX:MaxMetaspaceSize=512m -XX:+UseParallelGC -XX:+HeapDumpOnOutOfMemoryError
+android.enableR8.fullMode=false
 kotlin.compiler.execution.strategy=in-process
 kotlin.daemon.jvmargs=-Xmx512m

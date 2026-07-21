@@ -2,7 +2,7 @@
 # gradle.properties
 
 # 1. Alokasi Memori JVM (Ini adalah kunci utama agar GitHub Actions tidak error OOM)
-org.gradle.jvmargs=-Xmx5120m -Dfile.encoding=UTF-8 -XX:MaxMetaspaceSize=512m -XX:+UseParallelGC -XX:+HeapDumpOnOutOfMemoryError
+org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8 -XX:MaxMetaspaceSize=512m -XX:+UseParallelGC -XX:+HeapDumpOnOutOfMemoryError
 
 # 2. Batasi jumlah pekerja (worker) paralel
 org.gradle.workers.max=2
