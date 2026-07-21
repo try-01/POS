@@ -1,112 +1,91 @@
-# =========================================================================
-# 1. ATURAN UMUM ANDROID & KOTLIN (Optimasi & Struktur)
-# =========================================================================
+# =====================================================================
+# ATURAN BAWAAN & ARSITEKTUR APLIKASI (DI-PRESERVE)
+# =====================================================================
 -keepattributes Signature, InnerClasses, EnclosingMethod, Deprecated, SourceFile, LineNumberTable
 -keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations, RuntimeVisibleTypeAnnotations, AnnotationDefault
 -keep class kotlin.Metadata { *; }
 -renamesourcefileattribute SourceFile
 
-# =========================================================================
-# 2. MODEL DATABASE & REPOSITORY DTO (Spesifik POS Offline)
-# =========================================================================
+# Database Room
 -keep class com.pos.offline.data.local.entity.** { *; }
 -keep @androidx.room.Entity class * { *; }
--keep class com.pos.offline.data.repository.** { *; }
 
-# =========================================================================
-# 3. MODEL STATE UI & FORMS (Spesifik Jetpack Compose & ViewModel)
-# =========================================================================
+# Data & Repository
+-keep class com.pos.offline.data.repository.** { *; }
 -keep class * implements android.os.Parcelable { *; }
 -keep class **.*UiState { *; }
 -keep class **.*FormState { *; }
 -keep class **.*SortOption { *; }
 -keep class **.*Summary { *; }
 -keep class **.*Result { *; }
+
+# Jetpack Compose & Lifecycle
 -keep class androidx.compose.** { *; }
 -keepclasseswithmembers class * {
     @androidx.compose.runtime.Composable *;
 }
 -keep class * extends androidx.lifecycle.ViewModel { *; }
 
-# =========================================================================
-# 4. UTILLITAS & FITUR KHUSUS (Printer, Excel, dll)
-# =========================================================================
+# Package Internal Aplikasi
 -keep class com.pos.offline.util.** { *; }
 -keep class com.pos.offline.ui.receipt.** { *; }
 
-# =========================================================================
-# 5. KOTLIN COROUTINES (Asinkronus & Flow)
-# =========================================================================
+# Coroutines
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
 -keepclassmembernames class kotlinx.coroutines.android.HandlerContext$FrameCallbackProvider {
     *** postFrameCallback(...);
 }
 
-# =========================================================================
-# 6. APACHE POI (FOKUS EKSTREM PADA EXCEL UNTUK UKURAN APK KECIL)
-# =========================================================================
-# Hanya mempertahankan modul Spreadsheet/Excel dan utilitas dasarnya
--keep class org.apache.poi.ss.** { *; }
--keep class org.apache.poi.xssf.** { *; }
--keep class org.apache.poi.hssf.** { *; }
--keep class org.apache.poi.poifs.** { *; }
+# =====================================================================
+# OPTIMALISASI APACHE POI 5.5.1 (HANYA SIMPAN EXCEL .XLS & .XLSX)
+# =====================================================================
+
+# [PERBAIKAN UTAMA] Hapus "-keep class org.apache.poi.** { *; }" agar R8 bisa memotong Word/PPT.
+# Sebagai gantinya, kita HANYA mengunci package Core, Excel Lama (.xls), dan Excel Baru (.xlsx):
+-keep class org.apache.poi.ss.usermodel.** { *; }
+-keep class org.apache.poi.hssf.usermodel.** { *; }
+-keep class org.apache.poi.xssf.usermodel.** { *; }
+-keep class org.apache.poi.xssf.streaming.** { *; }
+-keep class org.apache.poi.ss.formula.** { *; }
+-keep class org.apache.poi.poifs.filesystem.** { *; }
 -keep class org.apache.poi.util.** { *; }
 
-# Mempertahankan XMLBeans dan format OpenXML khusus Spreadsheet (Excel)
-# Kita TIDAK LAGI menahan paket org.openxmlformats.** secara keseluruhan agar fitur Word/PowerPoint terbuang.
+# Hanya simpan skema XML yang dibutuhkan oleh Spreadsheet (Excel)
+-keep class org.openxmlformats.schemas.spreadsheetml.x2006.main.** { *; }
+
+# Tetap pertahankan engine dasar XMLBeans pembaca file kompresi openxml
 -keep class org.apache.xmlbeans.** { *; }
--keep class org.openxmlformats.schemas.spreadsheetml.** { *; }
--keep class org.openxmlformats.schemas.officeDocument.x2006.sharedTypes.** { *; }
 -keep class schemaorg_apache_xmlbeans.** { *; }
 
-# =========================================================================
-# 7. MENGABAIKAN ERROR & MEMBUANG MODUL YANG TIDAK DIPAKAI
-# =========================================================================
+# Sisanya (Word, PPT, Grafis, dll) TIDAK ditaruh di "-keep" agar otomatis DIBUANG oleh R8.
 
-# --- [A] MEMBUANG MODUL SELAIN EXCEL SECARA PAKSA ---
--dontwarn org.apache.poi.xslf.**     # Buang PowerPoint
--dontwarn org.apache.poi.xwpf.**     # Buang Word
--dontwarn org.apache.poi.hdgf.**     # Buang Visio Lama
--dontwarn org.apache.poi.xdgf.**     # Buang Visio Baru
--dontwarn org.apache.poi.hsmf.**     # Buang Outlook
--dontwarn org.apache.poi.hpbf.**     # Buang Publisher
--dontwarn org.apache.poi.hslf.**     # Buang PowerPoint Lama
--dontwarn org.apache.poi.hwpf.**     # Buang Word Lama
-
-# --- [B] Skema Dokumen Microsoft Umum ---
+# =====================================================================
+# WARNING SUPPRESSION (TETAP DIPERTAHANKAN & DIOPTIMALKAN)
+# =====================================================================
 -dontwarn com.microsoft.schemas.**
 -dontwarn org.openxmlformats.schemas.drawingml.**
--dontwarn org.openxmlformats.schemas.wordprocessingml.**
--dontwarn org.openxmlformats.schemas.presentationml.**
 -dontwarn org.openxmlformats.**
-
-# --- [C] Pemrosesan W3C DOM (XML & Vektor SVG Desktop) ---
 -dontwarn org.w3c.dom.events.**
 -dontwarn org.w3c.dom.svg.**
 -dontwarn org.w3c.dom.traversal.**
 -dontwarn org.w3.**
-
-# --- [D] Kriptografi, Tanda Tangan Digital, & Keamanan ---
 -dontwarn org.bouncycastle.**
 -dontwarn org.apache.xml.security.**
 -dontwarn org.apache.jcp.xml.dsig.**
 -dontwarn org.w3.x2000.x09.xmldsig.**
 -dontwarn org.etsi.uri.x01903.v13.**
-
-# --- [E] Library Desktop Java (AWT, GSS, NIO, dll) ---
 -dontwarn org.ietf.jgss.**
+-dontwarn org.apache.pdfbox.**
+-dontwarn de.rototor.pdfbox.**
 -dontwarn java.awt.**
 -dontwarn javax.**
 -dontwarn java.nio.file.**
 -dontwarn java.lang.invoke.**
 -dontwarn org.apache.jcp.**
-
-# --- [F] Library PDF (Bila ada sisa) ---
--dontwarn org.apache.pdfbox.**
--dontwarn de.rototor.pdfbox.**
-
-# --- [G] Peringatan Tambahan Eksternal Lainnya ---
+-dontwarn org.apache.poi.**
+-dontwarn org.apache.xmlbeans.**
+-dontwarn schemaorg_apache_xmlbeans.**
 -dontwarn aQute.bnd.annotation.**
 -dontwarn com.github.luben.zstd.**
 -dontwarn com.github.javaparser.**
@@ -117,11 +96,5 @@
 -dontwarn org.jspecify.annotations.**
 -dontwarn org.osgi.framework.**
 -dontwarn org.tukaani.xz.**
-# =========================================================================
-
-# =========================================================================
-# TAMBAHAN: Mengabaikan sisa Missing Class Maven, Ant, & XML Resolver
-# =========================================================================
--dontwarn com.sun.org.apache.xml.**
--dontwarn org.apache.maven.**
--dontwarn org.apache.tools.ant.**
+-dontwarn org.etsi.**
+-dontwarn com.microsoft.**
