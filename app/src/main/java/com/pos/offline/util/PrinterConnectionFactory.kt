@@ -1,5 +1,6 @@
 package com.pos.offline.util
 
+import android.util.Log
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -358,6 +359,8 @@ class PrinterConnectionFactory(
                             readJob.await()
                             watchdog.cancel()
                         }
+
+                        android.util.Log.d("PaperStatusTest", "Bluetooth Response Byte: $status (Hex: 0x${Integer.toHexString(status)})")
 
                         when {
                             status == -1 -> PaperStatusResult.NoResponse
