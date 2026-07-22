@@ -32,7 +32,7 @@ sealed class BondResult {
 class BluetoothPrinterHelper(
     private val appContext: Context,
 ) {
-    val adapter: BluetoothAdapter?
+    private val adapter: BluetoothAdapter?
         get() = (appContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
 
     fun isAdapterAvailable(): Boolean = adapter != null

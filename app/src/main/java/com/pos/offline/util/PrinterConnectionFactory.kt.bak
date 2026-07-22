@@ -280,9 +280,11 @@ class PrinterConnectionFactory(
         try {
             when (printer.connectionType) {
                 PrinterConnectionType.WIFI -> {
+                    val ip = printer.wifiIpAddress ?: return@withContext PaperStatusResult.NoResponse
+                    val port = printer.wifiPort ?: return@withContext PaperStatusResult.NoResponse
                     val socket = Socket()
                     try {
-                        socket.connect(InetSocketAddress(printer.wifiIpAddress, printer.wifiPort), 1500)
+                        socket.connect(InetSocketAddress(ip, port), 1500)
                         socket.soTimeout = 1500
                         socket.getOutputStream().apply { write(cmd); flush() }
                         val status = socket.getInputStream().read()
