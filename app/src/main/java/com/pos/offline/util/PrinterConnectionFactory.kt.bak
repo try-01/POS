@@ -206,26 +206,67 @@ class PrinterConnectionFactory(
                 return@repeat
             }
 
-            return try {
-                val escPosPrinter =
-                    withContext(Dispatchers.IO) {
-                        if (openCashDrawer) {
+                return try {
+                    // Cek status kertas HANYA pada percobaan pertama, jika didukung & diaktifkan di pengaturan
+                    if (attempt == 0 && printer.supportsStatusQuery) {
+                        val paperStatus = withContext(Dispatchers.IO) {
+                            val probeExecutor = Executors.newSingleThreadExecutor()
                             try {
-                                val commands = EscPosPrinterCommands(ready.connection)
-                                commands.openCashBox()
-                                Thread.sleep(250)
-                            } catch (e: Exception) {
+                                val future = probeExecutor.submit(Callable {
+                                    val status = EscPosPrinterCommands(ready.connection).status
+                                    // true = kertas ada, false = kertas habis
+                                    (status.toInt() and 0x04) == 0
+                                })
+                                try {
+                                    Result.success(future.get(1500, TimeUnit.MILLISECONDS))
+                                } catch (e: Exception) {
+                                    android.util.Log.w("PrinterConn", "Status query gagal/timeout, menutup koneksi untuk membebaskan thread", e)
+                                    Result.failure(e)
+                                }
+                            } finally {
+                                probeExecutor.shutdown() // nolak task baru, TIDAK menghentikan task yg masih blocking
                             }
                         }
-                        EscPosPrinter(
-                            ready.connection,
-                            DEFAULT_PRINTER_DPI,
-                            printer.paperWidth.printableWidthMM(),
-                            printer.charPerLine,
-                        ).useEscAsteriskCommand(true)
+
+                        // Fail-Closed: Jika timeout (zombie thread) ATAU kertas habis -> putuskan & gagalkan
+                        if (paperStatus.isFailure || !paperStatus.getOrThrow()) {
+                            // Tutup socket fisik untuk membunuh thread probe yang blocking di read()
+                            try {
+                                withContext(Dispatchers.IO) { ready.connection.disconnect() }
+                            } catch (ce: kotlin.coroutines.cancellation.CancellationException) {
+                                throw ce // Jangan telan CancellationException, propagate agar coroutine cancellation tetap sehat
+                            } catch (e: Exception) {
+                                // Ignore disconnect errors
+                            }
+                            
+                            val msg = if (paperStatus.isFailure) {
+                                "Printer tidak merespon status (timeout)."
+                            } else {
+                                "Printer melaporkan kertas habis."
+                            }
+                            return JobOutcome.Failure(msg)
+                        }
                     }
 
-                val markups = markupBuilder(escPosPrinter)
+                    val escPosPrinter =
+                        withContext(Dispatchers.IO) {
+                            if (openCashDrawer) {
+                                try {
+                                    val commands = EscPosPrinterCommands(ready.connection)
+                                    commands.openCashBox()
+                                    Thread.sleep(250)
+                                } catch (e: Exception) {
+                                }
+                            }
+                            EscPosPrinter(
+                                ready.connection,
+                                DEFAULT_PRINTER_DPI,
+                                printer.paperWidth.printableWidthMM(),
+                                printer.charPerLine,
+                            ).useEscAsteriskCommand(true)
+                        }
+
+                    val markups = markupBuilder(escPosPrinter)
                 withContext(Dispatchers.IO) {
                     markups.forEachIndexed { index, markup ->
                         if (index == markups.lastIndex) {
