@@ -46,7 +46,6 @@ class PrintCoordinator(
 ) {
     private val activeJobs = ConcurrentHashMap<String, Mutex>()
     private val statusQueryFailureCounts = ConcurrentHashMap<Long, Int>()
-    private val activeJobs = ConcurrentHashMap<String, Mutex>()
 
     suspend fun printReceiptAuto(
         result: CheckoutResult,

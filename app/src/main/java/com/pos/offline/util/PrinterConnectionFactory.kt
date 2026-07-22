@@ -96,6 +96,7 @@ sealed class PrintResult {
     data class Failure(
         val printer: PrinterEntity,
         val message: String,
+        val statusQueryFailed: Boolean = false,
     ) : PrintResult()
 }
 
@@ -131,6 +132,7 @@ private sealed class JobOutcome {
 
     data class Failure(
         val message: String,
+        val statusQueryFailed: Boolean = false,
     ) : JobOutcome()
 }
 
@@ -154,7 +156,7 @@ class PrinterConnectionFactory(
         val outcome = executePrintJob(printer, openCashDrawer, markupBuilder)
         return when (outcome) {
             is JobOutcome.Success -> PrintResult.Success(printer, outcome.statusQueryFailed)
-            is JobOutcome.Failure -> PrintResult.Failure(printer, outcome.message)
+            is JobOutcome.Failure -> PrintResult.Failure(printer, outcome.message, outcome.statusQueryFailed)
         }
     }
 
@@ -268,6 +270,7 @@ class PrinterConnectionFactory(
                 runCatching { ready.connection.disconnect() }
                 JobOutcome.Failure(
                     "Terhubung ke printer, tetapi gagal mencetak: ${e.message ?: "kesalahan tidak diketahui"}",
+                    statusQueryFailed = statusQueryFailed
                 )
             }
         }
@@ -277,7 +280,8 @@ class PrinterConnectionFactory(
 
     @SuppressLint("MissingPermission")
     private suspend fun preCheckPaperStatus(printer: PrinterEntity): PaperStatusResult = withContext(Dispatchers.IO) {
-        val cmd = byteArrayOf(0x1D, 0x72, 0x01)
+        // DLE EOT 4 : Real-time status transmission (Paper Roll Status)
+        val cmd = byteArrayOf(0x10, 0x04, 0x04)
         try {
             when (printer.connectionType) {
                 PrinterConnectionType.WIFI -> {
@@ -291,7 +295,9 @@ class PrinterConnectionFactory(
                         val status = socket.getInputStream().read()
                         when { 
                             status == -1 -> PaperStatusResult.NoResponse
-                            (status and 0x04) == 0 -> PaperStatusResult.Ok
+                            // Bit 2 (0x04) = near end, Bit 3 (0x08) = paper end. 
+                            // Jika salah satu bernilai 1 -> kertas habis/mendung.
+                            (status and 0x0C) == 0 -> PaperStatusResult.Ok
                             else -> PaperStatusResult.PaperOut 
                         }
                     } finally { runCatching { socket.close() } }
@@ -355,7 +361,9 @@ class PrinterConnectionFactory(
 
                         when {
                             status == -1 -> PaperStatusResult.NoResponse
-                            (status and 0x04) == 0 -> PaperStatusResult.Ok
+                            // Bit 2 (0x04) = near end, Bit 3 (0x08) = paper end. 
+                            // Jika salah satu bernilai 1 -> kertas habis/mendung.
+                            (status and 0x0C) == 0 -> PaperStatusResult.Ok
                             else -> PaperStatusResult.PaperOut
                         }
                     } finally {

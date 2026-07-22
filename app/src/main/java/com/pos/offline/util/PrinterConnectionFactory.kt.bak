@@ -96,6 +96,7 @@ sealed class PrintResult {
     data class Failure(
         val printer: PrinterEntity,
         val message: String,
+        val statusQueryFailed: Boolean = false,
     ) : PrintResult()
 }
 
@@ -131,6 +132,7 @@ private sealed class JobOutcome {
 
     data class Failure(
         val message: String,
+        val statusQueryFailed: Boolean = false,
     ) : JobOutcome()
 }
 
@@ -154,7 +156,7 @@ class PrinterConnectionFactory(
         val outcome = executePrintJob(printer, openCashDrawer, markupBuilder)
         return when (outcome) {
             is JobOutcome.Success -> PrintResult.Success(printer, outcome.statusQueryFailed)
-            is JobOutcome.Failure -> PrintResult.Failure(printer, outcome.message)
+            is JobOutcome.Failure -> PrintResult.Failure(printer, outcome.message, outcome.statusQueryFailed)
         }
     }
 
@@ -212,22 +214,24 @@ class PrinterConnectionFactory(
         repeat(RETRY_ATTEMPTS_TOTAL) { attempt ->
             if (attempt > 0) delay(RETRY_DELAY_MS)
 
+            var statusQueryFailed = false
+            if (attempt == 0 && printer.supportsStatusQuery) {
+                when (preCheckPaperStatus(printer)) {
+                    PaperStatusResult.PaperOut -> return JobOutcome.Failure("Printer melaporkan kertas habis.")
+                    PaperStatusResult.NoResponse -> statusQueryFailed = true
+                    PaperStatusResult.Ok -> {}
+                }
+                // KRITIS: Beri jeda 1 detik bagi OS untuk melepaskan kanal Bluetooth 
+                // sebelum DantSu membuka socket baru, mencegah "Broken pipe".
+                delay(1000)
+            }
+
             val connected = connectWithTimeout(ready.connection)
             if (!connected) {
                 return@repeat
             }
 
             return try {
-                var statusQueryFailed = false
-                if (attempt == 0 && printer.supportsStatusQuery) {
-                    when (preCheckPaperStatus(printer)) {
-                        PaperStatusResult.PaperOut -> return JobOutcome.Failure("Printer melaporkan kertas habis.")
-                        PaperStatusResult.NoResponse -> statusQueryFailed = true
-                        PaperStatusResult.Ok -> {}
-                    }
-                    delay(500)
-                }
-
                 val escPosPrinter =
                     withContext(Dispatchers.IO) {
                         if (openCashDrawer) {
@@ -266,6 +270,7 @@ class PrinterConnectionFactory(
                 runCatching { ready.connection.disconnect() }
                 JobOutcome.Failure(
                     "Terhubung ke printer, tetapi gagal mencetak: ${e.message ?: "kesalahan tidak diketahui"}",
+                    statusQueryFailed = statusQueryFailed
                 )
             }
         }
