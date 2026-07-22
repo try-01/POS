@@ -212,22 +212,24 @@ class PrinterConnectionFactory(
         repeat(RETRY_ATTEMPTS_TOTAL) { attempt ->
             if (attempt > 0) delay(RETRY_DELAY_MS)
 
+            var statusQueryFailed = false
+            if (attempt == 0 && printer.supportsStatusQuery) {
+                when (preCheckPaperStatus(printer)) {
+                    PaperStatusResult.PaperOut -> return JobOutcome.Failure("Printer melaporkan kertas habis.")
+                    PaperStatusResult.NoResponse -> statusQueryFailed = true
+                    PaperStatusResult.Ok -> {}
+                }
+                // KRITIS: Beri jeda 1 detik bagi OS untuk melepaskan kanal Bluetooth 
+                // sebelum DantSu membuka socket baru, mencegah "Broken pipe".
+                delay(1000)
+            }
+
             val connected = connectWithTimeout(ready.connection)
             if (!connected) {
                 return@repeat
             }
 
             return try {
-                var statusQueryFailed = false
-                if (attempt == 0 && printer.supportsStatusQuery) {
-                    when (preCheckPaperStatus(printer)) {
-                        PaperStatusResult.PaperOut -> return JobOutcome.Failure("Printer melaporkan kertas habis.")
-                        PaperStatusResult.NoResponse -> statusQueryFailed = true
-                        PaperStatusResult.Ok -> {}
-                    }
-                    delay(500)
-                }
-
                 val escPosPrinter =
                     withContext(Dispatchers.IO) {
                         if (openCashDrawer) {

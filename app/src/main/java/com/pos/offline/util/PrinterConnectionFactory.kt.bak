@@ -18,7 +18,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.text.SimpleDateFormat
@@ -297,25 +296,65 @@ class PrinterConnectionFactory(
                 }
                 PrinterConnectionType.BLUETOOTH -> {
                     val address = printer.bluetoothMacAddress ?: return@withContext PaperStatusResult.NoResponse
-                    val adapter = BluetoothAdapter.getDefaultAdapter() ?: return@withContext PaperStatusResult.NoResponse
+                    val adapter = bluetoothHelper.adapter ?: return@withContext PaperStatusResult.NoResponse
                     val device = adapter.getRemoteDevice(address)
                     val uuid = device.uuids?.firstOrNull { it.uuid == SPP_UUID }?.uuid ?: SPP_UUID
 
-                    val socket = withTimeoutOrNull(1500) {
-                        val s = device.createRfcommSocketToServiceRecord(uuid)
-                        adapter.cancelDiscovery()
-                        s.connect()
-                        s
-                    } ?: return@withContext PaperStatusResult.NoResponse
+                    val socket = device.createRfcommSocketToServiceRecord(uuid)
+                    adapter.cancelDiscovery()
+
+                    // 1. WATCHDOG UNTUK CONNECT
+                    var isConnected = false
+                    supervisorScope {
+                        val connectJob = async(Dispatchers.IO) {
+                            try {
+                                socket.connect()
+                                isConnected = true
+                            } catch (e: Exception) { }
+                        }
+                        val watchdog = launch(Dispatchers.IO) {
+                            delay(1500)
+                            if (connectJob.isActive) {
+                                runCatching { socket.close() } // Paksa tutup jika connect nyangkut
+                                connectJob.cancel()
+                            }
+                        }
+                        connectJob.await()
+                        watchdog.cancel()
+                    }
+
+                    if (!isConnected) return@withContext PaperStatusResult.NoResponse
 
                     try {
                         socket.outputStream.write(cmd)
                         socket.outputStream.flush()
-                        val status = withTimeoutOrNull(1500) { socket.inputStream.read() } ?: -1
-                        when { 
+
+                        var status = -1
+                        
+                        // 2. WATCHDOG UNTUK READ (Mencegah Zombie Thread)
+                        supervisorScope {
+                            val readJob = async(Dispatchers.IO) {
+                                try {
+                                    status = socket.inputStream.read()
+                                } catch (e: Exception) {
+                                    // Akan terpanggil (IOException) jika watchdog menutup socket
+                                }
+                            }
+                            val watchdog = launch(Dispatchers.IO) {
+                                delay(1500)
+                                if (readJob.isActive) {
+                                    runCatching { socket.close() } // Paksa tutup agar read() terinterupsi!
+                                    readJob.cancel()
+                                }
+                            }
+                            readJob.await()
+                            watchdog.cancel()
+                        }
+
+                        when {
                             status == -1 -> PaperStatusResult.NoResponse
                             (status and 0x04) == 0 -> PaperStatusResult.Ok
-                            else -> PaperStatusResult.PaperOut 
+                            else -> PaperStatusResult.PaperOut
                         }
                     } finally {
                         runCatching { socket.close() }
@@ -359,7 +398,7 @@ class PrinterConnectionFactory(
             )
         }
         val adapter =
-            BluetoothAdapter.getDefaultAdapter()
+            bluetoothHelper.adapter
                 ?: return ConnectionResolution.Error("Perangkat ini tidak mendukung Bluetooth.")
         if (!adapter.isEnabled) {
             return ConnectionResolution.Error(
