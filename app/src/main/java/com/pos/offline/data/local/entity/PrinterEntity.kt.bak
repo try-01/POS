@@ -39,7 +39,4 @@ data class PrinterEntity(
     val usbVendorId: Int? = null,
     val usbProductId: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
-    val statusQueryFailStreak: Int = 0,
-    @ColumnInfo(name = "autoDisabledDueToNoResponse", defaultValue = "0")
-    val autoDisabledDueToNoResponse: Boolean = false,
 )

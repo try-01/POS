@@ -406,14 +406,6 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
                         onCheckedChange = viewModel::updateFormSupportsStatusQuery,
                     )
                 }
-                if (!form.supportsStatusQuery && form.autoDisabledDueToNoResponse) {
-                    Text(
-                        "Dimatikan otomatis, printer tidak merespons.",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(start = 4.dp, top = 2.dp)
-                    )
-                }
             }
         },
         confirmButton = {

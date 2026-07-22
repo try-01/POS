@@ -2043,6 +2043,7 @@ private fun PrintResultBanner(
     val (message, isError) =
         when (outcome) {
             is ReceiptPrintOutcome.Success -> "Struk terkirim ke \"${outcome.printer.label}\"." to false
+            is ReceiptPrintOutcome.SuccessWithNotice -> "Struk terkirim ke \"${outcome.printer.label}\".\n⚠ ${outcome.notice}" to false
             is ReceiptPrintOutcome.Failed -> "Gagal mencetak ke semua printer." to true
             ReceiptPrintOutcome.NoPrinterConfigured -> "Printer belum diatur." to true
             ReceiptPrintOutcome.AlreadyInProgress -> "Sedang mencetak, mohon tunggu..." to false

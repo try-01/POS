@@ -138,12 +138,7 @@ class PrinterViewModel(
 
     fun updateFormWifiPort(value: String) = updateForm { it.copy(wifiPort = value.filter { c -> c.isDigit() }) }
 
-    fun updateFormSupportsStatusQuery(value: Boolean) = updateForm {
-        it.copy(
-            supportsStatusQuery = value,
-            autoDisabledDueToNoResponse = if (value) false else it.autoDisabledDueToNoResponse
-        )
-    }
+    fun updateFormSupportsStatusQuery(value: Boolean) = updateForm { it.copy(supportsStatusQuery = value) }
 
     private inline fun updateForm(block: (PrinterFormState) -> PrinterFormState) {
         _uiState.value = _uiState.value.copy(formState = block(_uiState.value.formState))
