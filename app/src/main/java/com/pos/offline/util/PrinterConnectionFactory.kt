@@ -296,10 +296,10 @@ class PrinterConnectionFactory(
                         val status = socket.getInputStream().read()
                         when { 
                             status == -1 -> PaperStatusResult.NoResponse
-                            // Bit 2 (0x04) = near end, Bit 3 (0x08) = paper end. 
-                            // Jika salah satu bernilai 1 -> kertas habis/mendung.
-                            (status and 0x0C) == 0 -> PaperStatusResult.Ok
-                            else -> PaperStatusResult.PaperOut 
+                            // Hanya blokir saat kertas BENAR-BENAR HABIS (Bit 5 & 6 / 0x60).
+                            // Near-end (0x0C) diabaikan agar kertas sisa 1-3 meter tidak terbuang.
+                            (status and 0x60) != 0 -> PaperStatusResult.PaperOut
+                            else -> PaperStatusResult.Ok 
                         }
                     } finally { runCatching { socket.close() } }
                 }
@@ -360,14 +360,12 @@ class PrinterConnectionFactory(
                             watchdog.cancel()
                         }
 
-                        android.util.Log.d("PaperStatusTest", "Bluetooth Response Byte: $status (Hex: 0x${Integer.toHexString(status)})")
-
                         when {
                             status == -1 -> PaperStatusResult.NoResponse
-                            // Bit 2 (0x04) = near end, Bit 3 (0x08) = paper end. 
-                            // Jika salah satu bernilai 1 -> kertas habis/mendung.
-                            (status and 0x0C) == 0 -> PaperStatusResult.Ok
-                            else -> PaperStatusResult.PaperOut
+                            // Hanya blokir saat kertas BENAR-BENAR HABIS (Bit 5 & 6 / 0x60).
+                            // Near-end (0x0C) diabaikan agar kertas sisa 1-3 meter tidak terbuang.
+                            (status and 0x60) != 0 -> PaperStatusResult.PaperOut
+                            else -> PaperStatusResult.Ok
                         }
                     } finally {
                         runCatching { socket.close() }
