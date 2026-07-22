@@ -38,6 +38,7 @@ data class PrinterFormState(
     val usbVendorId: Int? = null,
     val usbProductId: Int? = null,
     val supportsStatusQuery: Boolean = false,
+    val autoDisabledDueToNoResponse: Boolean = false,
 )
 
 data class PrinterUiState(
@@ -117,6 +118,7 @@ class PrinterViewModel(
                         usbVendorId = printer.usbVendorId,
                         usbProductId = printer.usbProductId,
                         supportsStatusQuery = printer.supportsStatusQuery,
+                        autoDisabledDueToNoResponse = printer.autoDisabledDueToNoResponse,
                     ),
             )
     }
@@ -222,6 +224,7 @@ class PrinterViewModel(
                         charPerLine = charPerLine,
                         paperWidth = form.paperWidth,
                         supportsStatusQuery = form.supportsStatusQuery,
+                        autoDisabledDueToNoResponse = form.autoDisabledDueToNoResponse,
                         wifiIpAddress = wifiIp,
                         wifiPort = wifiPort,
                         bluetoothMacAddress = btAddress,
@@ -242,6 +245,7 @@ class PrinterViewModel(
                             paperWidth = form.paperWidth,
                             charPerLine = charPerLine,
                             supportsStatusQuery = form.supportsStatusQuery,
+                            autoDisabledDueToNoResponse = form.autoDisabledDueToNoResponse,
                             wifiIpAddress = wifiIp,
                             wifiPort = wifiPort,
                             bluetoothMacAddress = btAddress,

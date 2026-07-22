@@ -18,13 +18,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
-import java.util.concurrent.Callable
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
 class CancellableBluetoothConnection(
     private val device: BluetoothDevice,
@@ -91,6 +91,7 @@ sealed class TestPrintResult {
 sealed class PrintResult {
     data class Success(
         val printer: PrinterEntity,
+        val statusQueryFailed: Boolean = false,
     ) : PrintResult()
 
     data class Failure(
@@ -107,6 +108,12 @@ sealed class CashDrawerResult {
     ) : CashDrawerResult()
 }
 
+sealed class PaperStatusResult {
+    object Ok : PaperStatusResult()
+    object PaperOut : PaperStatusResult()
+    object NoResponse : PaperStatusResult()
+}
+
 private sealed class ConnectionResolution {
     data class Ready(
         val connection: DeviceConnection,
@@ -119,7 +126,9 @@ private sealed class ConnectionResolution {
 }
 
 private sealed class JobOutcome {
-    object Success : JobOutcome()
+    data class Success(
+        val statusQueryFailed: Boolean = false,
+    ) : JobOutcome()
 
     data class Failure(
         val message: String,
@@ -145,7 +154,7 @@ class PrinterConnectionFactory(
     ): PrintResult {
         val outcome = executePrintJob(printer, openCashDrawer, markupBuilder)
         return when (outcome) {
-            is JobOutcome.Success -> PrintResult.Success(printer)
+            is JobOutcome.Success -> PrintResult.Success(printer, outcome.statusQueryFailed)
             is JobOutcome.Failure -> PrintResult.Failure(printer, outcome.message)
         }
     }
@@ -209,67 +218,36 @@ class PrinterConnectionFactory(
                 return@repeat
             }
 
-                return try {
-                    // Cek status kertas HANYA pada percobaan pertama, jika didukung & diaktifkan di pengaturan
-                    if (attempt == 0 && printer.supportsStatusQuery) {
-                        val paperStatus = withContext(Dispatchers.IO) {
-                            val probeExecutor = Executors.newSingleThreadExecutor()
-                            try {
-                                val future = probeExecutor.submit(Callable {
-                                    val status = EscPosPrinterCommands(ready.connection).status
-                                    // true = kertas ada, false = kertas habis
-                                    (status.toInt() and 0x04) == 0
-                                })
-                                try {
-                                    Result.success(future.get(1500, TimeUnit.MILLISECONDS))
-                                } catch (e: Exception) {
-                                    android.util.Log.w("PrinterConn", "Status query gagal/timeout, menutup koneksi untuk membebaskan thread", e)
-                                    Result.failure(e)
-                                }
-                            } finally {
-                                probeExecutor.shutdown() // nolak task baru, TIDAK menghentikan task yg masih blocking
-                            }
-                        }
+            return try {
+                var statusQueryFailed = false
+                if (attempt == 0 && printer.supportsStatusQuery) {
+                    when (preCheckPaperStatus(printer)) {
+                        PaperStatusResult.PaperOut -> return JobOutcome.Failure("Printer melaporkan kertas habis.")
+                        PaperStatusResult.NoResponse -> statusQueryFailed = true
+                        PaperStatusResult.Ok -> {}
+                    }
+                    delay(500)
+                }
 
-                        // Fail-Closed: Jika timeout (zombie thread) ATAU kertas habis -> putuskan & gagalkan
-                        if (paperStatus.isFailure || !paperStatus.getOrThrow()) {
-                            // Tutup socket fisik untuk membunuh thread probe yang blocking di read()
+                val escPosPrinter =
+                    withContext(Dispatchers.IO) {
+                        if (openCashDrawer) {
                             try {
-                                withContext(Dispatchers.IO) { ready.connection.disconnect() }
-                            } catch (ce: kotlin.coroutines.cancellation.CancellationException) {
-                                throw ce // Jangan telan CancellationException, propagate agar coroutine cancellation tetap sehat
+                                val commands = EscPosPrinterCommands(ready.connection)
+                                commands.openCashBox()
+                                Thread.sleep(250)
                             } catch (e: Exception) {
-                                // Ignore disconnect errors
                             }
-                            
-                            val msg = if (paperStatus.isFailure) {
-                                "Printer tidak merespon status (timeout)."
-                            } else {
-                                "Printer melaporkan kertas habis."
-                            }
-                            return JobOutcome.Failure(msg)
                         }
+                        EscPosPrinter(
+                            ready.connection,
+                            DEFAULT_PRINTER_DPI,
+                            printer.paperWidth.printableWidthMM(),
+                            printer.charPerLine,
+                        ).useEscAsteriskCommand(true)
                     }
 
-                    val escPosPrinter =
-                        withContext(Dispatchers.IO) {
-                            if (openCashDrawer) {
-                                try {
-                                    val commands = EscPosPrinterCommands(ready.connection)
-                                    commands.openCashBox()
-                                    Thread.sleep(250)
-                                } catch (e: Exception) {
-                                }
-                            }
-                            EscPosPrinter(
-                                ready.connection,
-                                DEFAULT_PRINTER_DPI,
-                                printer.paperWidth.printableWidthMM(),
-                                printer.charPerLine,
-                            ).useEscAsteriskCommand(true)
-                        }
-
-                    val markups = markupBuilder(escPosPrinter)
+                val markups = markupBuilder(escPosPrinter)
                 withContext(Dispatchers.IO) {
                     markups.forEachIndexed { index, markup ->
                         if (index == markups.lastIndex) {
@@ -284,7 +262,7 @@ class PrinterConnectionFactory(
                 withContext(Dispatchers.IO) {
                     escPosPrinter.disconnectPrinter()
                 }
-                JobOutcome.Success
+                JobOutcome.Success(statusQueryFailed = statusQueryFailed)
             } catch (e: Exception) {
                 runCatching { ready.connection.disconnect() }
                 JobOutcome.Failure(
@@ -294,6 +272,58 @@ class PrinterConnectionFactory(
         }
 
         return JobOutcome.Failure(genericErrorMessage)
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun preCheckPaperStatus(printer: PrinterEntity): PaperStatusResult = withContext(Dispatchers.IO) {
+        val cmd = byteArrayOf(0x1D, 0x72, 0x01)
+        try {
+            when (printer.connectionType) {
+                PrinterConnectionType.WIFI -> {
+                    val socket = Socket()
+                    try {
+                        socket.connect(InetSocketAddress(printer.wifiIpAddress, printer.wifiPort), 1500)
+                        socket.soTimeout = 1500
+                        socket.getOutputStream().apply { write(cmd); flush() }
+                        val status = socket.getInputStream().read()
+                        when { 
+                            status == -1 -> PaperStatusResult.NoResponse
+                            (status and 0x04) == 0 -> PaperStatusResult.Ok
+                            else -> PaperStatusResult.PaperOut 
+                        }
+                    } finally { runCatching { socket.close() } }
+                }
+                PrinterConnectionType.BLUETOOTH -> {
+                    val address = printer.bluetoothMacAddress ?: return@withContext PaperStatusResult.NoResponse
+                    val adapter = BluetoothAdapter.getDefaultAdapter() ?: return@withContext PaperStatusResult.NoResponse
+                    val device = adapter.getRemoteDevice(address)
+                    val uuid = device.uuids?.firstOrNull { it.uuid == SPP_UUID }?.uuid ?: SPP_UUID
+
+                    val socket = withTimeoutOrNull(1500) {
+                        val s = device.createRfcommSocketToServiceRecord(uuid)
+                        adapter.cancelDiscovery()
+                        s.connect()
+                        s
+                    } ?: return@withContext PaperStatusResult.NoResponse
+
+                    try {
+                        socket.outputStream.write(cmd)
+                        socket.outputStream.flush()
+                        val status = withTimeoutOrNull(1500) { socket.inputStream.read() } ?: -1
+                        when { 
+                            status == -1 -> PaperStatusResult.NoResponse
+                            (status and 0x04) == 0 -> PaperStatusResult.Ok
+                            else -> PaperStatusResult.PaperOut 
+                        }
+                    } finally {
+                        runCatching { socket.close() }
+                    }
+                }
+                PrinterConnectionType.USB -> PaperStatusResult.Ok
+            }
+        } catch (e: Exception) {
+            PaperStatusResult.NoResponse
+        }
     }
 
     private suspend fun resolveConnection(printer: PrinterEntity): ConnectionResolution =
@@ -427,5 +457,6 @@ class PrinterConnectionFactory(
         private const val CONNECT_TIMEOUT_MS = 5_000L
         private const val RETRY_ATTEMPTS_TOTAL = 3
         private const val RETRY_DELAY_MS = 1_500L
+        private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
     }
 }

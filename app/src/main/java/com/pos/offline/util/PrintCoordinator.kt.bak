@@ -23,6 +23,11 @@ sealed class ReceiptPrintOutcome {
         val printer: PrinterEntity,
     ) : ReceiptPrintOutcome()
 
+    data class SuccessWithNotice(
+        val printer: PrinterEntity,
+        val notice: String,
+    ) : ReceiptPrintOutcome()
+
     data class Failed(
         val attempts: List<PrintAttemptFailure>,
         val fallbackPdf: File?,
@@ -39,6 +44,8 @@ class PrintCoordinator(
     private val storeProfileRepository: StoreProfileRepository,
     private val connectionFactory: PrinterConnectionFactory,
 ) {
+    private val activeJobs = ConcurrentHashMap<String, Mutex>()
+    private val statusQueryFailureCounts = ConcurrentHashMap<Long, Int>()
     private val activeJobs = ConcurrentHashMap<String, Mutex>()
 
     suspend fun printReceiptAuto(
@@ -93,12 +100,23 @@ class PrintCoordinator(
         val failures = mutableListOf<PrintAttemptFailure>()
 
         for (printer in candidates) {
-            val printResult =
-                connectionFactory.printReceipt(printer, openCashDrawer) { escPosPrinter ->
-                    EscPosReceiptFormatter.build(escPosPrinter, result, storeProfile)
-                }
+            val printResult = connectionFactory.printReceipt(printer, openCashDrawer) { escPosPrinter ->
+                EscPosReceiptFormatter.build(escPosPrinter, result, storeProfile)
+            }
             when (printResult) {
-                is PrintResult.Success -> return ReceiptPrintOutcome.Success(printer)
+                is PrintResult.Success -> {
+                    if (printResult.statusQueryFailed) {
+                        val fails = statusQueryFailureCounts.merge(printer.id, 1, Int::plus) ?: 1
+                        if (fails >= 3) {
+                            printerRepository.update(printer.copy(supportsStatusQuery = false, statusQueryFailStreak = 0, autoDisabledDueToNoResponse = true))
+                            statusQueryFailureCounts.remove(printer.id)
+                            return ReceiptPrintOutcome.SuccessWithNotice(printer, "Deteksi status kertas otomatis dimatikan untuk printer ini (tidak merespons).")
+                        }
+                    } else {
+                        statusQueryFailureCounts.remove(printer.id)
+                    }
+                    return ReceiptPrintOutcome.Success(printer)
+                }
                 is PrintResult.Failure -> failures += PrintAttemptFailure(printer, printResult.message)
             }
         }
