@@ -36,7 +36,7 @@ class ReportRepository(private val reportDao: ReportDao) {
         return SalesReportData(summary, profitItems, payments, returns, diskon, pendapatanBersih, labaBersih, products)
     }
 
-    fun observeProductsByTopSales(start: Long, end: Long): kotlinx.coroutines.flow<List<com.pos.offline.data.local.entity.ProductEntity>> {
+    fun observeProductsByTopSales(start: Long, end: Long): kotlinx.coroutines.flow.Flow<List<com.pos.offline.data.local.entity.ProductEntity>> {
         return reportDao.observeProductsByTopSales(start, end)
     }
 }
