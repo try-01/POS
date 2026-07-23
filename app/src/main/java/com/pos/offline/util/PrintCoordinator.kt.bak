@@ -116,7 +116,18 @@ class PrintCoordinator(
                     }
                     return ReceiptPrintOutcome.Success(printer)
                 }
-                is PrintResult.Failure -> failures += PrintAttemptFailure(printer, printResult.message)
+                is PrintResult.Failure -> {
+                    var msg = printResult.message
+                    if (printResult.statusQueryFailed) {
+                        val fails = statusQueryFailureCounts.merge(printer.id, 1, Int::plus) ?: 1
+                        if (fails >= 3) {
+                            printerRepository.update(printer.copy(supportsStatusQuery = false, statusQueryFailStreak = 0, autoDisabledDueToNoResponse = true))
+                            statusQueryFailureCounts.remove(printer.id)
+                            msg += " (Deteksi status kertas otomatis dimatikan karena tidak merespons)."
+                        }
+                    }
+                    failures += PrintAttemptFailure(printer, msg)
+                }
             }
         }
 
