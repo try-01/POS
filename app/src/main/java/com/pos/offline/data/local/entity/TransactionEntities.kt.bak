@@ -5,10 +5,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(
-    tableName = "transactions",
-    indices = [Index(value = ["createdAt"])]
-)
+@Entity(tableName = "transactions")
 data class TransactionEntity(
     @PrimaryKey
     val id: String, // nomor invoice, mis. "INV-1700000000000"
@@ -38,10 +35,7 @@ data class TransactionEntity(
 
 @Entity(
     tableName = "transaction_items",
-    indices = [
-        Index(value = ["transactionId"]), // lookup item per struk cepat
-        Index(value = ["productId"]) // lookup produk terlaris cepat
-    ], 
+    indices = [Index(value = ["transactionId"])], // lookup item per struk cepat
 )
 data class TransactionItemEntity(
     @PrimaryKey(autoGenerate = true)
