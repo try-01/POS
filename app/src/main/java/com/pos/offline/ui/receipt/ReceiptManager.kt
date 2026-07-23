@@ -213,7 +213,7 @@ object ReceiptManager {
                 }
                 document.finishPage(page)
 
-                val dir = File(context.getExternalFilesDir(null) ?: context.filesDir, "reports").apply { mkdirs() }
+                val dir = File(context.cacheDir, "reports").apply { mkdirs() }
                 val file = File(dir, "$fileName.pdf")
                 FileOutputStream(file).use { document.writeTo(it) }
                 file
