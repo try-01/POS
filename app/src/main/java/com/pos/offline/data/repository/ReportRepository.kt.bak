@@ -1,0 +1,41 @@
+package com.pos.offline.data.repository
+
+import com.pos.offline.data.local.dao.ReportDao
+
+data class SalesReportData(
+    val summary: ReportDao.SalesSummary,
+    val profitItems: ReportDao.ProfitAndItemsSummary,
+    val payments: List<ReportDao.PaymentMethodSummary>,
+    val returnsTotal: Long,
+    val diskon: Long,
+    val pendapatanBersih: Long,
+    val labaBersih: Long,
+    val products: List<ReportDao.ProductSalesRow> = emptyList()
+)
+
+class ReportRepository(private val reportDao: ReportDao) {
+    suspend fun buildSalesReport(start: Long, end: Long, includeProducts: Boolean = false): SalesReportData {
+        val summary = reportDao.getSalesSummary(start, end)
+        val profitItems = reportDao.getProfitAndItemsSummary(start, end)
+        val payments = reportDao.getPaymentMethodSummary(start, end)
+        val returns = reportDao.getReturnsTotal(start, end)
+        
+        val diskon = summary.subtotalSum + summary.taxSum - summary.totalSum
+        val pendapatanBersih = summary.totalSum - returns
+        
+        // Koreksi Laba Bersih: modal cuma "balik" kalau barang direstock
+        val restockedCost = reportDao.getRestockedReturnsCost(start, end)
+        val netCogs = profitItems.costSum - restockedCost
+        val labaBersih = pendapatanBersih - netCogs
+
+        // Laporan historical tetap tampilkan produk non-aktif (activeOnly = false)
+        val products = if (includeProducts) reportDao.getTopSellingProducts(start, end, activeOnly = false) else emptyList()
+
+        return SalesReportData(summary, profitItems, payments, returns, diskon, pendapatanBersih, labaBersih, products)
+    }
+
+    // Sort Inventory hanya tampilkan produk aktif (activeOnly = true)
+    suspend fun getTopSellingForInventory(start: Long, end: Long): List<ReportDao.ProductSalesRow> {
+        return reportDao.getTopSellingProducts(start, end, activeOnly = true)
+    }
+}

@@ -234,6 +234,16 @@ object Migrations {
                 )
             }
         }
+        
+        val MIGRATION_11_12 =
+        object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_createdAt` ON `transactions` (`createdAt`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transaction_items_transactionId` ON `transaction_items` (`transactionId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transaction_items_productId` ON `transaction_items` (`productId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_returns_returnedAt` ON `returns` (`returnedAt`)")
+            }
+        }
 
     val ALL: Array<Migration> =
         arrayOf(
@@ -247,5 +257,6 @@ object Migrations {
             MIGRATION_8_9,
             MIGRATION_9_10,
             MIGRATION_10_11,
+            MIGRATION_11_12,
         )
 }

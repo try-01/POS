@@ -1,6 +1,5 @@
 package com.pos.offline.util
 
-import android.util.Log
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice

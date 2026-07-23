@@ -106,7 +106,6 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
 
     val snackbarHostState = remember { SnackbarHostState() }
     val sortOption by viewModel.sortOption.collectAsStateWithLifecycle()
-    val topSalesRange by viewModel.topSalesRange.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val hasCamera =
@@ -209,13 +208,6 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                         )
                         Spacer(Modifier.width(6.dp))
                         SortMenuButton(current = sortOption, onSelect = viewModel::setSortOption)
-                        if (sortOption == ProductSortOption.TERLARIS) {
-                            Spacer(Modifier.width(6.dp))
-                            TopSalesRangePicker(
-                                selected = topSalesRange,
-                                onSelect = viewModel::setTopSalesRange
-                            )
-                        }
                     }
                 }
             },
@@ -1087,51 +1079,4 @@ private fun MoneyNumberField(
         shape = RoundedCornerShape(10.dp),
         modifier = modifier,
     )
-}
-
-@Composable
-private fun TopSalesRangePicker(
-    selected: TopSalesRange,
-    onSelect: (TopSalesRange) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .height(34.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
-            .padding(horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        TopSalesRange.entries.forEach { range ->
-            TopSalesChip(
-                label = range.label,
-                selected = selected == range,
-                onClick = { onSelect(range) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun TopSalesChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-        )
-    }
 }

@@ -55,9 +55,6 @@ object ServiceLocator {
     private val returnRepository: ReturnRepository by lazy {
         ReturnRepository(db, db.returnDao(), db.transactionDao(), db.productDao())
     }
-    private val reportRepository: ReportRepository by lazy {
-        ReportRepository(db.reportDao())
-    }
     private val printerRepository: PrinterRepository by lazy {
         PrinterRepository(db.printerDao())
     }
@@ -97,7 +94,7 @@ object ServiceLocator {
             printerConnectionFactory,
         )
 
-    fun inventoryViewModelFactory(): ViewModelProvider.Factory = InventoryViewModelFactory(appContext, productRepository, reportRepository)
+    fun inventoryViewModelFactory(): ViewModelProvider.Factory = InventoryViewModelFactory(appContext, productRepository)
 
     fun reportViewModelFactory(): ViewModelProvider.Factory =
         ReportViewModelFactory(transactionRepository, shiftRepository, returnRepository, printCoordinator, printerRepository)
@@ -155,10 +152,9 @@ class PosViewModelFactory(
 class InventoryViewModelFactory(
     private val appContext: Context,
     private val productRepository: ProductRepository,
-    private val reportRepository: ReportRepository,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T = InventoryViewModel(appContext, productRepository, reportRepository) as T
+    override fun <T : ViewModel> create(modelClass: Class<T>): T = InventoryViewModel(appContext, productRepository) as T
 }
 
 class ReportViewModelFactory(

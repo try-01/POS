@@ -92,6 +92,7 @@ sealed class PrintResult {
     data class Success(
         val printer: PrinterEntity,
         val statusQueryFailed: Boolean = false,
+        val nearEndWarning: Boolean = false,
     ) : PrintResult()
 
     data class Failure(
@@ -113,6 +114,7 @@ sealed class PaperStatusResult {
     object Ok : PaperStatusResult()
     object PaperOut : PaperStatusResult()
     object NoResponse : PaperStatusResult()
+    object NearEnd : PaperStatusResult()
 }
 
 private sealed class ConnectionResolution {
@@ -129,6 +131,7 @@ private sealed class ConnectionResolution {
 private sealed class JobOutcome {
     data class Success(
         val statusQueryFailed: Boolean = false,
+        val nearEndWarning: Boolean = false,
     ) : JobOutcome()
 
     data class Failure(
@@ -156,7 +159,7 @@ class PrinterConnectionFactory(
     ): PrintResult {
         val outcome = executePrintJob(printer, openCashDrawer, markupBuilder)
         return when (outcome) {
-            is JobOutcome.Success -> PrintResult.Success(printer, outcome.statusQueryFailed)
+            is JobOutcome.Success -> PrintResult.Success(printer, outcome.statusQueryFailed, outcome.nearEndWarning)
             is JobOutcome.Failure -> PrintResult.Failure(printer, outcome.message, outcome.statusQueryFailed)
         }
     }
@@ -215,17 +218,17 @@ class PrinterConnectionFactory(
         repeat(RETRY_ATTEMPTS_TOTAL) { attempt ->
             if (attempt > 0) delay(RETRY_DELAY_MS)
 
-            var statusQueryFailed = false
-            if (attempt == 0 && printer.supportsStatusQuery) {
-                when (preCheckPaperStatus(printer)) {
-                    PaperStatusResult.PaperOut -> return JobOutcome.Failure("Printer melaporkan kertas habis.")
-                    PaperStatusResult.NoResponse -> statusQueryFailed = true
-                    PaperStatusResult.Ok -> {}
+                var statusQueryFailed = false
+                var nearEndWarning = false
+                if (attempt == 0 && printer.supportsStatusQuery) {
+                    when (preCheckPaperStatus(printer)) {
+                        PaperStatusResult.PaperOut -> return JobOutcome.Failure("Printer melaporkan kertas habis.")
+                        PaperStatusResult.NoResponse -> statusQueryFailed = true
+                        PaperStatusResult.NearEnd -> nearEndWarning = true
+                        PaperStatusResult.Ok -> {}
+                    }
+                    delay(1000)
                 }
-                // KRITIS: Beri jeda 1 detik bagi OS untuk melepaskan kanal Bluetooth 
-                // sebelum DantSu membuka socket baru, mencegah "Broken pipe".
-                delay(1000)
-            }
 
             val connected = connectWithTimeout(ready.connection)
             if (!connected) {
@@ -266,7 +269,7 @@ class PrinterConnectionFactory(
                 withContext(Dispatchers.IO) {
                     escPosPrinter.disconnectPrinter()
                 }
-                JobOutcome.Success(statusQueryFailed = statusQueryFailed)
+                JobOutcome.Success(statusQueryFailed = statusQueryFailed, nearEndWarning = nearEndWarning)
             } catch (e: Exception) {
                 runCatching { ready.connection.disconnect() }
                 JobOutcome.Failure(
@@ -296,9 +299,10 @@ class PrinterConnectionFactory(
                         val status = socket.getInputStream().read()
                         when { 
                             status == -1 -> PaperStatusResult.NoResponse
-                            // Hanya blokir saat kertas BENAR-BENAR HABIS (Bit 5 & 6 / 0x60).
-                            // Near-end (0x0C) diabaikan agar kertas sisa 1-3 meter tidak terbuang.
+                            // Blokir saat kertas BENAR-BENAR HABIS (Bit 5 & 6 / 0x60)
                             (status and 0x60) != 0 -> PaperStatusResult.PaperOut
+                            // Peringatan kuning saat kertas tinggal sedikit (Bit 2 & 3 / 0x0C)
+                            (status and 0x0C) != 0 -> PaperStatusResult.NearEnd
                             else -> PaperStatusResult.Ok 
                         }
                     } finally { runCatching { socket.close() } }
@@ -362,9 +366,10 @@ class PrinterConnectionFactory(
 
                         when {
                             status == -1 -> PaperStatusResult.NoResponse
-                            // Hanya blokir saat kertas BENAR-BENAR HABIS (Bit 5 & 6 / 0x60).
-                            // Near-end (0x0C) diabaikan agar kertas sisa 1-3 meter tidak terbuang.
+                            // Blokir saat kertas BENAR-BENAR HABIS (Bit 5 & 6 / 0x60)
                             (status and 0x60) != 0 -> PaperStatusResult.PaperOut
+                            // Peringatan kuning saat kertas tinggal sedikit (Bit 2 & 3 / 0x0C)
+                            (status and 0x0C) != 0 -> PaperStatusResult.NearEnd
                             else -> PaperStatusResult.Ok
                         }
                     } finally {

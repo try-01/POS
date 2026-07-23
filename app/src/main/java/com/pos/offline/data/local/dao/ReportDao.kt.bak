@@ -1,0 +1,63 @@
+package com.pos.offline.data.local.dao
+
+import androidx.room.Dao
+import androidx.room.Query
+
+data class SalesSummary(val transactionCount: Int, val subtotalSum: Long, val taxSum: Long, val totalSum: Long)
+data class ProfitAndItemsSummary(val itemsSoldSum: Int, val revenueSum: Long, val costSum: Long)
+data class PaymentMethodSummary(val paymentMethod: String, val total: Long, val count: Int)
+data class ProductSalesRow(val productId: Long, val productName: String, val sku: String, val price: Long, val stock: Int, val qtySold: Int, val revenue: Long)
+
+@Dao
+interface ReportDao {
+    @Query("""
+        SELECT COUNT(*) as transactionCount, COALESCE(SUM(subtotal),0) as subtotalSum,
+               COALESCE(SUM(tax),0) as taxSum, COALESCE(SUM(total),0) as totalSum
+        FROM transactions WHERE createdAt BETWEEN :start AND :end AND status = 'COMPLETED'
+    """)
+    suspend fun getSalesSummary(start: Long, end: Long): SalesSummary
+
+    @Query("""
+        SELECT COALESCE(SUM(ti.quantity),0) as itemsSoldSum,
+               COALESCE(SUM(ti.quantity * ti.unitPrice),0) as revenueSum,
+               COALESCE(SUM(ti.quantity * ti.unitCost),0) as costSum
+        FROM transaction_items ti INNER JOIN transactions t ON t.id = ti.transactionId
+        WHERE t.createdAt BETWEEN :start AND :end AND t.status = 'COMPLETED'
+    """)
+    suspend fun getProfitAndItemsSummary(start: Long, end: Long): ProfitAndItemsSummary
+
+    @Query("""
+        SELECT COALESCE(SUM(ti.unitCost * ri.quantityReturned), 0)
+        FROM return_items ri
+        INNER JOIN transaction_items ti ON ri.transactionItemId = ti.id
+        INNER JOIN returns r ON r.id = ri.returnId
+        WHERE r.returnedAt BETWEEN :start AND :end AND ri.restocked = 1
+    """)
+    suspend fun getRestockedReturnsCost(start: Long, end: Long): Long
+
+    @Query("""
+        SELECT paymentMethod, COALESCE(SUM(total),0) as total, COUNT(*) as count
+        FROM transactions WHERE createdAt BETWEEN :start AND :end AND status = 'COMPLETED'
+        GROUP BY paymentMethod
+    """)
+    suspend fun getPaymentMethodSummary(start: Long, end: Long): List<PaymentMethodSummary>
+
+    @Query("SELECT COALESCE(SUM(refundAmount),0) FROM returns WHERE returnedAt BETWEEN :start AND :end")
+    suspend fun getReturnsTotal(start: Long, end: Long): Long
+
+    @Query("""
+        SELECT p.id as productId, p.name as productName, p.sku as sku, p.price as price, p.stock as stock,
+               COALESCE(SUM(ti.quantity), 0) as qtySold, 
+               COALESCE(SUM(ti.lineTotal), 0) as revenue
+        FROM products p
+        LEFT JOIN transaction_items ti ON p.id = ti.productId
+        LEFT JOIN transactions t ON t.id = ti.transactionId 
+              AND t.createdAt BETWEEN :start AND :end 
+              AND t.status = 'COMPLETED'
+        WHERE (:activeOnly = 0 OR p.active = 1)
+        GROUP BY p.id
+        ORDER BY qtySold DESC, p.name ASC
+        LIMIT :limit
+    """)
+    suspend fun getTopSellingProducts(start: Long, end: Long, limit: Int = 1000, activeOnly: Boolean = false): List<ProductSalesRow>
+}
