@@ -215,6 +215,7 @@ fun ReportScreen(
             item(key = "sales_report_generator") {
                 val salesData by viewModel.salesReportData.collectAsStateWithLifecycle()
                 val showProducts by viewModel.showProductListInReport.collectAsStateWithLifecycle()
+                val showDeadStock by viewModel.showDeadStockInReport.collectAsStateWithLifecycle()
                 val context = LocalContext.current
                 val scope = rememberCoroutineScope()
 
@@ -223,6 +224,12 @@ fun ReportScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = showProducts, onCheckedChange = viewModel::toggleShowProductList)
                         Text("Tampilkan Produk Terjual", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (showProducts) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = showDeadStock, onCheckedChange = viewModel::toggleShowDeadStock)
+                            Text("Sertakan Stok Mati (0 laku)", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { viewModel.generateSalesReport(false) }, modifier = Modifier.weight(1f)) { Text("Harian") }
@@ -243,7 +250,7 @@ fun ReportScreen(
                                     OutlinedButton(onClick = { viewModel.printSalesReport(false) }, modifier = Modifier.weight(1f)) { Text("Cetak Harian") }
                                     OutlinedButton(onClick = {
                                         scope.launch {
-                                            val lines = ReceiptManager.buildSalesReportLines(data, null, "Laporan Harian", null, null)
+                                            val lines = ReceiptManager.buildSalesReportLines(data, null, "Laporan Harian", null, null, showDeadStock)
                                             val file = ReceiptManager.exportPdfFromLines(context, lines, "Laporan_Harian")
                                             context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
                                         }

@@ -384,8 +384,15 @@ class ReportViewModel(
     private val _showProductListInReport = MutableStateFlow(false)
     val showProductListInReport: StateFlow<Boolean> = _showProductListInReport.asStateFlow()
 
+    private val _showDeadStockInReport = MutableStateFlow(true) // Default true agar tetap mencetak dead stock seperti perilaku sebelumnya
+    val showDeadStockInReport: StateFlow<Boolean> = _showDeadStockInReport.asStateFlow()
+
     fun toggleShowProductList(show: Boolean) {
         _showProductListInReport.value = show
+    }
+
+    fun toggleShowDeadStock(show: Boolean) {
+        _showDeadStockInReport.value = show
     }
 
     fun generateSalesReport(isMonthly: Boolean) {
@@ -405,7 +412,7 @@ class ReportViewModel(
             val profile = storeProfileRepository.get()
             val periodLabel = if (isMonthly) "Bulanan: ${now.month.name} ${now.year}" else "Harian: ${now.format(dateFmt)}"
             val shift = shiftRepository.getOpenShift()
-            val lines = ReceiptManager.buildSalesReportLines(data, profile, periodLabel, shift?.cashierName, shift?.id?.toString())
+            val lines = ReceiptManager.buildSalesReportLines(data, profile, periodLabel, shift?.cashierName, shift?.id?.toString(), _showDeadStockInReport.value)
 
             val printer = printerRepository.getDefault()
             if (printer == null) {

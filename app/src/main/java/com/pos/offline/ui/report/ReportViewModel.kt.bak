@@ -10,15 +10,19 @@ import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.isVoid
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.PrinterRepository
+import com.pos.offline.data.repository.ReportRepository
 import com.pos.offline.data.repository.ReturnDetail
 import com.pos.offline.data.repository.ReturnItemInput
 import com.pos.offline.data.repository.ReturnOutcome
 import com.pos.offline.data.repository.ReturnRepository
+import com.pos.offline.data.repository.SalesReportData
 import com.pos.offline.data.repository.ShiftRepository
 import com.pos.offline.data.repository.ShiftSummary
+import com.pos.offline.data.repository.StoreProfileRepository
 import com.pos.offline.data.repository.TransactionRepository
 import com.pos.offline.data.repository.VoidOutcome
 import com.pos.offline.ui.receipt.PrintUiState
+import com.pos.offline.ui.receipt.ReceiptManager
 import com.pos.offline.util.PrintCoordinator
 import com.pos.offline.util.toRupiah
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -42,16 +46,16 @@ import java.util.Locale
 
 data class DailyReport(
     val date: LocalDate,
-    val transactions: List<TransactionEntity>, // SEMUA baris, termasuk VOID
-    val totalRevenue: Long, // Σ total transaksi COMPLETED
-    val transactionCount: Int, // jumlah transaksi COMPLETED
+    val transactions: List<TransactionEntity>,
+    val totalRevenue: Long,
+    val transactionCount: Int,
     val averagePerTransaction: Long,
-    val totalDiscount: Long, // Σ diskon transaksi COMPLETED
-    val totalTax: Long, // Σ pajak transaksi COMPLETED
-    val hourlyRevenue: List<Long>, // panjang 24; hanya dari transaksi COMPLETED
-    val voidedCount: Int, // jumlah transaksi VOID hari ini
-    val cashRevenue: Long, // BATCH G: Σ total transaksi COMPLETED metode CASH
-    val qrisRevenue: Long, // BATCH G: Σ total transaksi COMPLETED metode QRIS
+    val totalDiscount: Long,
+    val totalTax: Long,
+    val hourlyRevenue: List<Long>,
+    val voidedCount: Int,
+    val cashRevenue: Long,
+    val qrisRevenue: Long,
 ) {
     companion object {
         fun empty(date: LocalDate) =
@@ -105,6 +109,8 @@ class ReportViewModel(
     private val returnRepository: ReturnRepository,
     private val printCoordinator: PrintCoordinator,
     private val printerRepository: PrinterRepository,
+    private val reportRepository: ReportRepository,
+    private val storeProfileRepository: StoreProfileRepository,
 ) : ViewModel() {
     private val zone: ZoneId = ZoneId.systemDefault()
     private val _selectedDate = MutableStateFlow(LocalDate.now(zone))
@@ -369,6 +375,62 @@ class ReportViewModel(
         _printUiState.value = PrintUiState.Printing(result)
         val outcome = printCoordinator.printReceiptToSpecific(printer, result)
         _printUiState.value = PrintUiState.Result(outcome, result)
+    }
+
+    // ==================== SALES REPORT ====================
+    private val _salesReportData = MutableStateFlow<SalesReportData?>(null)
+    val salesReportData: StateFlow<SalesReportData?> = _salesReportData.asStateFlow()
+
+    private val _showProductListInReport = MutableStateFlow(false)
+    val showProductListInReport: StateFlow<Boolean> = _showProductListInReport.asStateFlow()
+
+    fun toggleShowProductList(show: Boolean) {
+        _showProductListInReport.value = show
+    }
+
+    fun generateSalesReport(isMonthly: Boolean) {
+        viewModelScope.launch {
+            val now = LocalDate.now(zone)
+            val (start, end) = getReportRange(now, isMonthly)
+            val data = reportRepository.buildSalesReport(start, end, _showProductListInReport.value)
+            _salesReportData.value = data
+        }
+    }
+
+    fun printSalesReport(isMonthly: Boolean) {
+        viewModelScope.launch {
+            val now = LocalDate.now(zone)
+            val (start, end) = getReportRange(now, isMonthly)
+            val data = reportRepository.buildSalesReport(start, end, _showProductListInReport.value)
+            val profile = storeProfileRepository.get()
+            val periodLabel = if (isMonthly) "Bulanan: ${now.month.name} ${now.year}" else "Harian: ${now.format(dateFmt)}"
+            val shift = shiftRepository.getOpenShift()
+            val lines = ReceiptManager.buildSalesReportLines(data, profile, periodLabel, shift?.cashierName, shift?.id?.toString())
+
+            val printer = printerRepository.getDefault()
+            if (printer == null) {
+                _messages.emit(ReportMessage("Printer belum diatur.", isError = true))
+                return@launch
+            }
+
+            val outcome = printCoordinator.printCustomLines(printer, lines)
+            when (outcome) {
+                is com.pos.offline.util.ReceiptPrintOutcome.Success -> _messages.emit(ReportMessage("Laporan berhasil dicetak.", isError = false))
+                is com.pos.offline.util.ReceiptPrintOutcome.SuccessWithNotice -> _messages.emit(ReportMessage("Laporan dicetak: ${outcome.notice}", isError = false))
+                is com.pos.offline.util.ReceiptPrintOutcome.Failed -> _messages.emit(ReportMessage("Gagal mencetak laporan: ${outcome.attempts.firstOrNull()?.message ?: "Unknown"}", isError = true))
+                else -> {}
+            }
+        }
+    }
+
+    private fun getReportRange(now: LocalDate, isMonthly: Boolean): Pair<Long, Long> {
+        return if (isMonthly) {
+            val s = now.withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            val e = now.plusMonths(1).withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            s to e
+        } else {
+            dayBounds(now)
+        }
     }
 
     private fun dayBounds(date: LocalDate): Pair<Long, Long> {
