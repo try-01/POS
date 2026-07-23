@@ -2044,7 +2044,23 @@ private fun PrintResultBanner(
         when (outcome) {
             is ReceiptPrintOutcome.Success -> "Struk terkirim ke \"${outcome.printer.label}\"." to false
             is ReceiptPrintOutcome.SuccessWithNotice -> "Struk terkirim ke \"${outcome.printer.label}\".\n⚠ ${outcome.notice}" to false
-            is ReceiptPrintOutcome.Failed -> "Gagal mencetak ke semua printer." to true
+            is ReceiptPrintOutcome.Failed -> {
+                val printerCount = outcome.attempts.size
+                val reason = outcome.attempts.firstOrNull()?.message ?: ""
+                
+                if (reason.contains("terhubung", ignoreCase = true)) {
+                    // Kasus printer mati / diluar jangkauan
+                    if (printerCount > 1) {
+                        "Gagal mencetak ke semua printer. Mohon hubungkan ke perangkat" to true
+                    } else {
+                        "Gagal mencetak ke printer. Mohon hubungkan ke perangkat" to true
+                    }
+                } else {
+                    // Kasus lain (misal kertas habis, error I/O)
+                    val title = if (printerCount > 1) "Gagal mencetak ke semua printer." else "Gagal mencetak ke printer."
+                    "$title\nAlasan: $reason" to true
+                }
+            }
             ReceiptPrintOutcome.NoPrinterConfigured -> "Printer belum diatur." to true
             ReceiptPrintOutcome.AlreadyInProgress -> "Sedang mencetak, mohon tunggu..." to false
         }
