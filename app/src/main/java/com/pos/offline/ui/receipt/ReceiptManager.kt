@@ -353,25 +353,35 @@ object ReceiptManager {
         includeDeadStock: Boolean = true,
     ): List<ReceiptLine> {
         val lines = mutableListOf<ReceiptLine>()
-        val storeName = storeProfile?.storeName?.trim()?.ifBlank { "Kasir Offline" } ?: "Kasir Offline"
+        
+        // 1. Cek Nama Toko: Jika kosong, baris ini diabaikan sepenuhnya (tidak ada baris kosong/Kasir Offline)
+        val storeName = storeProfile?.storeName?.trim()
+        if (!storeName.isNullOrBlank()) {
+            lines += ReceiptLine(left = storeName, align = ReceiptAlign.CENTER, bold = true, large = true)
+        }
 
-        lines += ReceiptLine(left = storeName, align = ReceiptAlign.CENTER, bold = true, large = true)
+        // Header Laporan
         lines += ReceiptLine(left = "Laporan Penjualan", align = ReceiptAlign.CENTER)
         lines += ReceiptLine(left = periodLabel, align = ReceiptAlign.CENTER)
         lines += ReceiptLine(left = "Dicetak: ${dateFmt.format(Date())}", align = ReceiptAlign.CENTER)
         if (printedBy != null) lines += ReceiptLine(left = "Kasir: $printedBy", right = shiftId?.let { "Shift: $it" } ?: "")
         lines += divider()
 
+        // 2. Rincian Angka (Penjualan, Diskon, Pajak, Retur)
         lines += ReceiptLine(left = "Total Transaksi", right = "${data.summary.transactionCount} struk")
-        lines += ReceiptLine(left = "Penjualan (sblm diskon)", right = data.summary.subtotalSum.toRupiah())
+        lines += ReceiptLine(left = "Penjualan Kotor", right = data.summary.subtotalSum.toRupiah())
+        
         if (data.diskon > 0) lines += ReceiptLine(left = "Diskon", right = "- ${data.diskon.toRupiah()}")
         if (data.summary.taxSum > 0) lines += ReceiptLine(left = "Pajak", right = data.summary.taxSum.toRupiah())
-        lines += ReceiptLine(left = "PENDAPATAN BERSIH", right = data.pendapatanBersih.toRupiah(), bold = true, large = true)
-        if (data.returnsTotal > 0) lines += ReceiptLine(left = "  (Termasuk Retur)", right = "- ${data.returnsTotal.toRupiah()}")
+        if (data.returnsTotal > 0) lines += ReceiptLine(left = "Retur", right = "- ${data.returnsTotal.toRupiah()}")
+        lines += divider()
 
+        // 3. Kesimpulan Akhir (Diperkecil ukurannya dengan menghapus large=true, tapi tetap tebal)
+        lines += ReceiptLine(left = "Pendapatan Bersih", right = data.pendapatanBersih.toRupiah(), bold = true)
         lines += ReceiptLine(left = "Laba Bersih", right = data.labaBersih.toRupiah(), bold = true)
         lines += divider()
 
+        // 4. Metode Pembayaran
         lines += ReceiptLine(left = "Metode Pembayaran", align = ReceiptAlign.CENTER, bold = true)
         data.payments.forEach {
             val label = PaymentMethod.fromStorage(it.paymentMethod).label
@@ -379,24 +389,25 @@ object ReceiptManager {
         }
         lines += divider()
 
+        // 5. Detail Produk (Terjual & Belum Terjual)
         if (data.products.isNotEmpty()) {
             val soldProducts = data.products.filter { it.qtySold > 0 }
             if (soldProducts.isNotEmpty()) {
                 lines += ReceiptLine(left = "Detail Produk Terjual", align = ReceiptAlign.CENTER, bold = true)
-                lines += divider()
                 soldProducts.forEach { p ->
                     lines += ReceiptLine(left = p.productName, right = "${p.qtySold}x  ${p.revenue.toRupiah()}")
                 }
+                lines += divider()
             }
             
             if (includeDeadStock) {
                 val deadStock = data.products.filter { it.qtySold == 0 }
                 if (deadStock.isNotEmpty()) {
-                    lines += divider()
-                    lines += ReceiptLine(left = "Stok Dead-Stock (0 laku):", align = ReceiptAlign.LEFT, bold = true)
+                    lines += ReceiptLine(left = "Produk Belum Terjual (0x)", align = ReceiptAlign.CENTER, bold = true)
                     deadStock.forEach {
                         lines += ReceiptLine(left = it.productName, right = "0x")
                     }
+                    lines += divider()
                 }
             }
         }

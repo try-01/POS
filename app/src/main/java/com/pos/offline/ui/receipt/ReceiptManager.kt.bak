@@ -350,6 +350,7 @@ object ReceiptManager {
         periodLabel: String,
         printedBy: String?,
         shiftId: String?,
+        includeDeadStock: Boolean = true,
     ): List<ReceiptLine> {
         val lines = mutableListOf<ReceiptLine>()
         val storeName = storeProfile?.storeName?.trim()?.ifBlank { "Kasir Offline" } ?: "Kasir Offline"
@@ -379,19 +380,23 @@ object ReceiptManager {
         lines += divider()
 
         if (data.products.isNotEmpty()) {
-            lines += ReceiptLine(left = "Detail Produk Terjual", align = ReceiptAlign.CENTER, bold = true)
-            lines += divider()
-            data.products.forEach { p ->
-                if (p.qtySold > 0) {
+            val soldProducts = data.products.filter { it.qtySold > 0 }
+            if (soldProducts.isNotEmpty()) {
+                lines += ReceiptLine(left = "Detail Produk Terjual", align = ReceiptAlign.CENTER, bold = true)
+                lines += divider()
+                soldProducts.forEach { p ->
                     lines += ReceiptLine(left = p.productName, right = "${p.qtySold}x  ${p.revenue.toRupiah()}")
                 }
             }
-            lines += divider()
-            val deadStock = data.products.filter { it.qtySold == 0 }
-            if (deadStock.isNotEmpty()) {
-                lines += ReceiptLine(left = "Stok Dead-Stock (0 laku):", align = ReceiptAlign.LEFT, bold = true)
-                deadStock.forEach {
-                    lines += ReceiptLine(left = it.productName, right = "0x")
+            
+            if (includeDeadStock) {
+                val deadStock = data.products.filter { it.qtySold == 0 }
+                if (deadStock.isNotEmpty()) {
+                    lines += divider()
+                    lines += ReceiptLine(left = "Stok Dead-Stock (0 laku):", align = ReceiptAlign.LEFT, bold = true)
+                    deadStock.forEach {
+                        lines += ReceiptLine(left = it.productName, right = "0x")
+                    }
                 }
             }
         }
