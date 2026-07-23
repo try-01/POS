@@ -23,6 +23,7 @@ import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.local.entity.StoreProfileEntity
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.TransactionItemEntity
+import com.pos.offline.data.local.dao.ReportDao
 
 private data class SeedProduct(
     val name: String,
@@ -61,6 +62,8 @@ abstract class PosDatabase : RoomDatabase() {
     abstract fun returnDao(): ReturnDao
 
     abstract fun printerDao(): PrinterDao
+
+    abstract fun reportDao(): ReportDao
 
     abstract fun storeProfileDao(): StoreProfileDao
 

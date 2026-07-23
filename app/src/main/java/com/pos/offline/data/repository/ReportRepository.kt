@@ -1,18 +1,20 @@
 package com.pos.offline.data.repository
 
+import com.pos.offline.data.local.dao.PaymentMethodSummary
+import com.pos.offline.data.local.dao.ProfitAndItemsSummary
+import com.pos.offline.data.local.dao.ProductSalesRow
 import com.pos.offline.data.local.dao.ReportDao
-import com.pos.offline.data.local.entity.ProductEntity
-import kotlinx.coroutines.flow.Flow
+import com.pos.offline.data.local.dao.SalesSummary
 
 data class SalesReportData(
-    val summary: ReportDao.SalesSummary,
-    val profitItems: ReportDao.ProfitAndItemsSummary,
-    val payments: List<ReportDao.PaymentMethodSummary>,
+    val summary: SalesSummary,
+    val profitItems: ProfitAndItemsSummary,
+    val payments: List<PaymentMethodSummary>,
     val returnsTotal: Long,
     val diskon: Long,
     val pendapatanBersih: Long,
     val labaBersih: Long,
-    val products: List<ReportDao.ProductSalesRow> = emptyList()
+    val products: List<ProductSalesRow> = emptyList()
 )
 
 class ReportRepository(private val reportDao: ReportDao) {
@@ -25,23 +27,16 @@ class ReportRepository(private val reportDao: ReportDao) {
         val diskon = summary.subtotalSum + summary.taxSum - summary.totalSum
         val pendapatanBersih = summary.totalSum - returns
         
-        // Koreksi Laba Bersih: modal cuma "balik" kalau barang direstock
         val restockedCost = reportDao.getRestockedReturnsCost(start, end)
         val netCogs = profitItems.costSum - restockedCost
         val labaBersih = pendapatanBersih - netCogs
 
-        // Laporan historical tetap tampilkan produk non-aktif (activeOnly = false)
         val products = if (includeProducts) reportDao.getTopSellingProducts(start, end, activeOnly = false) else emptyList()
 
         return SalesReportData(summary, profitItems, payments, returns, diskon, pendapatanBersih, labaBersih, products)
     }
 
-    // Sort Inventory hanya tampilkan produk aktif (activeOnly = true)
-    suspend fun getTopSellingForInventory(start: Long, end: Long): List<ReportDao.ProductSalesRow> {
-        return reportDao.getTopSellingProducts(start, end, activeOnly = true)
-    }
-
-    fun observeProductsByTopSales(start: Long, end: Long): Flow<List<ProductEntity>> {
+    fun observeProductsByTopSales(start: Long, end: Long): kotlinx.coroutines.flow<List<com.pos.offline.data.local.entity.ProductEntity>> {
         return reportDao.observeProductsByTopSales(start, end)
     }
 }

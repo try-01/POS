@@ -1,6 +1,8 @@
 package com.pos.offline.data.repository
 
 import com.pos.offline.data.local.dao.ReportDao
+import com.pos.offline.data.local.entity.ProductEntity
+import kotlinx.coroutines.flow.Flow
 
 data class SalesReportData(
     val summary: ReportDao.SalesSummary,
@@ -37,5 +39,9 @@ class ReportRepository(private val reportDao: ReportDao) {
     // Sort Inventory hanya tampilkan produk aktif (activeOnly = true)
     suspend fun getTopSellingForInventory(start: Long, end: Long): List<ReportDao.ProductSalesRow> {
         return reportDao.getTopSellingProducts(start, end, activeOnly = true)
+    }
+
+    fun observeProductsByTopSales(start: Long, end: Long): Flow<List<ProductEntity>> {
+        return reportDao.observeProductsByTopSales(start, end)
     }
 }
