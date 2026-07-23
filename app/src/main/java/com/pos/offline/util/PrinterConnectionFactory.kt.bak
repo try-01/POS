@@ -1,6 +1,5 @@
 package com.pos.offline.util
 
-import android.util.Log
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -13,12 +12,15 @@ import com.dantsu.escposprinter.connection.usb.UsbConnection
 import com.dantsu.escposprinter.exceptions.EscPosConnectionException
 import com.pos.offline.data.local.entity.PrinterConnectionType
 import com.pos.offline.data.local.entity.PrinterEntity
+import com.pos.offline.ui.receipt.ReceiptLine
+import com.pos.offline.ui.receipt.ReceiptManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.text.SimpleDateFormat
@@ -41,7 +43,7 @@ class CancellableBluetoothConnection(
             val uuid = resolveServiceUuid()
             val newSocket = device.createRfcommSocketToServiceRecord(uuid)
             socket = newSocket
-            BluetoothAdapter.getDefaultAdapter()?.cancelDiscovery()
+            bluetoothHelper.adapter?.cancelDiscovery() // Asumsi bluetoothHelper injected, jika tidak pakai adapter lama
             newSocket.connect()
             outputStream = newSocket.outputStream
             data = ByteArray(0)
@@ -164,6 +166,15 @@ class PrinterConnectionFactory(
         }
     }
 
+    suspend fun printRawLines(printer: PrinterEntity, lines: List<ReceiptLine>): PrintResult {
+        val markup = ReceiptManager.linesToEscPosMarkup(lines)
+        val outcome = executePrintJob(printer, false) { listOf(markup) }
+        return when (outcome) {
+            is JobOutcome.Success -> PrintResult.Success(printer, outcome.statusQueryFailed, outcome.nearEndWarning)
+            is JobOutcome.Failure -> PrintResult.Failure(printer, outcome.message, outcome.statusQueryFailed)
+        }
+    }
+
     suspend fun openCashDrawer(printer: PrinterEntity): CashDrawerResult {
         val resolution = resolveConnection(printer)
         val ready =
@@ -218,17 +229,17 @@ class PrinterConnectionFactory(
         repeat(RETRY_ATTEMPTS_TOTAL) { attempt ->
             if (attempt > 0) delay(RETRY_DELAY_MS)
 
-                var statusQueryFailed = false
-                var nearEndWarning = false
-                if (attempt == 0 && printer.supportsStatusQuery) {
-                    when (preCheckPaperStatus(printer)) {
-                        PaperStatusResult.PaperOut -> return JobOutcome.Failure("Printer melaporkan kertas habis.")
-                        PaperStatusResult.NoResponse -> statusQueryFailed = true
-                        PaperStatusResult.NearEnd -> nearEndWarning = true
-                        PaperStatusResult.Ok -> {}
-                    }
-                    delay(1000)
+            var statusQueryFailed = false
+            var nearEndWarning = false
+            if (attempt == 0 && printer.supportsStatusQuery) {
+                when (preCheckPaperStatus(printer)) {
+                    PaperStatusResult.PaperOut -> return JobOutcome.Failure("Printer melaporkan kertas habis.")
+                    PaperStatusResult.NoResponse -> statusQueryFailed = true
+                    PaperStatusResult.NearEnd -> nearEndWarning = true
+                    PaperStatusResult.Ok -> {}
                 }
+                delay(1000)
+            }
 
             val connected = connectWithTimeout(ready.connection)
             if (!connected) {
@@ -284,7 +295,6 @@ class PrinterConnectionFactory(
 
     @SuppressLint("MissingPermission")
     private suspend fun preCheckPaperStatus(printer: PrinterEntity): PaperStatusResult = withContext(Dispatchers.IO) {
-        // DLE EOT 4 : Real-time status transmission (Paper Roll Status)
         val cmd = byteArrayOf(0x10, 0x04, 0x04)
         try {
             when (printer.connectionType) {
@@ -297,13 +307,11 @@ class PrinterConnectionFactory(
                         socket.soTimeout = 1500
                         socket.getOutputStream().apply { write(cmd); flush() }
                         val status = socket.getInputStream().read()
-                        when { 
+                        when {
                             status == -1 -> PaperStatusResult.NoResponse
-                            // Blokir saat kertas BENAR-BENAR HABIS (Bit 5 & 6 / 0x60)
                             (status and 0x60) != 0 -> PaperStatusResult.PaperOut
-                            // Peringatan kuning saat kertas tinggal sedikit (Bit 2 & 3 / 0x0C)
                             (status and 0x0C) != 0 -> PaperStatusResult.NearEnd
-                            else -> PaperStatusResult.Ok 
+                            else -> PaperStatusResult.Ok
                         }
                     } finally { runCatching { socket.close() } }
                 }
@@ -316,7 +324,6 @@ class PrinterConnectionFactory(
                     val socket = device.createRfcommSocketToServiceRecord(uuid)
                     adapter.cancelDiscovery()
 
-                    // 1. WATCHDOG UNTUK CONNECT
                     var isConnected = false
                     supervisorScope {
                         val connectJob = async(Dispatchers.IO) {
@@ -328,7 +335,7 @@ class PrinterConnectionFactory(
                         val watchdog = launch(Dispatchers.IO) {
                             delay(1500)
                             if (connectJob.isActive) {
-                                runCatching { socket.close() } // Paksa tutup jika connect nyangkut
+                                runCatching { socket.close() }
                                 connectJob.cancel()
                             }
                         }
@@ -343,20 +350,16 @@ class PrinterConnectionFactory(
                         socket.outputStream.flush()
 
                         var status = -1
-                        
-                        // 2. WATCHDOG UNTUK READ (Mencegah Zombie Thread)
                         supervisorScope {
                             val readJob = async(Dispatchers.IO) {
                                 try {
                                     status = socket.inputStream.read()
-                                } catch (e: Exception) {
-                                    // Akan terpanggil (IOException) jika watchdog menutup socket
-                                }
+                                } catch (e: Exception) { }
                             }
                             val watchdog = launch(Dispatchers.IO) {
                                 delay(1500)
                                 if (readJob.isActive) {
-                                    runCatching { socket.close() } // Paksa tutup agar read() terinterupsi!
+                                    runCatching { socket.close() }
                                     readJob.cancel()
                                 }
                             }
@@ -366,9 +369,7 @@ class PrinterConnectionFactory(
 
                         when {
                             status == -1 -> PaperStatusResult.NoResponse
-                            // Blokir saat kertas BENAR-BENAR HABIS (Bit 5 & 6 / 0x60)
                             (status and 0x60) != 0 -> PaperStatusResult.PaperOut
-                            // Peringatan kuning saat kertas tinggal sedikit (Bit 2 & 3 / 0x0C)
                             (status and 0x0C) != 0 -> PaperStatusResult.NearEnd
                             else -> PaperStatusResult.Ok
                         }

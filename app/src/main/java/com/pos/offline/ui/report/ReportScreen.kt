@@ -206,6 +206,49 @@ fun ReportScreen(
                 )
             }
 
+            item(key = "sales_report_generator") {
+                val salesData by viewModel.salesReportData.collectAsStateWithLifecycle()
+                val showProducts by viewModel.showProductListInReport.collectAsStateWithLifecycle()
+                val context = LocalContext.current
+                val scope = rememberCoroutineScope()
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Generate Laporan Penjualan", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp), fontWeight = FontWeight.SemiBold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = showProducts, onCheckedChange = viewModel::toggleShowProductList)
+                        Text("Tampilkan Produk Terjual", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { viewModel.generateSalesReport(false) }, modifier = Modifier.weight(1f)) { Text("Harian") }
+                        Button(onClick = { viewModel.generateSalesReport(true) }, modifier = Modifier.weight(1f)) { Text("Bulanan") }
+                    }
+
+                    salesData?.let { data ->
+                        GlassCard(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), contentPadding = PaddingValues(12.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                SummaryLine("Total Transaksi", "${data.summary.transactionCount} struk")
+                                SummaryLine("Pendapatan Bersih", data.pendapatanBersih.toRupiah(), emphasize = true)
+                                SummaryLine("Laba Bersih", data.labaBersih.toRupiah(), color = MaterialTheme.colorScheme.primary)
+                                if (data.diskon > 0) SummaryLine("Diskon", "- ${data.diskon.toRupiah()}")
+                                if (data.summary.taxSum > 0) SummaryLine("Pajak", data.summary.taxSum.toRupiah())
+
+                                Spacer(Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = { viewModel.printSalesReport(false) }, modifier = Modifier.weight(1f)) { Text("Cetak Harian") }
+                                    OutlinedButton(onClick = {
+                                        scope.launch {
+                                            val lines = ReceiptManager.buildSalesReportLines(data, null, "Laporan Harian", null, null)
+                                            val file = ReceiptManager.exportPdfFromLines(context, lines, "Laporan_Harian")
+                                            context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
+                                        }
+                                    }, modifier = Modifier.weight(1f)) { Text("PDF Harian") }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             item(key = "summary") { SummarySection(report = report) }
 
             if (report.transactionCount > 0) {

@@ -9,6 +9,7 @@ import com.pos.offline.data.repository.CartRepository
 import com.pos.offline.data.repository.CashierRepository
 import com.pos.offline.data.repository.PrinterRepository
 import com.pos.offline.data.repository.ProductRepository
+import com.pos.offline.data.repository.ReportRepository
 import com.pos.offline.data.repository.ReturnRepository
 import com.pos.offline.data.repository.ShiftRepository
 import com.pos.offline.data.repository.StoreProfileRepository
@@ -24,7 +25,6 @@ import com.pos.offline.util.LogoImageProcessor
 import com.pos.offline.util.PrintCoordinator
 import com.pos.offline.util.PrinterConnectionFactory
 import com.pos.offline.util.UsbPrinterHelper
-import com.pos.offline.data.repository.ReportRepository
 
 class PosApplication : Application() {
     override fun onCreate() {
@@ -101,7 +101,7 @@ object ServiceLocator {
     fun inventoryViewModelFactory(): ViewModelProvider.Factory = InventoryViewModelFactory(appContext, productRepository, reportRepository)
 
     fun reportViewModelFactory(): ViewModelProvider.Factory =
-        ReportViewModelFactory(transactionRepository, shiftRepository, returnRepository, printCoordinator, printerRepository)
+        ReportViewModelFactory(transactionRepository, shiftRepository, returnRepository, printCoordinator, printerRepository, reportRepository, storeProfileRepository)
 
     fun settingsViewModelFactory(): ViewModelProvider.Factory = SettingsViewModelFactory(appContext, cashierRepository, shiftRepository)
 
@@ -168,10 +168,12 @@ class ReportViewModelFactory(
     private val returnRepository: ReturnRepository,
     private val printCoordinator: PrintCoordinator,
     private val printerRepository: PrinterRepository,
+    private val reportRepository: ReportRepository,
+    private val storeProfileRepository: StoreProfileRepository,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        ReportViewModel(transactionRepository, shiftRepository, returnRepository, printCoordinator, printerRepository) as T
+        ReportViewModel(transactionRepository, shiftRepository, returnRepository, printCoordinator, printerRepository, reportRepository, storeProfileRepository) as T
 }
 
 class SettingsViewModelFactory(

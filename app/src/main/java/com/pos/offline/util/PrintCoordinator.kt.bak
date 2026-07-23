@@ -114,6 +114,11 @@ class PrintCoordinator(
                     } else {
                         statusQueryFailureCounts.remove(printer.id)
                     }
+                    
+                    if (printResult.nearEndWarning) {
+                        return ReceiptPrintOutcome.SuccessWithNotice(printer, "Kertas printer hampir habis, siapkan gulungan baru.")
+                    }
+                    
                     return ReceiptPrintOutcome.Success(printer)
                 }
                 is PrintResult.Failure -> {

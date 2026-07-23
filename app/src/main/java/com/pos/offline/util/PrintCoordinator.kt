@@ -6,6 +6,7 @@ import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.PrinterRepository
 import com.pos.offline.data.repository.StoreProfileRepository
 import com.pos.offline.ui.receipt.EscPosReceiptFormatter
+import com.pos.offline.ui.receipt.ReceiptLine
 import com.pos.offline.ui.receipt.ReceiptManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -69,6 +70,16 @@ class PrintCoordinator(
             executeSequential(listOf(printer), result, openCashDrawer)
         }
 
+    suspend fun printCustomLines(printer: PrinterEntity, lines: List<ReceiptLine>): ReceiptPrintOutcome {
+        return runGuarded("REPORT_${System.currentTimeMillis()}") {
+            val printResult = connectionFactory.printRawLines(printer, lines)
+            when (printResult) {
+                is PrintResult.Success -> ReceiptPrintOutcome.Success(printer)
+                is PrintResult.Failure -> ReceiptPrintOutcome.Failed(listOf(PrintAttemptFailure(printer, printResult.message)), null)
+            }
+        }
+    }
+
     private suspend fun runGuarded(
         transactionId: String,
         block: suspend () -> ReceiptPrintOutcome,
@@ -114,11 +125,11 @@ class PrintCoordinator(
                     } else {
                         statusQueryFailureCounts.remove(printer.id)
                     }
-                    
+
                     if (printResult.nearEndWarning) {
                         return ReceiptPrintOutcome.SuccessWithNotice(printer, "Kertas printer hampir habis, siapkan gulungan baru.")
                     }
-                    
+
                     return ReceiptPrintOutcome.Success(printer)
                 }
                 is PrintResult.Failure -> {

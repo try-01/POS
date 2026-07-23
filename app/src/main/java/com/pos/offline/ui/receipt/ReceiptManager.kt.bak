@@ -15,6 +15,8 @@ import com.pos.offline.data.local.entity.isVoid
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.ui.components.paymentMethodLabel
 import com.pos.offline.util.toRupiah
+import com.pos.offline.data.local.entity.PaymentMethod
+import com.pos.offline.data.repository.SalesReportData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream

@@ -24,6 +24,7 @@ import com.pos.offline.util.LogoImageProcessor
 import com.pos.offline.util.PrintCoordinator
 import com.pos.offline.util.PrinterConnectionFactory
 import com.pos.offline.util.UsbPrinterHelper
+import com.pos.offline.data.repository.ReportRepository
 
 class PosApplication : Application() {
     override fun onCreate() {
