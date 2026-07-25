@@ -7,13 +7,19 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -28,7 +34,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
@@ -51,7 +59,6 @@ fun BarcodeScannerCamera(
     modifier: Modifier = Modifier,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
-    val context = LocalContext.current
     val executor = remember { Executors.newSingleThreadExecutor() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) } // Handler untuk pindah ke Main Thread
 
@@ -71,6 +78,53 @@ fun BarcodeScannerCamera(
         }
     val scanned = remember { AtomicBoolean(false) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
+    var cameraError by remember { mutableStateOf<String?>(null) }
+
+    fun attemptBind() {
+        val provider = cameraProvider ?: return
+        val previewView = previewViewRef ?: return
+        try {
+            val preview =
+                Preview.Builder().build().also {
+                    it.setSurfaceProvider(previewView.surfaceProvider)
+                }
+            val analysis =
+                ImageAnalysis
+                    .Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+            analysis.setAnalyzer(executor) { proxy ->
+                val mediaImage = proxy.image
+                if (mediaImage == null || scanned.get()) {
+                    proxy.close()
+                    return@setAnalyzer
+                }
+                val input = InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
+                scanner
+                    .process(input)
+                    .addOnSuccessListener { barcodes ->
+                        barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }?.rawValue?.let { code ->
+                            if (scanned.compareAndSet(false, true)) {
+                                mainHandler.post { onBarcodeScanned(code) }
+                            }
+                        }
+                    }.addOnCompleteListener { proxy.close() }
+            }
+
+            provider.unbindAll()
+            provider.bindToLifecycle(
+                lifecycleOwner,
+                CameraSelector.DEFAULT_BACK_CAMERA,
+                preview,
+                analysis,
+            )
+            cameraError = null
+        } catch (e: Exception) {
+            android.util.Log.e("BarcodeScannerCamera", "Gagal membuka kamera", e)
+            cameraError = "Gagal membuka kamera. Pastikan kamera tidak sedang dipakai aplikasi lain, lalu coba lagi."
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -80,54 +134,58 @@ fun BarcodeScannerCamera(
         }
     }
 
-    AndroidView(
-        modifier = modifier,
-        factory = { c ->
-            val previewView = PreviewView(c)
-            val providerFuture = ProcessCameraProvider.getInstance(c)
-            providerFuture.addListener({
-                val provider = providerFuture.get()
-                cameraProvider = provider
-                val preview =
-                    Preview.Builder().build().also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
+    Box(modifier = modifier) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { c ->
+                val previewView = PreviewView(c)
+                previewViewRef = previewView
+                val providerFuture = ProcessCameraProvider.getInstance(c)
+                providerFuture.addListener({
+                    try {
+                        cameraProvider = providerFuture.get()
+                        attemptBind()
+                    } catch (e: Exception) {
+                        android.util.Log.e("BarcodeScannerCamera", "Gagal mendapatkan CameraProvider", e)
+                        cameraError = "Gagal membuka kamera. Pastikan kamera tidak sedang dipakai aplikasi lain, lalu coba lagi."
                     }
-                val analysis =
-                    ImageAnalysis
-                        .Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build()
-                analysis.setAnalyzer(executor) { proxy ->
-                    val mediaImage = proxy.image
-                    if (mediaImage == null || scanned.get()) {
-                        proxy.close()
-                        return@setAnalyzer
-                    }
-                    val input = InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
-                    scanner
-                        .process(input)
-                        .addOnSuccessListener { barcodes ->
-                            barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }?.rawValue?.let { code ->
-                                if (scanned.compareAndSet(false, true)) {
-                                    mainHandler.post { onBarcodeScanned(code) }
-                                }
-                            }
-                        }.addOnCompleteListener { proxy.close() }
-                }
-                try {
-                    provider.unbindAll()
-                    provider.bindToLifecycle(
-                        lifecycleOwner,
-                        CameraSelector.DEFAULT_BACK_CAMERA,
-                        preview,
-                        analysis,
+                }, ContextCompat.getMainExecutor(c))
+                previewView
+            },
+        )
+
+        cameraError?.let { message ->
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.85f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Rounded.Warning,
+                        contentDescription = null,
+                        tint = Color.White,
                     )
-                } catch (e: Exception) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = message,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 24.dp),
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Button(
+                        onClick = { attemptBind() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                    ) {
+                        Text("Coba Lagi", color = Color.Black)
+                    }
                 }
-            }, ContextCompat.getMainExecutor(c))
-            previewView
-        },
-    )
+            }
+        }
+    }
 }
 
 @Composable

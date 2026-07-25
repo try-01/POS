@@ -74,7 +74,12 @@ fun StoreProfileDialog(
             if (uri != null) viewModel.pickLogo(uri)
         }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    val dismissAndCleanup = {
+        viewModel.cancelPendingLogoProcessing()
+        onDismiss()
+    }
+
+    Dialog(onDismissRequest = dismissAndCleanup, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
@@ -93,7 +98,7 @@ fun StoreProfileDialog(
                         style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
                         fontWeight = FontWeight.Bold,
                     )
-                    IconButton(onClick = onDismiss) {
+                    IconButton(onClick = dismissAndCleanup) {
                         Icon(Icons.Rounded.Close, contentDescription = "Tutup")
                     }
                 }

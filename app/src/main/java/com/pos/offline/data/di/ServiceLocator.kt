@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.pos.offline.data.backup.BackupManager
+import com.pos.offline.data.backup.RestoreGuard
 import com.pos.offline.data.local.PosDatabase
 import com.pos.offline.data.repository.CartRepository
 import com.pos.offline.data.repository.CashierRepository
@@ -30,6 +32,42 @@ class PosApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         ServiceLocator.initialize(this)
+        installRestoreCrashGuard()
+    }
+
+    /**
+     * Jaring pengaman untuk window kritis restore database (lihat RestoreGuard).
+     * Overlay di AppRoot mencegah user MEMICU aksi baru selama restore, tapi
+     * tidak bisa menghentikan Flow latar belakang yang SUDAH aktif (mis.
+     * `openShift` yang dikoleksi permanen di AppRoot tanpa syarat tab aktif).
+     * Kalau salah satu Flow tsb menembak query tepat setelah
+     * PosDatabase.closeActiveInstance() dipanggil, hasilnya crash yang tidak
+     * tertangkap di viewModelScope manapun.
+     *
+     * Karena hasil akhir yang kita inginkan pada window ini SUDAH PASTI
+     * restart proses penuh (sukses maupun gagal), crash semacam ini TIDAK
+     * membahayakan integritas data (file sudah aman di-swap/rollback oleh
+     * BackupManager sebelum titik ini) — hanya mengganggu UX (dialog crash
+     * sistem). Handler ini mencegat & mengubahnya jadi restart terkendali.
+     */
+    private fun installRestoreCrashGuard() {
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            if (RestoreGuard.isInProgress) {
+                android.util.Log.e(
+                    "PosApplication",
+                    "Crash tertangkap di window restore, dialihkan ke restart terkendali",
+                    throwable,
+                )
+                try {
+                    BackupManager.restartApp(applicationContext)
+                } catch (t: Throwable) {
+                    defaultHandler?.uncaughtException(thread, throwable)
+                }
+            } else {
+                defaultHandler?.uncaughtException(thread, throwable)
+            }
+        }
     }
 }
 
@@ -83,6 +121,10 @@ object ServiceLocator {
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
+        // WAJIB sinkron & terjadi SEBELUM `db` (lazy, di bawah) diakses pertama
+        // kali oleh factory ViewModel manapun. Lihat dokumentasi
+        // BackupManager.recoverFromInterruptedRestore().
+        BackupManager.recoverFromInterruptedRestore(appContext)
     }
 
     fun posViewModelFactory(): ViewModelProvider.Factory =

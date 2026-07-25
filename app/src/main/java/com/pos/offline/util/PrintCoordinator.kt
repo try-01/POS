@@ -9,7 +9,6 @@ import com.pos.offline.ui.receipt.EscPosReceiptFormatter
 import com.pos.offline.ui.receipt.ReceiptLine
 import com.pos.offline.ui.receipt.ReceiptManager
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -45,8 +44,11 @@ class PrintCoordinator(
     private val storeProfileRepository: StoreProfileRepository,
     private val connectionFactory: PrinterConnectionFactory,
 ) {
-    private val activeJobs = ConcurrentHashMap<String, Mutex>()
-    private val statusQueryFailureCounts = ConcurrentHashMap<Long, Int>()
+    // Dedupe cepat berbasis transactionId/printerId (bukan mutual exclusion
+    // hardware — itu tanggung jawab PrinterConnectionFactory.printerMutexes).
+    // Tujuannya: feedback instan "sedang diproses" tanpa membuat coroutine
+    // menunggu, mis. saat user double-tap tombol Bayar atau Cetak Laporan.
+    private val activeJobs = ConcurrentHashMap.newKeySet<String>()
 
     suspend fun printReceiptAuto(
         result: CheckoutResult,
@@ -71,7 +73,7 @@ class PrintCoordinator(
         }
 
     suspend fun printCustomLines(printer: PrinterEntity, lines: List<ReceiptLine>): ReceiptPrintOutcome {
-        return runGuarded("REPORT_${System.currentTimeMillis()}") {
+        return runGuarded("PRINTER_${printer.id}") {
             val printResult = connectionFactory.printRawLines(printer, lines)
             when (printResult) {
                 is PrintResult.Success -> ReceiptPrintOutcome.Success(printer)
@@ -81,16 +83,14 @@ class PrintCoordinator(
     }
 
     private suspend fun runGuarded(
-        transactionId: String,
+        key: String,
         block: suspend () -> ReceiptPrintOutcome,
     ): ReceiptPrintOutcome {
-        val mutex = activeJobs.computeIfAbsent(transactionId) { Mutex() }
-        if (!mutex.tryLock()) return ReceiptPrintOutcome.AlreadyInProgress
+        if (!activeJobs.add(key)) return ReceiptPrintOutcome.AlreadyInProgress
         return try {
             block()
         } finally {
-            mutex.unlock()
-            activeJobs.remove(transactionId)
+            activeJobs.remove(key)
         }
     }
 
@@ -115,15 +115,19 @@ class PrintCoordinator(
             }
             when (printResult) {
                 is PrintResult.Success -> {
-                    if (printResult.statusQueryFailed) {
-                        val fails = statusQueryFailureCounts.merge(printer.id, 1, Int::plus) ?: 1
-                        if (fails >= 3) {
-                            printerRepository.update(printer.copy(supportsStatusQuery = false, statusQueryFailStreak = 0, autoDisabledDueToNoResponse = true))
-                            statusQueryFailureCounts.remove(printer.id)
-                            return ReceiptPrintOutcome.SuccessWithNotice(printer, "Deteksi status kertas otomatis dimatikan untuk printer ini (tidak merespons).")
+                    if (printer.supportsStatusQuery) {
+                        if (printResult.statusQueryFailed) {
+                            val streak = printerRepository.incrementStatusQueryFailStreak(printer.id)
+                            if (streak >= 3) {
+                                printerRepository.disableStatusQuery(printer.id)
+                                return ReceiptPrintOutcome.SuccessWithNotice(
+                                    printer,
+                                    "Deteksi status kertas otomatis dimatikan untuk printer ini (tidak merespons).",
+                                )
+                            }
+                        } else {
+                            printerRepository.resetStatusQueryFailStreak(printer.id)
                         }
-                    } else {
-                        statusQueryFailureCounts.remove(printer.id)
                     }
 
                     if (printResult.nearEndWarning) {
@@ -134,11 +138,10 @@ class PrintCoordinator(
                 }
                 is PrintResult.Failure -> {
                     var msg = printResult.message
-                    if (printResult.statusQueryFailed) {
-                        val fails = statusQueryFailureCounts.merge(printer.id, 1, Int::plus) ?: 1
-                        if (fails >= 3) {
-                            printerRepository.update(printer.copy(supportsStatusQuery = false, statusQueryFailStreak = 0, autoDisabledDueToNoResponse = true))
-                            statusQueryFailureCounts.remove(printer.id)
+                    if (printer.supportsStatusQuery && printResult.statusQueryFailed) {
+                        val streak = printerRepository.incrementStatusQueryFailStreak(printer.id)
+                        if (streak >= 3) {
+                            printerRepository.disableStatusQuery(printer.id)
                             msg += " (Deteksi status kertas otomatis dimatikan karena tidak merespons)."
                         }
                     }
@@ -149,7 +152,7 @@ class PrintCoordinator(
 
         val fallbackPdf =
             try {
-                withContext(Dispatchers.IO) { ReceiptManager.exportToPdf(appContext, result) }
+                withContext(Dispatchers.IO) { ReceiptManager.exportToPdf(appContext, result, storeProfile) }
             } catch (e: Exception) {
                 null
             }

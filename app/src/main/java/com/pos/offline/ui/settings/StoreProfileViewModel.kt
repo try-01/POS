@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -86,17 +87,29 @@ class StoreProfileViewModel(
 
     fun updateAutoPrintEnabled(value: Boolean) = updateForm { it.copy(autoPrintEnabled = value) }
 
+    private var pickLogoJob: Job? = null
+
     fun pickLogo(uri: Uri) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isProcessingLogo = true)
-            val bytes = logoImageProcessor.process(uri)
-            if (bytes == null) {
-                emitMessage("Gagal memproses gambar. Coba pilih gambar lain.")
-            } else {
-                updateForm { it.copy(logoBytes = bytes) }
+        pickLogoJob?.cancel() // batalkan proses logo sebelumnya yang belum selesai
+        pickLogoJob =
+            viewModelScope.launch {
+                _uiState.value = _uiState.value.copy(isProcessingLogo = true)
+                val bytes = logoImageProcessor.process(uri)
+                if (bytes == null) {
+                    emitMessage("Gagal memproses gambar. Coba pilih gambar lain.")
+                } else {
+                    updateForm { it.copy(logoBytes = bytes) }
+                }
+                _uiState.value = _uiState.value.copy(isProcessingLogo = false)
             }
-            _uiState.value = _uiState.value.copy(isProcessingLogo = false)
-        }
+    }
+
+    /** Dipanggil saat dialog ditutup agar hasil proses logo yang basi tidak
+     * "bocor" ke sesi edit berikutnya setelah form di-reset. */
+    fun cancelPendingLogoProcessing() {
+        pickLogoJob?.cancel()
+        pickLogoJob = null
+        _uiState.value = _uiState.value.copy(isProcessingLogo = false)
     }
 
     fun clearLogo() = updateForm { it.copy(logoBytes = null) }
@@ -106,6 +119,7 @@ class StoreProfileViewModel(
     }
 
     fun save() {
+        if (_uiState.value.isSaving) return
         val form = _uiState.value.formState
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSaving = true)

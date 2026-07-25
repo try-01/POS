@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -143,6 +144,12 @@ private fun AppRoot() {
     // Ambil profil toko terkini untuk diteruskan ke ReceiptManager saat ekspor PDF/Gambar
     val storeProfile by storeProfileViewModel.profile.collectAsStateWithLifecycle()
 
+    // Dikoleksi di level AppRoot (bukan hanya di dalam SettingsScreen) agar
+    // overlay blocking & penonaktifan navigasi berlaku di SELURUH aplikasi —
+    // krusial karena semua ViewModel di sini scope-nya AppRoot, bukan per-tab.
+    val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+    val isRestoringDatabase = settingsUiState.isImporting
+
     val pageAlpha = remember { Animatable(1f) }
     var isJumping by remember { mutableStateOf(false) }
 
@@ -161,8 +168,11 @@ private fun AppRoot() {
     val openShift by posViewModel.openShift.collectAsStateWithLifecycle()
     var showExitDialog by rememberSaveable { mutableStateOf(false) }
 
-    BackHandler(enabled = currentDest != Dest.POS) { goTo(Dest.POS) }
-    BackHandler(enabled = currentDest == Dest.POS && !showExitDialog) { showExitDialog = true }
+    // Prioritas tertinggi: selama restore berlangsung, tombol back TIDAK BOLEH
+    // melakukan apa pun — window kritis, aplikasi akan segera direstart otomatis.
+    BackHandler(enabled = isRestoringDatabase) { /* sengaja tidak melakukan apa pun */ }
+    BackHandler(enabled = currentDest != Dest.POS && !isRestoringDatabase) { goTo(Dest.POS) }
+    BackHandler(enabled = currentDest == Dest.POS && !showExitDialog && !isRestoringDatabase) { showExitDialog = true }
 
     if (showExitDialog) {
         val shift = openShift
@@ -259,7 +269,7 @@ private fun AppRoot() {
         menuExpanded = false
     }
 
-    val hideFab = imeVisible || (!isLandscape && currentDest == Dest.POS && isCartExpanded)
+    val hideFab = isRestoringDatabase || imeVisible || (!isLandscape && currentDest == Dest.POS && isCartExpanded)
 
     Box(
         modifier =
@@ -275,7 +285,7 @@ private fun AppRoot() {
                 Modifier
                     .fillMaxSize()
                     .graphicsLayer { alpha = pageAlpha.value },
-            userScrollEnabled = !menuExpanded && !imeVisible && !isJumping,
+            userScrollEnabled = !menuExpanded && !imeVisible && !isJumping && !isRestoringDatabase,
         ) { page ->
             val dest = Dest.entries[page]
             when (dest) {
@@ -371,6 +381,47 @@ private fun AppRoot() {
                     menuExpanded = false
                 },
             )
+        }
+
+        // Overlay blocking PENUH APLIKASI (bukan hanya di dalam SettingsScreen).
+        // Dipasang di AppRoot karena semua ViewModel di sini scope-nya AppRoot,
+        // bukan per-tab — mencegah user berpindah tab/memicu aksi apa pun
+        // (mis. menambah item ke keranjang di tab Kasir) selama window kritis
+        // restore database berlangsung.
+        AnimatedVisibility(
+            visible = isRestoringDatabase,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.75f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { /* serap semua sentuhan, sengaja tidak melakukan apa pun */ },
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = Color.White)
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Memulihkan cadangan…",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Jangan tutup aplikasi. Aplikasi akan otomatis restart.",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 11.sp,
+                    )
+                }
+            }
         }
     }
 }

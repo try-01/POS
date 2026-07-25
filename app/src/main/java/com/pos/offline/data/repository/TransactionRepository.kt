@@ -20,6 +20,14 @@ data class CheckoutResult(
     val items: List<TransactionItemEntity>,
 )
 
+/**
+ * Nama historis dipertahankan agar tidak memutus caller lama (mis. PosViewModel)
+ * yang mungkin menangkap tipe exception ini secara eksplisit. Sejak kebijakan
+ * stok berubah menjadi soft-block, exception ini SEHARUSNYA hanya terpicu pada
+ * kasus data-integrity (produk hilang dari DB saat checkout), bukan lagi
+ * "stok tidak cukup". TODO setelah PosViewModel.kt dikonfirmasi: pertimbangkan
+ * rename ke ProductMissingDuringCheckoutException & perbarui pesan UI terkait.
+ */
 class InsufficientStockException(
     val productName: String,
 ) : RuntimeException()
@@ -126,6 +134,13 @@ class TransactionRepository(
 
         database.withTransaction {
             cart.forEach { item ->
+                // SOFT-BLOCK: decrementStock TIDAK LAGI mensyaratkan stock >= qty
+                // (lihat ProductDao) — stok boleh menjadi negatif secara sengaja.
+                // `affected == 0` di sini HANYA berarti produk dengan id tsb sudah
+                // tidak ada di database (data-integrity, mis. dihapus permanen
+                // secara konkuren saat checkout berlangsung), BUKAN kehabisan
+                // stok. Nama exception dipertahankan untuk kompatibilitas
+                // caller lama — lihat catatan di kelas InsufficientStockException.
                 val affected = productDao.decrementStock(item.productId, item.quantity, now)
                 if (affected == 0) {
                     throw InsufficientStockException(item.name)

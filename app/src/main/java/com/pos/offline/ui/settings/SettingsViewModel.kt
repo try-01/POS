@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pos.offline.data.backup.BackupManager
 import com.pos.offline.data.backup.BackupOutcome
+import com.pos.offline.data.backup.RestoreGuard
 import com.pos.offline.data.backup.RestoreOutcome
 import com.pos.offline.data.backup.ShareOutcome
 import com.pos.offline.data.local.entity.CashierEntity
@@ -97,6 +98,11 @@ class SettingsViewModel(
         val uri = _uiState.value.pendingRestoreUri ?: return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isImporting = true, pendingRestoreUri = null)
+            // Aktifkan guard SEBELUM menyentuh BackupManager — window kritis
+            // dimulai sejak titik ini, bukan hanya setelah koneksi ditutup,
+            // untuk berjaga-jaga jika closeActiveInstance() terjadi sangat
+            // cepat di dalam validateAndRestore().
+            RestoreGuard.begin()
             try {
                 when (val result = BackupManager.validateAndRestore(appContext, uri)) {
                     is RestoreOutcome.Success -> {
@@ -104,18 +110,29 @@ class SettingsViewModel(
                     }
 
                     is RestoreOutcome.InvalidFile -> {
+                        // Koneksi Room TIDAK PERNAH disentuh -> aman menonaktifkan guard.
+                        RestoreGuard.end()
                         _messages.emit("File tidak valid: ${result.reason}")
                         _uiState.value = _uiState.value.copy(isImporting = false)
                     }
 
                     is RestoreOutcome.Error -> {
                         _messages.emit("Gagal memulihkan: ${result.throwable.message}")
-                        _uiState.value = _uiState.value.copy(isImporting = false)
+                        if (result.requiresRestart) {
+                            // Koneksi sempat ditutup -> guard TETAP aktif sampai
+                            // proses benar-benar mati via onRestartRequired().
+                            onRestartRequired()
+                        } else {
+                            RestoreGuard.end()
+                            _uiState.value = _uiState.value.copy(isImporting = false)
+                        }
                     }
                 }
             } catch (e: Exception) {
+                // Payung tak terduga: guard TETAP aktif (default aman), sama
+                // seperti alasan requiresRestart default true di BackupManager.
                 _messages.emit("Gagal memulihkan: ${e.message ?: "kesalahan tak dikenal"}")
-                _uiState.value = _uiState.value.copy(isImporting = false)
+                onRestartRequired()
             }
         }
     }

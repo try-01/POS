@@ -47,6 +47,7 @@ data class PrinterUiState(
     val isSaving: Boolean = false,
     val pendingDeleteId: Long? = null,
     val testingPrinterIds: Set<Long> = emptySet(),
+    val isReordering: Boolean = false,
 )
 
 data class BluetoothUiState(
@@ -91,6 +92,7 @@ class PrinterViewModel(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private var discoveryJob: Job? = null
+    private var discoveryTimeoutJob: Job? = null
     private var usbAttachmentJob: Job? = null
 
     fun openAddDialog() {
@@ -152,6 +154,7 @@ class PrinterViewModel(
     }
 
     fun saveForm() {
+        if (_uiState.value.isSaving) return
         val form = _uiState.value.formState
 
         val label = form.label.trim()
@@ -276,17 +279,26 @@ class PrinterViewModel(
         printer: PrinterEntity,
         moveUp: Boolean,
     ) {
+        if (_uiState.value.isReordering) return
         viewModelScope.launch {
-            val all = printerRepository.getAllOrderedByPriority()
-            val index = all.indexOfFirst { it.id == printer.id }
-            if (index == -1) return@launch
-            val targetIndex = if (moveUp) index - 1 else index + 1
-            if (targetIndex !in all.indices) return@launch
+            _uiState.value = _uiState.value.copy(isReordering = true)
+            try {
+                val all = printerRepository.getAllOrderedByPriority()
+                val index = all.indexOfFirst { it.id == printer.id }
+                if (index == -1) return@launch
+                val targetIndex = if (moveUp) index - 1 else index + 1
+                if (targetIndex !in all.indices) return@launch
 
-            val a = all[index]
-            val b = all[targetIndex]
-            printerRepository.update(a.copy(priority = b.priority))
-            printerRepository.update(b.copy(priority = a.priority))
+                val a = all[index]
+                val b = all[targetIndex]
+                // Partial update (bukan copy()+update() full-row) agar tidak
+                // menimpa balik statusQueryFailStreak/supportsStatusQuery yang
+                // mungkin sedang diubah background print job secara bersamaan.
+                printerRepository.updatePriority(a.id, b.priority)
+                printerRepository.updatePriority(b.id, a.priority)
+            } finally {
+                _uiState.value = _uiState.value.copy(isReordering = false)
+            }
         }
     }
 
@@ -362,13 +374,18 @@ class PrinterViewModel(
                     }
                 }
             }
-        viewModelScope.launch {
-            delay(13_000)
-            if (discoveryJob?.isActive == true) stopDiscovery()
-        }
+        // Timeout job dilacak & dibatalkan setiap kali stop/start baru,
+        // agar timeout sesi LAMA tidak mematikan sesi scan BARU.
+        discoveryTimeoutJob =
+            viewModelScope.launch {
+                delay(13_000)
+                stopDiscovery()
+            }
     }
 
     fun stopDiscovery() {
+        discoveryTimeoutJob?.cancel()
+        discoveryTimeoutJob = null
         discoveryJob?.cancel()
         discoveryJob = null
         bluetoothHelper.cancelDiscovery()

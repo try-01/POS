@@ -19,14 +19,16 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class CancellableBluetoothConnection(
     private val device: BluetoothDevice,
@@ -146,6 +148,20 @@ class PrinterConnectionFactory(
     private val bluetoothHelper: BluetoothPrinterHelper,
     private val usbHelper: UsbPrinterHelper,
 ) {
+    // Mutual exclusion HARDWARE per printer fisik (keyed by printer.id).
+    // Menjamin testPrint / openCashDrawer / printReceipt / printRawLines untuk
+    // printer yang sama tidak pernah berjalan konkuren, apa pun caller-nya
+    // (PrintCoordinator, PrinterViewModel test-print button, dsb).
+    private val printerMutexes = ConcurrentHashMap<Long, Mutex>()
+
+    private suspend fun <T> withPrinterLock(
+        printerId: Long,
+        block: suspend () -> T,
+    ): T {
+        val mutex = printerMutexes.computeIfAbsent(printerId) { Mutex() }
+        return mutex.withLock { block() }
+    }
+
     suspend fun testPrint(printer: PrinterEntity): TestPrintResult {
         val outcome = executePrintJob(printer, false) { listOf(buildTestPrintMarkup(printer)) }
         return when (outcome) {
@@ -175,123 +191,128 @@ class PrinterConnectionFactory(
         }
     }
 
-    suspend fun openCashDrawer(printer: PrinterEntity): CashDrawerResult {
-        val resolution = resolveConnection(printer)
-        val ready =
-            when (resolution) {
-                is ConnectionResolution.Error -> return CashDrawerResult.Failure(resolution.message)
-                is ConnectionResolution.Ready -> resolution
-            }
-
-        val genericErrorMessage = connectionErrorMessage(printer, ready.targetLabel)
-
-        repeat(RETRY_ATTEMPTS_TOTAL) { attempt ->
-            if (attempt > 0) delay(RETRY_DELAY_MS)
-
-            val connected = connectWithTimeout(ready.connection)
-            if (!connected) {
-                return@repeat
-            }
-
-            return try {
-                withContext(Dispatchers.IO) {
-                    val commands = EscPosPrinterCommands(ready.connection)
-                    commands.connect()
-                    commands.openCashBox()
-                    commands.disconnect()
+    suspend fun openCashDrawer(printer: PrinterEntity): CashDrawerResult =
+        withPrinterLock(printer.id) {
+            val resolution = resolveConnection(printer)
+            val ready =
+                when (resolution) {
+                    is ConnectionResolution.Error -> return@withPrinterLock CashDrawerResult.Failure(resolution.message)
+                    is ConnectionResolution.Ready -> resolution
                 }
-                CashDrawerResult.Success
-            } catch (e: Exception) {
-                runCatching { ready.connection.disconnect() }
-                CashDrawerResult.Failure(
-                    "Gagal membuka laci: ${e.message ?: "kesalahan tidak diketahui"}",
-                )
-            }
-        }
 
-        return CashDrawerResult.Failure(genericErrorMessage)
-    }
+            val genericErrorMessage = connectionErrorMessage(printer, ready.targetLabel)
+
+            repeat(RETRY_ATTEMPTS_TOTAL) { attempt ->
+                if (attempt > 0) delay(RETRY_DELAY_MS)
+
+                val connected = connectWithTimeout(ready.connection)
+                if (!connected) {
+                    return@repeat
+                }
+
+                return@withPrinterLock try {
+                    withContext(Dispatchers.IO) {
+                        val commands = EscPosPrinterCommands(ready.connection)
+                        commands.connect()
+                        commands.openCashBox()
+                        commands.disconnect()
+                    }
+                    CashDrawerResult.Success
+                } catch (e: Exception) {
+                    runCatching { ready.connection.disconnect() }
+                    CashDrawerResult.Failure(
+                        "Gagal membuka laci: ${e.message ?: "kesalahan tidak diketahui"}",
+                    )
+                }
+            }
+
+            CashDrawerResult.Failure(genericErrorMessage)
+        }
 
     private suspend fun executePrintJob(
         printer: PrinterEntity,
         openCashDrawer: Boolean = false,
         markupBuilder: (EscPosPrinter) -> List<String>,
-    ): JobOutcome {
-        val resolution = resolveConnection(printer)
-        val ready =
-            when (resolution) {
-                is ConnectionResolution.Error -> return JobOutcome.Failure(resolution.message)
-                is ConnectionResolution.Ready -> resolution
-            }
+    ): JobOutcome =
+        withPrinterLock(printer.id) {
+            val resolution = resolveConnection(printer)
+            val ready =
+                when (resolution) {
+                    is ConnectionResolution.Error -> return@withPrinterLock JobOutcome.Failure(resolution.message)
+                    is ConnectionResolution.Ready -> resolution
+                }
 
-        val genericErrorMessage = connectionErrorMessage(printer, ready.targetLabel)
+            val genericErrorMessage = connectionErrorMessage(printer, ready.targetLabel)
 
-        repeat(RETRY_ATTEMPTS_TOTAL) { attempt ->
-            if (attempt > 0) delay(RETRY_DELAY_MS)
-
+            // Dipindah keluar dari repeat{} agar hasil pre-check attempt-0 tidak hilang
+            // saat koneksi baru berhasil di attempt ke-2/3 (retry).
             var statusQueryFailed = false
             var nearEndWarning = false
-            if (attempt == 0 && printer.supportsStatusQuery) {
-                when (preCheckPaperStatus(printer)) {
-                    PaperStatusResult.PaperOut -> return JobOutcome.Failure("Printer melaporkan kertas habis.")
-                    PaperStatusResult.NoResponse -> statusQueryFailed = true
-                    PaperStatusResult.NearEnd -> nearEndWarning = true
-                    PaperStatusResult.Ok -> {}
+
+            repeat(RETRY_ATTEMPTS_TOTAL) { attempt ->
+                if (attempt > 0) delay(RETRY_DELAY_MS)
+
+                if (attempt == 0 && printer.supportsStatusQuery) {
+                    when (preCheckPaperStatus(printer)) {
+                        PaperStatusResult.PaperOut -> return@withPrinterLock JobOutcome.Failure("Printer melaporkan kertas habis.")
+                        PaperStatusResult.NoResponse -> statusQueryFailed = true
+                        PaperStatusResult.NearEnd -> nearEndWarning = true
+                        PaperStatusResult.Ok -> {}
+                    }
+                    delay(1000)
                 }
-                delay(1000)
-            }
 
-            val connected = connectWithTimeout(ready.connection)
-            if (!connected) {
-                return@repeat
-            }
+                val connected = connectWithTimeout(ready.connection)
+                if (!connected) {
+                    return@repeat
+                }
 
-            return try {
-                val escPosPrinter =
+                return@withPrinterLock try {
+                    val escPosPrinter =
+                        withContext(Dispatchers.IO) {
+                            if (openCashDrawer) {
+                                try {
+                                    val commands = EscPosPrinterCommands(ready.connection)
+                                    commands.openCashBox()
+                                    Thread.sleep(250)
+                                } catch (e: Exception) {
+                                }
+                            }
+                            EscPosPrinter(
+                                ready.connection,
+                                DEFAULT_PRINTER_DPI,
+                                printer.paperWidth.printableWidthMM(),
+                                printer.charPerLine,
+                            ).useEscAsteriskCommand(true)
+                        }
+
+                    val markups = markupBuilder(escPosPrinter)
                     withContext(Dispatchers.IO) {
-                        if (openCashDrawer) {
-                            try {
-                                val commands = EscPosPrinterCommands(ready.connection)
-                                commands.openCashBox()
-                                Thread.sleep(250)
-                            } catch (e: Exception) {
+                        markups.forEachIndexed { index, markup ->
+                            if (index == markups.lastIndex) {
+                                escPosPrinter.printFormattedTextAndCut(markup)
+                            } else {
+                                escPosPrinter.printFormattedText(markup)
+                                delay(1500)
                             }
                         }
-                        EscPosPrinter(
-                            ready.connection,
-                            DEFAULT_PRINTER_DPI,
-                            printer.paperWidth.printableWidthMM(),
-                            printer.charPerLine,
-                        ).useEscAsteriskCommand(true)
                     }
 
-                val markups = markupBuilder(escPosPrinter)
-                withContext(Dispatchers.IO) {
-                    markups.forEachIndexed { index, markup ->
-                        if (index == markups.lastIndex) {
-                            escPosPrinter.printFormattedTextAndCut(markup)
-                        } else {
-                            escPosPrinter.printFormattedText(markup)
-                            delay(1500)
-                        }
+                    withContext(Dispatchers.IO) {
+                        escPosPrinter.disconnectPrinter()
                     }
+                    JobOutcome.Success(statusQueryFailed = statusQueryFailed, nearEndWarning = nearEndWarning)
+                } catch (e: Exception) {
+                    runCatching { ready.connection.disconnect() }
+                    JobOutcome.Failure(
+                        "Terhubung ke printer, tetapi gagal mencetak: ${e.message ?: "kesalahan tidak diketahui"}",
+                        statusQueryFailed = statusQueryFailed,
+                    )
                 }
-
-                withContext(Dispatchers.IO) {
-                    escPosPrinter.disconnectPrinter()
-                }
-                JobOutcome.Success(statusQueryFailed = statusQueryFailed, nearEndWarning = nearEndWarning)
-            } catch (e: Exception) {
-                runCatching { ready.connection.disconnect() }
-                JobOutcome.Failure(
-                    "Terhubung ke printer, tetapi gagal mencetak: ${e.message ?: "kesalahan tidak diketahui"}",
-                    statusQueryFailed = statusQueryFailed
-                )
             }
-        }
 
-        return JobOutcome.Failure(genericErrorMessage)
-    }
+            JobOutcome.Failure(genericErrorMessage)
+        }
 
     @SuppressLint("MissingPermission")
     private suspend fun preCheckPaperStatus(printer: PrinterEntity): PaperStatusResult = withContext(Dispatchers.IO) {
@@ -343,7 +364,11 @@ class PrinterConnectionFactory(
                         watchdog.cancel()
                     }
 
-                    if (!isConnected) return@withContext PaperStatusResult.NoResponse
+                    // FIX: leak socket jika connect() gagal cepat (bukan lewat watchdog timeout)
+                    if (!isConnected) {
+                        runCatching { socket.close() }
+                        return@withContext PaperStatusResult.NoResponse
+                    }
 
                     try {
                         socket.outputStream.write(cmd)

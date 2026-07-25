@@ -77,7 +77,7 @@ class BluetoothPrinterHelper(
                 appContext,
                 receiver,
                 IntentFilter(BluetoothDevice.ACTION_FOUND),
-                ContextCompat.RECEIVER_EXPORTED,
+                ContextCompat.RECEIVER_NOT_EXPORTED,
             )
 
             try {
@@ -165,7 +165,7 @@ class BluetoothPrinterHelper(
                     addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
                     priority = IntentFilter.SYSTEM_HIGH_PRIORITY
                 }
-            ContextCompat.registerReceiver(appContext, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
+            ContextCompat.registerReceiver(appContext, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
 
             cont.invokeOnCancellation {
                 runCatching { appContext.unregisterReceiver(receiver) }

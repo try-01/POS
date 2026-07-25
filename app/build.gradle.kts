@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose") // Kotlin 2.0+ Compose compiler plugin
     id("com.google.devtools.ksp")             // codegen Room yang cepat & hemat
-    id("androidx.room")                       // export skema JSON (untuk migrasi teruji)
+    id("androidx.room")                       // export skema JSON
 }
 
 room {
@@ -12,12 +12,12 @@ room {
 
 android {
     namespace = "com.pos.offline"
-    compileSdk = 36 // Android 16
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.pos.offline"
-        minSdk = 26      // Android 8.0 — baseline modern (java.time, classic BT)
-        targetSdk = 36   // Android 16
+        minSdk = 26
+        targetSdk = 36
         versionCode = 2
         versionName = "1.0.0.1"
         vectorDrawables { useSupportLibrary = true }
@@ -25,16 +25,16 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-buildTypes {
-    release {
-        isMinifyEnabled = true
-        isShrinkResources = true
-        proguardFiles(
-            getDefaultProguardFile("proguard-android-optimize.txt"),
-            "proguard-rules.pro" // Pastikan baris ini ada
-        )
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true // Membuang gambar/ikon yang tidak dipakai
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
     }
-}
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -49,14 +49,33 @@ buildTypes {
         getByName("debug").assets.srcDir("$projectDir/schemas")
     }
 
+    // OPTIMALISASI: Membuang file metadata/lisensi raksasa bawaan Apache POI & library lain
     packaging {
-        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+        resources { 
+            excludes += setOf(
+                "/META-INF/{AL2.0,LGPL2.1}",
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE",
+                "META-INF/LICENSE.txt",
+                "META-INF/license.txt",
+                "META-INF/NOTICE",
+                "META-INF/NOTICE.txt",
+                "META-INF/notice.txt",
+                "META-INF/ASL2.0",
+                "META-INF/*.version",
+                "META-INF/INDEX.LIST"
+            )
+        }
     }
 }
 
 afterEvaluate {
     tasks.matching { it.name == "mergeDebugAssets" || it.name == "mergeDebugAndroidTestAssets" }
         .configureEach { dependsOn("kspDebugKotlin") }
+    
+    val schemaGenTasks = tasks.matching { it.name.matches(Regex("ksp\\w*Kotlin")) }
+    tasks.matching { it.name.contains("MergeAssets", ignoreCase = true) }
+        .configureEach { dependsOn(schemaGenTasks) }
 }
 
 dependencies {
@@ -65,7 +84,7 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended") // ikon Icons.Rounded.*
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.13.1")
 
@@ -76,7 +95,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1") // suspend DAO + withTransaction
+    implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
     implementation("com.github.DantSu:ESCPOS-ThermalPrinter-Android:3.4.0")
@@ -89,16 +108,11 @@ dependencies {
 
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
+    // Apache POI (Library berat, ProGuard akan membuang bagian Word/PPT-nya)
     implementation("org.apache.poi:poi:5.5.1")
     implementation("org.apache.poi:poi-ooxml:5.5.1")
 
-    androidTestImplementation("androidx.room:room-testing:2.6.1") // MigrationTestHelper
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")     // AndroidJUnit4
-    androidTestImplementation("androidx.test:runner:1.6.2")        // InstrumentationRegistry
-}
-
-afterEvaluate {
-    val schemaGenTasks = tasks.matching { it.name.matches(Regex("ksp\\w*Kotlin")) }
-    tasks.matching { it.name.contains("MergeAssets", ignoreCase = true) }
-        .configureEach { dependsOn(schemaGenTasks) }
+    androidTestImplementation("androidx.room:room-testing:2.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }

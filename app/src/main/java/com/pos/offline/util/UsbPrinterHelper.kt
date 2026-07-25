@@ -87,7 +87,10 @@ class UsbPrinterHelper(
         if (manager.hasPermission(device)) return UsbPermissionResult.Granted
 
         return suspendCancellableCoroutine { cont ->
-            val action = "${appContext.packageName}.USB_PERMISSION"
+            // Action unik per-device agar permintaan izin untuk beberapa device USB
+            // yang berjalan bersamaan tidak saling menimpa PendingIntent atau
+            // salah resume continuation milik device lain.
+            val action = "${appContext.packageName}.USB_PERMISSION.${device.deviceId}"
             lateinit var receiver: BroadcastReceiver
             receiver =
                 object : BroadcastReceiver() {
@@ -96,6 +99,8 @@ class UsbPrinterHelper(
                         intent: Intent,
                     ) {
                         if (intent.action != action) return
+                        val target = intent.getParcelableExtraCompat<UsbDevice>(UsbManager.EXTRA_DEVICE)
+                        if (target != null && target.deviceId != device.deviceId) return
                         runCatching { appContext.unregisterReceiver(receiver) }
                         val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
                         if (cont.isActive) {
@@ -128,7 +133,7 @@ class UsbPrinterHelper(
             val permissionIntent =
                 PendingIntent.getBroadcast(
                     appContext,
-                    0,
+                    device.deviceId,
                     Intent(action).setPackage(appContext.packageName),
                     flags,
                 )
@@ -136,6 +141,14 @@ class UsbPrinterHelper(
             manager.requestPermission(device, permissionIntent)
         }
     }
+
+    @Suppress("DEPRECATION")
+    private inline fun <reified T : android.os.Parcelable> Intent.getParcelableExtraCompat(key: String): T? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            getParcelableExtra(key, T::class.java)
+        } else {
+            getParcelableExtra(key)
+        }
 
     private fun UsbDevice.toInfo(): UsbDeviceInfo {
         val name =

@@ -3,6 +3,7 @@ package com.pos.offline.data.local.dao
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import com.pos.offline.data.local.entity.ShiftEntity
 import kotlinx.coroutines.flow.Flow
@@ -44,6 +45,47 @@ interface ShiftDao {
 
     @Query("SELECT EXISTS(SELECT 1 FROM shifts WHERE cashierId = :cashierId AND endedAt IS NULL)")
     suspend fun hasOpenShiftForCashier(cashierId: Long): Boolean
+
+    /**
+     * Cegah race condition "double-open shift" untuk kasir yang sama.
+     * Check + insert dijalankan dalam SATU transaksi Room (pola sama dengan
+     * TransactionDao.checkout) sehingga aman dari TOCTOU walau dipanggil
+     * bersamaan dari 2 coroutine/tap cepat.
+     * @return id shift baru, atau -1L jika kasir tsb sudah punya shift terbuka.
+     */
+    @Transaction
+    suspend fun insertIfNoOpenShift(shift: ShiftEntity): Long {
+        if (hasOpenShiftForCashier(shift.cashierId)) return -1L
+        return insert(shift)
+    }
+
+    /**
+     * Cegah race condition "double-close shift". Re-check endedAt dilakukan
+     * DI DALAM transaksi yang sama dengan update, sehingga dua panggilan
+     * bersamaan terhadap shift yang sama tidak akan sama-sama lolos.
+     * @return ShiftEntity hasil update, atau null jika shift tidak ditemukan
+     * atau sudah ditutup sebelumnya.
+     */
+    @Transaction
+    suspend fun endIfOpen(
+        id: Long,
+        endingCashExpected: Long,
+        endingCashActual: Long,
+        endedAt: Long,
+        note: String,
+    ): ShiftEntity? {
+        val current = getById(id) ?: return null
+        if (current.endedAt != null) return null
+        val updated =
+            current.copy(
+                endingCashExpected = endingCashExpected,
+                endingCashActual = endingCashActual,
+                endedAt = endedAt,
+                note = note,
+            )
+        update(updated)
+        return updated
+    }
 
     @Query(
         """

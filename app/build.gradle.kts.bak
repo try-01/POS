@@ -25,13 +25,16 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    buildTypes {
-        release {
-            isMinifyEnabled = true        // R8: buang kode mati → APK kecil & RAM hemat
-            isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-        }
+buildTypes {
+    release {
+        isMinifyEnabled = true
+        isShrinkResources = true
+        proguardFiles(
+            getDefaultProguardFile("proguard-android-optimize.txt"),
+            "proguard-rules.pro" // Pastikan baris ini ada
+        )
     }
+}
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

@@ -58,6 +58,7 @@ import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -83,7 +84,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -95,17 +95,14 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.OffsetMapping
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.input.TransformedText
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -163,12 +160,15 @@ fun PosScreen(
     val paymentMethod by viewModel.paymentMethod.collectAsStateWithLifecycle()
 
     val activeCashiers by viewModel.activeCashiers.collectAsStateWithLifecycle()
-    val openShift by viewModel.openShift.collectAsStateWithLifecycle()
+    val activeShift by viewModel.activeShift.collectAsStateWithLifecycle()
     val openShifts by viewModel.openShifts.collectAsStateWithLifecycle()
     val showStartShiftDialog by viewModel.showStartShiftDialog.collectAsStateWithLifecycle()
     val showEndShiftDialog by viewModel.showEndShiftDialog.collectAsStateWithLifecycle()
     val showShiftListDialog by viewModel.showShiftListDialog.collectAsStateWithLifecycle()
     val shiftSummary by viewModel.shiftSummary.collectAsStateWithLifecycle()
+    val stockWarning by viewModel.stockWarning.collectAsStateWithLifecycle()
+    val isStartingShift by viewModel.isStartingShift.collectAsStateWithLifecycle()
+    val isEndingShift by viewModel.isEndingShift.collectAsStateWithLifecycle()
 
     val isCartEmpty by remember { derivedStateOf { cart.isEmpty() } }
     val isProcessing by remember { derivedStateOf { checkoutState is CheckoutState.Processing } }
@@ -211,14 +211,14 @@ fun PosScreen(
                         .padding(top = 4.dp, bottom = 6.dp),
             ) {
                 ShiftIndicatorBar(
-                    openShift = openShift,
+                    openShift = activeShift,
                     isOpeningDrawer = isOpeningDrawer,
                     onClick = {
-                        val shift = openShift
-                        if (shift == null) {
-                            viewModel.openStartShiftDialog()
-                        } else {
-                            viewModel.openEndShiftDialog(shift)
+                        when {
+                            activeShift != null -> viewModel.openEndShiftDialog(activeShift!!)
+                            openShifts.isEmpty() -> viewModel.openStartShiftDialog()
+                            // >1 shift terbuka & belum ada yang dipilih -> paksa pilih dulu.
+                            else -> viewModel.openShiftListDialog()
                         }
                     },
                     onManageClick = viewModel::openShiftListDialog,
@@ -367,6 +367,34 @@ fun PosScreen(
         }
     }
 
+    // Dialog peringatan stok: mutually-exclusive terhadap dialog hasil checkout
+    // (Success/Error lebih prioritas kalau kebetulan terjadi bersamaan).
+    if (stockWarning != null && checkoutState !is CheckoutState.Success && checkoutState !is CheckoutState.Error) {
+        val warning = stockWarning!!
+        AlertDialog(
+            onDismissRequest = viewModel::dismissStockWarning,
+            icon = {
+                Icon(
+                    Icons.Rounded.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            },
+            title = { Text("Stok Tidak Mencukupi") },
+            text = {
+                Text(
+                    "Stok \"${warning.productName}\" tercatat tinggal ${warning.currentStock}, " +
+                        "tapi Anda tetap menambahkannya ke keranjang. Transaksi tetap bisa " +
+                        "dilanjutkan — pastikan produk fisik memang tersedia, lalu perbarui " +
+                        "stok di menu Inventaris setelah transaksi ini selesai.",
+                )
+            },
+            confirmButton = {
+                Button(onClick = viewModel::dismissStockWarning) { Text("Mengerti, Lanjutkan") }
+            },
+        )
+    }
+
     when (val state = checkoutState) {
         is CheckoutState.Success -> {
             SuccessDialog(
@@ -399,6 +427,7 @@ fun PosScreen(
     if (showStartShiftDialog) {
         StartShiftDialog(
             cashiers = activeCashiers,
+            isProcessing = isStartingShift,
             onDismiss = viewModel::dismissStartShiftDialog,
             onConfirm = { cashierId, startingCash -> viewModel.startShift(cashierId, startingCash) },
         )
@@ -408,6 +437,7 @@ fun PosScreen(
         if (showEndShiftDialog) {
             EndShiftDialog(
                 summary = summary,
+                isProcessing = isEndingShift,
                 onDismiss = viewModel::dismissEndShiftDialog,
                 onConfirm = { actualCash -> viewModel.endShift(actualCash) },
             )
@@ -416,10 +446,18 @@ fun PosScreen(
     if (showShiftListDialog) {
         ManageShiftsDialog(
             shifts = openShifts,
-            activeShiftId = openShift?.id,
-            onSelectShift = { shift ->
+            activeShiftId = activeShift?.id,
+            onCloseShift = { shift ->
+                // Perilaku asli: siapa pun boleh menutup shift siapa pun.
+                // Navigasi ke EndShiftDialog yang tetap minta konfirmasi kas fisik.
                 viewModel.dismissShiftListDialog()
                 viewModel.openEndShiftDialog(shift)
+            },
+            onDesignateActive = { shift ->
+                // Hanya menentukan atribusi checkout di terminal ini,
+                // TIDAK menutup shift siapa pun.
+                viewModel.selectActiveShift(shift.id)
+                viewModel.dismissShiftListDialog()
             },
             onStartNewShift = {
                 viewModel.dismissShiftListDialog()
@@ -539,7 +577,8 @@ private fun formatElapsedSince(startedAt: Long): String {
 private fun ManageShiftsDialog(
     shifts: List<ShiftEntity>,
     activeShiftId: Long?,
-    onSelectShift: (ShiftEntity) -> Unit,
+    onCloseShift: (ShiftEntity) -> Unit,
+    onDesignateActive: (ShiftEntity) -> Unit,
     onStartNewShift: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -567,11 +606,20 @@ private fun ManageShiftsDialog(
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
+                    if (shifts.size > 1) {
+                        Text(
+                            "Gunakan \"Jadikan Aktif\" untuk memilih kasir yang bertugas di terminal ini (tanpa menutup shift).",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                     shifts.forEach { shift ->
                         OpenShiftRow(
                             shift = shift,
                             isDesignatedActive = shift.id == activeShiftId,
-                            onClick = { onSelectShift(shift) },
+                            showDesignateButton = shifts.size > 1,
+                            onCloseClick = { onCloseShift(shift) },
+                            onDesignateActiveClick = { onDesignateActive(shift) },
                         )
                     }
                 }
@@ -594,14 +642,16 @@ private fun ManageShiftsDialog(
 private fun OpenShiftRow(
     shift: ShiftEntity,
     isDesignatedActive: Boolean,
-    onClick: () -> Unit,
+    showDesignateButton: Boolean,
+    onCloseClick: () -> Unit,
+    onDesignateActiveClick: () -> Unit,
 ) {
     val elapsed = remember(shift.id, shift.startedAt) { formatElapsedSince(shift.startedAt) }
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 12.dp,
         contentPadding = PaddingValues(10.dp),
-        onClick = onClick,
+        onClick = onCloseClick, // Ketuk baris = tutup shift ini (perilaku asli dipertahankan)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -637,6 +687,25 @@ private fun OpenShiftRow(
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
+                // Tombol terpisah dgn hit-area sendiri: menekan ini TIDAK memicu
+                // onCloseClick milik GlassCard (nested clickable Compose berhenti
+                // di node terdalam yang menangani sentuhan).
+                if (showDesignateButton && !isDesignatedActive) {
+                    Spacer(Modifier.height(6.dp))
+                    TextButton(
+                        onClick = onDesignateActiveClick,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        modifier = Modifier.height(28.dp),
+                    ) {
+                        Icon(
+                            Icons.Rounded.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("Jadikan Aktif", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp))
+                    }
+                }
             }
             Icon(
                 Icons.Rounded.ChevronRight,
@@ -696,6 +765,7 @@ private fun CashierDropdownField(
 @Composable
 private fun StartShiftDialog(
     cashiers: List<CashierEntity>,
+    isProcessing: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (cashierId: Long, startingCash: Long) -> Unit,
 ) {
@@ -703,7 +773,7 @@ private fun StartShiftDialog(
     var startingCash by remember { mutableStateOf(0L) }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isProcessing) onDismiss() },
         title = { Text("Mulai Shift") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -731,13 +801,17 @@ private fun StartShiftDialog(
         confirmButton = {
             Button(
                 onClick = { selectedCashier?.let { onConfirm(it.id, startingCash) } },
-                enabled = selectedCashier != null,
+                enabled = selectedCashier != null && !isProcessing,
             ) {
-                Text("Mulai Shift")
+                if (isProcessing) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Mulai Shift")
+                }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Batal") }
+            TextButton(onClick = onDismiss, enabled = !isProcessing) { Text("Batal") }
         },
     )
 }
@@ -745,16 +819,22 @@ private fun StartShiftDialog(
 @Composable
 private fun EndShiftDialog(
     summary: ShiftSummary,
+    isProcessing: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (actualCash: Long) -> Unit,
 ) {
     var actualCash by remember { mutableStateOf(0L) }
+    // Dilacak terpisah dari nilai karena 0L adalah nilai VALID (mis. shift
+    // tanpa penjualan tunai sama sekali / uang fisik memang habis), bukan
+    // berarti "belum diisi". Tanpa flag ini, kasir tidak akan pernah bisa
+    // menutup shift jika hasil hitung fisiknya kebetulan nol.
+    var hasBeenEdited by remember { mutableStateOf(false) }
     val expected = summary.expectedCashInDrawer
     val difference = actualCash - expected
-    val hasInput = actualCash > 0L
+    val hasInput = hasBeenEdited
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isProcessing) onDismiss() },
         title = { Text("Tutup Shift") },
         text = {
             Column(
@@ -789,7 +869,10 @@ private fun EndShiftDialog(
                 MoneyField(
                     label = "Uang Fisik",
                     value = actualCash,
-                    onValueChange = { actualCash = it },
+                    onValueChange = {
+                        actualCash = it
+                        hasBeenEdited = true
+                    },
                     modifier = Modifier.fillMaxWidth().height(44.dp),
                 )
 
@@ -816,11 +899,17 @@ private fun EndShiftDialog(
         confirmButton = {
             Button(
                 onClick = { onConfirm(actualCash) },
-                enabled = hasInput,
-            ) { Text("Tutup Shift") }
+                enabled = hasInput && !isProcessing,
+            ) {
+                if (isProcessing) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Tutup Shift")
+                }
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Batal") }
+            TextButton(onClick = onDismiss, enabled = !isProcessing) { Text("Batal") }
         },
     )
 }

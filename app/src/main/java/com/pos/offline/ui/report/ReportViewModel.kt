@@ -330,6 +330,18 @@ class ReportViewModel(
                             isError = true,
                         )
                 }
+
+                is ReturnOutcome.InvalidRefundAmount -> {
+                    // Lapisan pertahanan backend (defense-in-depth) menolak nominal
+                    // negatif atau melebihi total transaksi — independen dari
+                    // validasi UI RefundAmountField, mencegah celah UI membengkakkan
+                    // atau membalik saldo laci kas.
+                    _returnMessage.value =
+                        ReportMessage(
+                            "Nominal refund tidak valid. Maksimal ${outcome.maxAllowed.toRupiah()} untuk transaksi ini.",
+                            isError = true,
+                        )
+                }
             }
         }
     }
@@ -384,15 +396,8 @@ class ReportViewModel(
     private val _showProductListInReport = MutableStateFlow(false)
     val showProductListInReport: StateFlow<Boolean> = _showProductListInReport.asStateFlow()
 
-    private val _showDeadStockInReport = MutableStateFlow(true) // Default true agar tetap mencetak dead stock seperti perilaku sebelumnya
-    val showDeadStockInReport: StateFlow<Boolean> = _showDeadStockInReport.asStateFlow()
-
     fun toggleShowProductList(show: Boolean) {
         _showProductListInReport.value = show
-    }
-
-    fun toggleShowDeadStock(show: Boolean) {
-        _showDeadStockInReport.value = show
     }
 
     fun generateSalesReport(isMonthly: Boolean) {
@@ -412,7 +417,7 @@ class ReportViewModel(
             val profile = storeProfileRepository.get()
             val periodLabel = if (isMonthly) "Bulanan: ${now.month.name} ${now.year}" else "Harian: ${now.format(dateFmt)}"
             val shift = shiftRepository.getOpenShift()
-            val lines = ReceiptManager.buildSalesReportLines(data, profile, periodLabel, shift?.cashierName, shift?.id?.toString(), _showDeadStockInReport.value)
+            val lines = ReceiptManager.buildSalesReportLines(data, profile, periodLabel, shift?.cashierName, shift?.id?.toString())
 
             val printer = printerRepository.getDefault()
             if (printer == null) {
@@ -425,7 +430,8 @@ class ReportViewModel(
                 is com.pos.offline.util.ReceiptPrintOutcome.Success -> _messages.emit(ReportMessage("Laporan berhasil dicetak.", isError = false))
                 is com.pos.offline.util.ReceiptPrintOutcome.SuccessWithNotice -> _messages.emit(ReportMessage("Laporan dicetak: ${outcome.notice}", isError = false))
                 is com.pos.offline.util.ReceiptPrintOutcome.Failed -> _messages.emit(ReportMessage("Gagal mencetak laporan: ${outcome.attempts.firstOrNull()?.message ?: "Unknown"}", isError = true))
-                else -> {}
+                com.pos.offline.util.ReceiptPrintOutcome.AlreadyInProgress -> _messages.emit(ReportMessage("Sedang mencetak, mohon tunggu...", isError = false))
+                com.pos.offline.util.ReceiptPrintOutcome.NoPrinterConfigured -> _messages.emit(ReportMessage("Printer belum diatur.", isError = true))
             }
         }
     }

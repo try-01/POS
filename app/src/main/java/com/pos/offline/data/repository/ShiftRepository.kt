@@ -17,9 +17,36 @@ data class ShiftSummary(
     val expectedCashInDrawer: Long get() = startingCash + cashRevenue - cashRefunds
 }
 
+sealed class ShiftStartOutcome {
+    data class Success(
+        val shiftId: Long,
+    ) : ShiftStartOutcome()
+
+    /** Kasir yang dipilih sudah punya shift terbuka lain — dicegah di level DB. */
+    data object AlreadyOpenForCashier : ShiftStartOutcome()
+}
+
+sealed class ShiftEndOutcome {
+    data class Success(
+        val shift: ShiftEntity,
+    ) : ShiftEndOutcome()
+
+    data object AlreadyClosed : ShiftEndOutcome()
+
+    data object NotFound : ShiftEndOutcome()
+}
+
 class ShiftRepository(
     private val shiftDao: ShiftDao,
 ) {
+    /**
+     * PERINGATAN ARSITEKTUR: Flow ini hanya "shift TERAKHIR yang dibuka",
+     * BUKAN "shift yang sedang aktif di terminal/sesi tertentu". Pada mode
+     * multi-kasir dengan >1 shift terbuka bersamaan, JANGAN pakai ini untuk
+     * atribusi transaksi — gunakan mekanisme active-shift-selection di
+     * PosViewModel (activeShift). Dipertahankan untuk kompatibilitas
+     * konsumen lain (mis. badge status ringkas) yang tidak butuh presisi ini.
+     */
     val openShift: Flow<ShiftEntity?> = shiftDao.observeOpenShift()
     val allShifts: Flow<List<ShiftEntity>> = shiftDao.observeAll()
     val openShifts: Flow<List<ShiftEntity>> = shiftDao.observeOpenShifts()
@@ -39,7 +66,7 @@ class ShiftRepository(
         cashierId: Long,
         cashierName: String,
         startingCash: Long,
-    ): Long {
+    ): ShiftStartOutcome {
         val shift =
             ShiftEntity(
                 cashierId = cashierId,
@@ -47,7 +74,8 @@ class ShiftRepository(
                 startingCash = startingCash,
                 startedAt = System.currentTimeMillis(),
             )
-        return shiftDao.insert(shift)
+        val id = shiftDao.insertIfNoOpenShift(shift)
+        return if (id == -1L) ShiftStartOutcome.AlreadyOpenForCashier else ShiftStartOutcome.Success(id)
     }
 
     suspend fun getShiftSummary(shiftId: Long): ShiftSummary {
@@ -65,17 +93,28 @@ class ShiftRepository(
         shiftId: Long,
         actualCash: Long,
         note: String = "",
-    ): ShiftEntity {
-        val shift = shiftDao.getById(shiftId) ?: error("Shift #$shiftId tidak ditemukan")
-        val summary = getShiftSummary(shiftId)
+    ): ShiftEndOutcome {
+        val shift = shiftDao.getById(shiftId) ?: return ShiftEndOutcome.NotFound
+        if (shift.endedAt != null) return ShiftEndOutcome.AlreadyClosed
+
+        val summary =
+            ShiftSummary(
+                startingCash = shift.startingCash,
+                cashRevenue = shiftDao.cashRevenueForShift(shiftId),
+                qrisRevenue = shiftDao.qrisRevenueForShift(shiftId),
+                totalCost = shiftDao.totalCostForShift(shiftId),
+                cashRefunds = shiftDao.cashRefundsForShift(shiftId),
+            )
+
         val updated =
-            shift.copy(
+            shiftDao.endIfOpen(
+                id = shiftId,
                 endingCashExpected = summary.expectedCashInDrawer,
                 endingCashActual = actualCash,
                 endedAt = System.currentTimeMillis(),
                 note = note,
-            )
-        shiftDao.update(updated)
-        return updated
+            ) ?: return ShiftEndOutcome.AlreadyClosed // ditutup oleh proses lain di antara check & update
+
+        return ShiftEndOutcome.Success(updated)
     }
 }

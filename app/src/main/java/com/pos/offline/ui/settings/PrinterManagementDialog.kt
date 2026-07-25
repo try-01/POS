@@ -111,7 +111,10 @@ fun PrinterManagementDialog(
                         )
                     } else {
                         printers.forEachIndexed { index, printer ->
-                            val isTesting = uiState.testingPrinterIds.contains(printer.id)
+                            // Gabungkan flag testing & reordering: nonaktifkan seluruh
+                            // aksi baris saat salah satu operasi async sedang berjalan,
+                            // mencegah tap ganda memicu reorder/print bertumpuk.
+                            val isTesting = uiState.testingPrinterIds.contains(printer.id) || uiState.isReordering
                             PrinterRow(
                                 printer = printer,
                                 isFirst = index == 0,
@@ -261,8 +264,20 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
     var showBluetoothPicker by remember { mutableStateOf(false) }
     var showUsbPicker by remember { mutableStateOf(false) }
 
+    // Sembunyikan form sementara saat picker BT/USB terbuka (mutually exclusive),
+    // konsisten dengan solusi nested-dialog di layar Laporan.
+    if (showBluetoothPicker || showUsbPicker) {
+        if (showBluetoothPicker) {
+            BluetoothPickerDialog(viewModel = viewModel, onDismiss = { showBluetoothPicker = false })
+        }
+        if (showUsbPicker) {
+            UsbPickerDialog(viewModel = viewModel, onDismiss = { showUsbPicker = false })
+        }
+        return
+    }
+
     AlertDialog(
-        onDismissRequest = { viewModel.closeFormDialog() },
+        onDismissRequest = { if (!uiState.isSaving) viewModel.closeFormDialog() },
         title = {
             Text(if (isEdit) "Edit Printer" else "Tambah Printer", fontSize = 15.sp, fontWeight = FontWeight.Bold)
         },
@@ -430,25 +445,11 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
             }
         },
         dismissButton = {
-            TextButton(onClick = { viewModel.closeFormDialog() }) {
+            TextButton(onClick = { viewModel.closeFormDialog() }, enabled = !uiState.isSaving) {
                 Text("Batal", fontSize = 13.sp)
             }
         },
     )
-
-    if (showBluetoothPicker) {
-        BluetoothPickerDialog(
-            viewModel = viewModel,
-            onDismiss = { showBluetoothPicker = false },
-        )
-    }
-
-    if (showUsbPicker) {
-        UsbPickerDialog(
-            viewModel = viewModel,
-            onDismiss = { showUsbPicker = false },
-        )
-    }
 }
 
 @Composable

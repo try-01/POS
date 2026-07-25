@@ -39,7 +39,6 @@ import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.FileUpload
@@ -102,7 +101,9 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val pendingDelete by viewModel.pendingDelete.collectAsStateWithLifecycle()
     val scanNotFound by viewModel.scanNotFound.collectAsStateWithLifecycle()
+    val deletedProductFound by viewModel.deletedProductFound.collectAsStateWithLifecycle()
     val excelState by viewModel.excelState.collectAsStateWithLifecycle()
+    val isSaving by viewModel.isSaving.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val sortOption by viewModel.sortOption.collectAsStateWithLifecycle()
@@ -267,6 +268,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
         ProductFormDialog(
             state = state,
             categories = categories,
+            isSaving = isSaving,
             onSave = viewModel::save,
             onDismiss = viewModel::dismissForm,
             checkBarcodeConflict = viewModel::checkBarcodeConflict,
@@ -307,6 +309,28 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             },
             dismissButton = {
                 TextButton(onClick = viewModel::dismissScanNotFound) { Text("Batal") }
+            },
+        )
+    }
+
+    // Opsi C: intersepsi sejak fase scan — barcode ditemukan tapi produknya
+    // sudah soft-deleted. Tawarkan pemulihan alih-alih membiarkan user mengisi
+    // form baru yang pasti ditolak saat Simpan karena barcode "sudah dipakai".
+    deletedProductFound?.let { state ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissDeletedProductFound,
+            title = { Text("Produk Pernah Dihapus") },
+            text = {
+                Text(
+                    "Barcode ini pernah digunakan oleh produk \"${state.product.name}\" yang sudah dihapus. " +
+                        "Apakah Anda ingin memulihkannya?",
+                )
+            },
+            confirmButton = {
+                Button(onClick = viewModel::restoreDeletedProduct) { Text("Pulihkan") }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissDeletedProductFound) { Text("Batal") }
             },
         )
     }
@@ -778,6 +802,7 @@ private fun ScanIconButton(onClick: () -> Unit) {
 private fun ProductFormDialog(
     state: ProductFormState,
     categories: List<String>,
+    isSaving: Boolean,
     onSave: (ProductFormState) -> Unit,
     onDismiss: () -> Unit,
     checkBarcodeConflict: suspend (String, Long) -> String?,
@@ -819,6 +844,7 @@ private fun ProductFormDialog(
             barcodeConflict = null
             return@LaunchedEffect
         }
+        kotlinx.coroutines.delay(300) // debounce, hindari query tiap keystroke
         barcodeConflict = checkBarcodeConflict(trimmed, state.id)
     }
 
@@ -828,6 +854,7 @@ private fun ProductFormDialog(
             skuConflict = null
             return@LaunchedEffect
         }
+        kotlinx.coroutines.delay(300)
         skuConflict = checkSkuConflict(trimmed, state.id)
     }
 
@@ -951,6 +978,7 @@ private fun ProductFormDialog(
             if (!state.isNew) {
                 {
                     Button(
+                        enabled = !isSaving,
                         onClick = onDeleteRequest,
                         colors =
                             ButtonDefaults.buttonColors(
@@ -965,10 +993,10 @@ private fun ProductFormDialog(
             },
         confirmButton = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onDismiss) { Text("Batal") }
+                TextButton(onClick = onDismiss, enabled = !isSaving) { Text("Batal") }
                 Spacer(Modifier.width(4.dp))
                 Button(
-                    enabled = name.isNotBlank() && barcodeConflict == null && skuConflict == null,
+                    enabled = !isSaving && name.isNotBlank() && barcodeConflict == null && skuConflict == null,
                     onClick = {
                         onSave(
                             ProductFormState(
@@ -984,7 +1012,17 @@ private fun ProductFormDialog(
                             ),
                         )
                     },
-                ) { Text("Simpan") }
+                ) {
+                    if (isSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    } else {
+                        Text("Simpan")
+                    }
+                }
             }
         },
     )

@@ -9,6 +9,7 @@ import org.apache.poi.ss.usermodel.DataFormatter
 import org.apache.poi.ss.usermodel.WorkbookFactory
 import org.apache.poi.xssf.streaming.SXSSFWorkbook
 import java.io.IOException
+import kotlin.math.round
 
 sealed class ExcelOutcome {
     object Success : ExcelOutcome()
@@ -74,6 +75,67 @@ object ExcelManager {
             }
         }
 
+    /**
+     * Membersihkan & menormalkan string angka dari berbagai gaya penulisan umum
+     * di Excel: gaya Indonesia ("8.000", "1.234,50"), gaya US ("8,000", "1234.5"),
+     * atau digit murni ("8000"). Mengembalikan null jika tidak bisa diinterpretasikan.
+     *
+     * Keterbatasan yang disengaja (heuristik umum, dipakai banyak parser serupa):
+     * jika hanya satu jenis pemisah muncul TEPAT SEKALI dan diikuti persis 3 digit
+     * (mis. "8.000"), itu diasumsikan pemisah RIBUAN, bukan desimal 3 angka di
+     * belakang koma — kasus harga dengan presisi 3 desimal sangat jarang di
+     * konteks kasir Rupiah/harga bulat.
+     */
+    private fun parseFlexibleNumber(raw: String): Double? {
+        val cleaned = raw.trim().filter { it.isDigit() || it == '.' || it == ',' || it == '-' }
+        if (cleaned.isBlank() || cleaned == "-") return null
+
+        val negative = cleaned.startsWith("-")
+        val body = cleaned.removePrefix("-")
+        if (body.isBlank()) return null
+
+        val hasDot = body.contains('.')
+        val hasComma = body.contains(',')
+
+        val normalized: String =
+            when {
+                hasDot && hasComma -> {
+                    // Pemisah desimal = simbol yang posisinya PALING BELAKANG.
+                    val lastDot = body.lastIndexOf('.')
+                    val lastComma = body.lastIndexOf(',')
+                    if (lastComma > lastDot) {
+                        body.replace(".", "").replace(',', '.')
+                    } else {
+                        body.replace(",", "")
+                    }
+                }
+                hasDot -> {
+                    val lastDot = body.lastIndexOf('.')
+                    val digitsAfter = body.length - lastDot - 1
+                    val dotCount = body.count { it == '.' }
+                    if (dotCount > 1 || digitsAfter == 3) {
+                        body.replace(".", "") // pemisah ribuan
+                    } else {
+                        body // pemisah desimal, format standar
+                    }
+                }
+                hasComma -> {
+                    val lastComma = body.lastIndexOf(',')
+                    val digitsAfter = body.length - lastComma - 1
+                    val commaCount = body.count { it == ',' }
+                    if (commaCount > 1 || digitsAfter == 3) {
+                        body.replace(",", "") // pemisah ribuan
+                    } else {
+                        body.replace(',', '.') // pemisah desimal
+                    }
+                }
+                else -> body
+            }
+
+        val value = normalized.toDoubleOrNull() ?: return null
+        return if (negative) -value else value
+    }
+
     suspend fun importProducts(
         context: Context,
         sourceUri: Uri,
@@ -90,20 +152,18 @@ object ExcelManager {
                         s: String,
                         field: String,
                     ): Long {
-                        val t = s.trim()
-                        require(!t.startsWith("-")) { "$field bernilai negatif" }
-                        return t.filter { it.isDigit() }.toLongOrNull()
-                            ?: error("$field tidak valid: \"$s\"")
+                        val value = parseFlexibleNumber(s) ?: error("$field tidak valid: \"$s\"")
+                        require(value >= 0) { "$field bernilai negatif" }
+                        return round(value).toLong()
                     }
 
                     fun parseQty(
                         s: String,
                         field: String,
                     ): Int {
-                        val t = s.trim()
-                        require(!t.startsWith("-")) { "$field bernilai negatif" }
-                        return t.filter { it.isDigit() }.toIntOrNull()
-                            ?: error("$field tidak valid: \"$s\"")
+                        val value = parseFlexibleNumber(s) ?: error("$field tidak valid: \"$s\"")
+                        require(value >= 0) { "$field bernilai negatif" }
+                        return round(value).toInt()
                     }
 
                     for (i in 1..sheet.lastRowNum) {

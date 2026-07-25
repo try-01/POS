@@ -42,6 +42,18 @@ sealed class ReturnOutcome {
     data class InvalidQuantity(
         val productName: String,
     ) : ReturnOutcome()
+
+    /**
+     * Nominal refund tidak valid: negatif, atau melebihi total transaksi.
+     * [maxAllowed] = total transaksi (batas atas, karena retur hanya bisa
+     * dilakukan sekali penuh per transaksi — lihat AlreadyReturned).
+     * Ini adalah lapisan pertahanan backend yang independen dari validasi
+     * UI (RefundAmountField) — mencegah bug/celah UI membengkakkan atau
+     * membalik saldo laci kas.
+     */
+    data class InvalidRefundAmount(
+        val maxAllowed: Long,
+    ) : ReturnOutcome()
 }
 
 class ReturnRepository(
@@ -81,6 +93,13 @@ class ReturnRepository(
         if (transaction.isVoid) return ReturnOutcome.TransactionVoided
         if (transaction.hasReturn) return ReturnOutcome.AlreadyReturned
         if (itemInputs.isEmpty()) return ReturnOutcome.NoItemsSelected
+
+        // Defense-in-depth: backend TIDAK BOLEH mempercayai UI sepenuhnya.
+        // Batas atas = total transaksi (retur hanya bisa penuh sekali per
+        // transaksi, dijamin oleh pengecekan AlreadyReturned di atas).
+        if (refundAmount < 0 || refundAmount > transaction.total) {
+            return ReturnOutcome.InvalidRefundAmount(maxAllowed = transaction.total)
+        }
 
         val originalItems = transactionDao.getItems(transactionId).associateBy { it.id }
         itemInputs.forEach { input ->

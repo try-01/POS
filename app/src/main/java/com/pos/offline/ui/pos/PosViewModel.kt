@@ -1,6 +1,5 @@
 package com.pos.offline.ui.pos
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pos.offline.data.local.entity.CartItemEntity
@@ -15,7 +14,9 @@ import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.InsufficientStockException
 import com.pos.offline.data.repository.PrinterRepository
 import com.pos.offline.data.repository.ProductRepository
+import com.pos.offline.data.repository.ShiftEndOutcome
 import com.pos.offline.data.repository.ShiftRepository
+import com.pos.offline.data.repository.ShiftStartOutcome
 import com.pos.offline.data.repository.ShiftSummary
 import com.pos.offline.data.repository.StoreProfileRepository
 import com.pos.offline.data.repository.TransactionRepository
@@ -25,7 +26,6 @@ import com.pos.offline.util.PrintCoordinator
 import com.pos.offline.util.PrinterConnectionFactory
 import com.pos.offline.util.roundToRupiah
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -53,6 +53,15 @@ sealed interface PosUiEvent {
         val message: String,
     ) : PosUiEvent
 }
+
+/** Info untuk dialog peringatan stok non-blocking. Transaksi/penambahan cart
+ * TETAP diteruskan (kebijakan soft-block) — dialog ini murni pemberitahuan,
+ * bukan penghalang, mengikuti kebutuhan lapangan: stok fisik sering telat
+ * di-update sementara pembeli sudah menunggu di kasir. */
+data class StockWarningInfo(
+    val productName: String,
+    val currentStock: Int,
+)
 
 sealed interface CheckoutState {
     data object Idle : CheckoutState
@@ -108,6 +117,9 @@ class PosViewModel(
     private val _selectedCategory = MutableStateFlow<String?>(null) // null = "Semua"
     val selectedCategory: StateFlow<String?> = _selectedCategory.asStateFlow()
 
+    private val _stockWarning = MutableStateFlow<StockWarningInfo?>(null)
+    val stockWarning: StateFlow<StockWarningInfo?> = _stockWarning.asStateFlow()
+
     val categories: StateFlow<List<String>> =
         productRepository
             .observeCategories()
@@ -123,17 +135,6 @@ class PosViewModel(
 
     fun selectCategory(category: String?) {
         _selectedCategory.value = category
-    }
-
-    init {
-        viewModelScope.launch {
-            categories.collect { list ->
-                val current = _selectedCategory.value
-                if (current != null && current !in list) {
-                    _selectedCategory.value = null
-                }
-            }
-        }
     }
 
     val cart: StateFlow<List<CartItemEntity>> =
@@ -169,6 +170,8 @@ class PosViewModel(
         cashierRepository.activeCashiers
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** @deprecated secara arsitektur untuk keperluan checkout (lihat [activeShift]).
+     * Dipertahankan hanya sebagai info "shift terbaru dibuka" untuk kebutuhan tampilan lain. */
     val openShift: StateFlow<ShiftEntity?> =
         shiftRepository.openShift
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -176,6 +179,21 @@ class PosViewModel(
     val openShifts: StateFlow<List<ShiftEntity>> =
         shiftRepository.openShifts
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** ID shift yang secara eksplisit dipilih sebagai "kasir yang bertugas di
+     * terminal ini". Sumber kebenaran untuk atribusi transaksi pada checkout,
+     * BUKAN [openShift] (yang cuma "shift terbaru dibuka" secara global). */
+    private val _activeShiftId = MutableStateFlow<Long?>(null)
+
+    /** Shift yang sedang dipakai untuk checkout di sesi ini. Auto-terisi kalau
+     * cuma ada 1 shift terbuka (kasus kasir tunggal, backward-compatible).
+     * Kalau >1 shift terbuka bersamaan (multi-kasir), WAJIB dipilih manual via
+     * [selectActiveShift] sebelum checkout — mencegah transaksi salah
+     * teratribusi ke kasir yang tidak sedang bertugas di terminal ini. */
+    val activeShift: StateFlow<ShiftEntity?> =
+        combine(openShifts, _activeShiftId) { shifts, activeId ->
+            shifts.find { it.id == activeId }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _showStartShiftDialog = MutableStateFlow(false)
     val showStartShiftDialog: StateFlow<Boolean> = _showStartShiftDialog.asStateFlow()
@@ -192,6 +210,12 @@ class PosViewModel(
     private val _showShiftListDialog = MutableStateFlow(false)
     val showShiftListDialog: StateFlow<Boolean> = _showShiftListDialog.asStateFlow()
 
+    private val _isStartingShift = MutableStateFlow(false)
+    val isStartingShift: StateFlow<Boolean> = _isStartingShift.asStateFlow()
+
+    private val _isEndingShift = MutableStateFlow(false)
+    val isEndingShift: StateFlow<Boolean> = _isEndingShift.asStateFlow()
+
     private var lastScannedBarcode: String = ""
     private var lastScannedTimestamp: Long = 0L
     private val scanCooldownMs = 600L // saring burst kamera, gak block scan sengaja
@@ -199,6 +223,43 @@ class PosViewModel(
     private fun sanitizeScannedCode(raw: String): String? {
         val cleaned = raw.trim().filter { c -> c.isLetterOrDigit() || c in "-_./: #" }.take(128)
         return cleaned.ifBlank { null }
+    }
+
+    init {
+        viewModelScope.launch {
+            categories.collect { list ->
+                val current = _selectedCategory.value
+                if (current != null && current !in list) {
+                    _selectedCategory.value = null
+                }
+            }
+        }
+        // Mekanisme auto-select shift aktif untuk mendukung multi-kasir dengan
+        // aman: hanya auto-pilih kalau tidak ambigu (0 atau 1 shift terbuka).
+        // Kalau >1 shift terbuka, kasir WAJIB memilih manual (selectActiveShift).
+        viewModelScope.launch {
+            openShifts.collect { shifts ->
+                val currentActiveId = _activeShiftId.value
+                when {
+                    shifts.isEmpty() -> {
+                        if (currentActiveId != null) _activeShiftId.value = null
+                    }
+
+                    currentActiveId != null && shifts.none { it.id == currentActiveId } -> {
+                        // Shift yang tadinya aktif di sesi ini sudah ditutup
+                        // (oleh diri sendiri atau proses lain). Jangan diam-diam
+                        // pindah ke kasir lain kecuali memang cuma tersisa 1.
+                        _activeShiftId.value = if (shifts.size == 1) shifts.first().id else null
+                    }
+
+                    currentActiveId == null && shifts.size == 1 -> {
+                        _activeShiftId.value = shifts.first().id
+                    }
+                    // currentActiveId == null && shifts.size > 1 -> tetap null,
+                    // paksa kasir memilih shift aktif secara eksplisit.
+                }
+            }
+        }
     }
 
     fun onBarcodeScanned(raw: String) {
@@ -249,14 +310,39 @@ class PosViewModel(
         _showStartShiftDialog.value = false
     }
 
+    /** Dipanggil saat kasir secara eksplisit memilih shift mana yang sedang ia
+     * operasikan di terminal ini. WAJIB dipanggil sebelum checkout jika ada
+     * >1 shift terbuka bersamaan (multi-kasir). */
+    fun selectActiveShift(shiftId: Long) {
+        _activeShiftId.value = shiftId
+    }
+
     fun startShift(
         cashierId: Long,
         startingCash: Long,
     ) = viewModelScope.launch {
-        val cashier = activeCashiers.value.find { it.id == cashierId } ?: return@launch
-        shiftRepository.startShift(cashierId, cashier.name, startingCash)
-        _showStartShiftDialog.value = false
-        _uiEvents.emit(PosUiEvent.ShowMessage("Shift dimulai untuk ${cashier.name}."))
+        if (_isStartingShift.value) return@launch
+        _isStartingShift.value = true
+        try {
+            val cashier = activeCashiers.value.find { it.id == cashierId } ?: return@launch
+            when (val outcome = shiftRepository.startShift(cashierId, cashier.name, startingCash)) {
+                is ShiftStartOutcome.Success -> {
+                    _showStartShiftDialog.value = false
+                    // Kasir yang baru saja membuka shift diasumsikan yang
+                    // sekarang bertugas di terminal ini -> jadikan aktif.
+                    _activeShiftId.value = outcome.shiftId
+                    _uiEvents.emit(PosUiEvent.ShowMessage("Shift dimulai untuk ${cashier.name}."))
+                }
+
+                ShiftStartOutcome.AlreadyOpenForCashier -> {
+                    _uiEvents.emit(
+                        PosUiEvent.ShowMessage("${cashier.name} sudah memiliki shift yang sedang berjalan."),
+                    )
+                }
+            }
+        } finally {
+            _isStartingShift.value = false
+        }
     }
 
     fun openEndShiftDialog(shift: ShiftEntity) =
@@ -274,12 +360,32 @@ class PosViewModel(
 
     fun endShift(actualCash: Long) =
         viewModelScope.launch {
+            if (_isEndingShift.value) return@launch
             val shift = _endShiftTarget.value ?: return@launch
-            shiftRepository.endShift(shift.id, actualCash)
-            _showEndShiftDialog.value = false
-            _shiftSummary.value = null
-            _endShiftTarget.value = null
-            _uiEvents.emit(PosUiEvent.ShowMessage("Shift ditutup untuk ${shift.cashierName}."))
+            _isEndingShift.value = true
+            try {
+                when (val outcome = shiftRepository.endShift(shift.id, actualCash)) {
+                    is ShiftEndOutcome.Success -> {
+                        if (_activeShiftId.value == shift.id) {
+                            _activeShiftId.value = null
+                        }
+                        _uiEvents.emit(PosUiEvent.ShowMessage("Shift ditutup untuk ${shift.cashierName}."))
+                    }
+
+                    ShiftEndOutcome.AlreadyClosed -> {
+                        _uiEvents.emit(PosUiEvent.ShowMessage("Shift ini sudah ditutup sebelumnya."))
+                    }
+
+                    ShiftEndOutcome.NotFound -> {
+                        _uiEvents.emit(PosUiEvent.ShowMessage("Shift tidak ditemukan."))
+                    }
+                }
+                _showEndShiftDialog.value = false
+                _shiftSummary.value = null
+                _endShiftTarget.value = null
+            } finally {
+                _isEndingShift.value = false
+            }
         }
 
     fun search(q: String) {
@@ -316,17 +422,22 @@ class PosViewModel(
         _paymentMethod.value = method
     }
 
-    // Pisahkan logika inti ke suspend function agar bisa mengembalikan status (Boolean)
+    // Kebijakan SOFT-BLOCK: penambahan SELALU berhasil, tidak pernah ditolak
+    // karena stok. Kalau qty melewati stok tercatat untuk pertama kali,
+    // tampilkan dialog peringatan (bukan penolakan) via _stockWarning.
     private suspend fun tryAddToCart(product: ProductEntity): Boolean {
-        val currentQtyInCart = cart.value.find { it.productId == product.id }?.quantity ?: 0
-        if (currentQtyInCart + 1 > product.stock) {
-            _uiEvents.emit(
-                PosUiEvent.ShowMessage("Stok \"${product.name}\" tidak mencukupi (tersisa ${product.stock})."),
+        val result =
+            cartRepository.changeQuantity(
+                productId = product.id,
+                name = product.name,
+                unitPrice = product.price,
+                delta = 1,
+                maxStock = product.stock,
             )
-            return false // Gagal karena kehabisan stok
+        if (result.crossedIntoExcess) {
+            _stockWarning.value = StockWarningInfo(product.name, product.stock)
         }
-        cartRepository.add(product.id, product.name, product.price)
-        return true // Sukses
+        return true // Selalu sukses; stok tidak lagi memblokir penambahan.
     }
 
     // Fungsi utama yang dipanggil oleh klik di UI (Tetap mempertahankan signature aslinya)
@@ -335,6 +446,8 @@ class PosViewModel(
             tryAddToCart(product)
         }
 
+    // Input manual (ketik langsung) juga SOFT-BLOCK sekarang: tidak lagi
+    // ditolak, hanya diberi peringatan kalau melewati stok tercatat.
     fun setQuantityDirect(
         item: CartItemEntity,
         newQuantity: Int,
@@ -345,32 +458,43 @@ class PosViewModel(
         }
         val product = productRepository.getById(item.productId)
         val stock = product?.stock
-        if (stock != null && newQuantity > stock) {
-            _uiEvents.emit(
-                PosUiEvent.ShowMessage("Stok \"${item.name}\" tidak mencukupi (tersisa $stock)."),
-            )
-            return@launch
+        if (stock != null && newQuantity > stock && item.quantity <= stock) {
+            // Hanya tampilkan dialog saat MELEWATI batas untuk pertama kali
+            // (konsisten dengan crossedIntoExcess pada jalur tap +/-).
+            _stockWarning.value = StockWarningInfo(item.name, stock)
         }
         cartRepository.setQuantity(item.productId, newQuantity)
     }
 
     fun increaseQty(item: CartItemEntity) =
         viewModelScope.launch {
-            val product = productRepository.getById(item.productId)
-            val stock = product?.stock
-            if (stock != null && item.quantity + 1 > stock) {
-                _uiEvents.emit(
-                    PosUiEvent.ShowMessage("Stok \"${item.name}\" tidak mencukupi (tersisa $stock)."),
+            val stock = productRepository.getById(item.productId)?.stock
+            val result =
+                cartRepository.changeQuantity(
+                    productId = item.productId,
+                    name = item.name,
+                    unitPrice = item.unitPrice,
+                    delta = 1,
+                    maxStock = stock,
                 )
-                return@launch
+            if (result.crossedIntoExcess) {
+                _stockWarning.value = StockWarningInfo(item.name, stock ?: 0)
             }
-            cartRepository.setQuantity(item.productId, item.quantity + 1)
         }
 
     fun decreaseQty(item: CartItemEntity) =
         viewModelScope.launch {
-            cartRepository.setQuantity(item.productId, item.quantity - 1)
+            cartRepository.changeQuantity(
+                productId = item.productId,
+                name = item.name,
+                unitPrice = item.unitPrice,
+                delta = -1,
+            )
         }
+
+    fun dismissStockWarning() {
+        _stockWarning.value = null
+    }
 
     fun removeFromCart(item: CartItemEntity) =
         viewModelScope.launch {
@@ -386,11 +510,25 @@ class PosViewModel(
             val currentCart = cart.value
             if (currentCart.isEmpty()) return@launch
 
+            val shiftsNow = openShifts.value
+            val shift = activeShift.value
+
+            // Guard multi-kasir: kalau ada >1 shift terbuka tapi belum ada
+            // yang dipilih sbg kasir aktif di sesi ini, JANGAN asal pakai
+            // shift lain — mencegah transaksi salah atribusi ke kasir yang
+            // tidak sedang bertugas di terminal ini.
+            if (shift == null && shiftsNow.size > 1) {
+                _checkoutState.value =
+                    CheckoutState.Error(
+                        "Ada beberapa shift kasir aktif. Pilih kasir yang bertugas di terminal ini terlebih dahulu.",
+                    )
+                return@launch
+            }
+
             _checkoutState.value = CheckoutState.Processing
             _printUiState.value = PrintUiState.Idle
             _checkoutState.value =
                 try {
-                    val shift = openShift.value
                     val currentTotal = totals.value.total
                     val effectivePaid = if (_paid.value <= 0L) currentTotal else _paid.value
                     val result =
@@ -412,7 +550,14 @@ class PosViewModel(
                     _paymentMethod.value = PaymentMethod.CASH
                     CheckoutState.Success(result)
                 } catch (e: InsufficientStockException) {
-                    CheckoutState.Error("Stok '${e.productName}' tidak mencukupi.")
+                    // Sejak kebijakan stok soft-block, exception ini HANYA terpicu
+                    // saat produk sudah tidak ada di database (dihapus permanen
+                    // secara konkuren tepat saat checkout berlangsung) — bukan lagi
+                    // "stok kurang", karena decrementStock kini selalu berhasil
+                    // untuk id yang masih ada, walau hasilnya stok jadi negatif.
+                    CheckoutState.Error(
+                        "Produk '${e.productName}' tidak ditemukan (kemungkinan baru saja dihapus). Transaksi dibatalkan, silakan cek ulang keranjang.",
+                    )
                 } catch (e: Exception) {
                     CheckoutState.Error("Gagal memproses: ${e.message ?: "kesalahan tak dikenal"}")
                 }
@@ -472,8 +617,6 @@ class PosViewModel(
     }
 
     companion object {
-        private const val TAG = "PosViewModel"
-
         fun computeTotals(
             items: List<CartItemEntity>,
             discountType: DiscountType,

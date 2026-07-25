@@ -60,4 +60,36 @@ interface PrinterDao {
         clearAllDefault()
         update(printer.copy(isDefault = true))
     }
+
+    // --- Persistensi status-query fail streak (atomic partial update) ---
+    // Menghindari read-modify-write via copy() yang berisiko lost-update
+    // jika bersamaan dengan edit manual printer di Settings.
+
+    @Query("UPDATE printers SET statusQueryFailStreak = statusQueryFailStreak + 1 WHERE id = :id")
+    suspend fun incrementStatusQueryFailStreakRaw(id: Long)
+
+    @Query("SELECT statusQueryFailStreak FROM printers WHERE id = :id")
+    suspend fun getStatusQueryFailStreak(id: Long): Int?
+
+    @Transaction
+    suspend fun incrementAndGetStatusQueryFailStreak(id: Long): Int {
+        incrementStatusQueryFailStreakRaw(id)
+        return getStatusQueryFailStreak(id) ?: 0
+    }
+
+    @Query("UPDATE printers SET statusQueryFailStreak = 0 WHERE id = :id")
+    suspend fun resetStatusQueryFailStreak(id: Long)
+
+    @Query(
+        "UPDATE printers SET supportsStatusQuery = 0, statusQueryFailStreak = 0, " +
+            "autoDisabledDueToNoResponse = 1 WHERE id = :id",
+    )
+    suspend fun disableStatusQuery(id: Long)
+
+    // Partial update kolom priority saja. Menghindari lost-update terhadap
+    // statusQueryFailStreak/supportsStatusQuery/autoDisabledDueToNoResponse
+    // yang mungkin sedang ditulis background print job secara bersamaan
+    // (mis. kasir checkout di POS sementara admin reorder printer di Settings).
+    @Query("UPDATE printers SET priority = :priority WHERE id = :id")
+    suspend fun updatePriority(id: Long, priority: Int)
 }

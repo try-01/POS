@@ -215,7 +215,6 @@ fun ReportScreen(
             item(key = "sales_report_generator") {
                 val salesData by viewModel.salesReportData.collectAsStateWithLifecycle()
                 val showProducts by viewModel.showProductListInReport.collectAsStateWithLifecycle()
-                val showDeadStock by viewModel.showDeadStockInReport.collectAsStateWithLifecycle()
                 val context = LocalContext.current
                 val scope = rememberCoroutineScope()
 
@@ -224,12 +223,6 @@ fun ReportScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = showProducts, onCheckedChange = viewModel::toggleShowProductList)
                         Text("Tampilkan Produk Terjual", style = MaterialTheme.typography.bodySmall)
-                    }
-                    if (showProducts) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = showDeadStock, onCheckedChange = viewModel::toggleShowDeadStock)
-                            Text("Sertakan Stok Mati (0 laku)", style = MaterialTheme.typography.bodySmall)
-                        }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { viewModel.generateSalesReport(false) }, modifier = Modifier.weight(1f)) { Text("Harian") }
@@ -250,7 +243,7 @@ fun ReportScreen(
                                     OutlinedButton(onClick = { viewModel.printSalesReport(false) }, modifier = Modifier.weight(1f)) { Text("Cetak Harian") }
                                     OutlinedButton(onClick = {
                                         scope.launch {
-                                            val lines = ReceiptManager.buildSalesReportLines(data, null, "Laporan Harian", null, null, showDeadStock)
+                                            val lines = ReceiptManager.buildSalesReportLines(data, null, "Laporan Harian", null, null)
                                             val file = ReceiptManager.exportPdfFromLines(context, lines, "Laporan_Harian")
                                             context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
                                         }
@@ -371,7 +364,7 @@ fun ReportScreen(
         }
     }
 
-    if (selectedTransaction != null && !pendingVoidConfirm && !showReturnDialog) {
+    if (selectedTransaction != null && !pendingVoidConfirm && !showReturnDialog && pendingPrintTarget == null) {
         val current = selectedTransaction!!
         TransactionDetailDialog(
             result = current,
@@ -1417,14 +1410,22 @@ private fun TransactionDetailDialog(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (!hasReturn) {
                             TextButton(onClick = onReturnClick, modifier = Modifier.weight(1f)) {
                                 Text("Retur Item", color = MaterialTheme.colorScheme.primary)
                             }
-                        }
-                        TextButton(onClick = onVoidClick, modifier = Modifier.weight(1f)) {
-                            Text("Batalkan Transaksi", color = MaterialTheme.colorScheme.error)
+                            TextButton(onClick = onVoidClick, modifier = Modifier.weight(1f)) {
+                                Text("Batalkan Transaksi", color = MaterialTheme.colorScheme.error)
+                            }
+                        } else {
+                            Text(
+                                "Transaksi ini sudah memiliki riwayat retur, sehingga tidak dapat dibatalkan.",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                modifier = Modifier.weight(1f),
+                            )
                         }
                     }
                 }
@@ -1640,6 +1641,9 @@ private fun ReturnItemDialog(
     var note by remember(tx.id) { mutableStateOf("") }
 
     val includedCount = rows.count { it.included }
+    val maxRefundable = tx.total
+    val refundAmountValue = refundAmountText.toLongOrNull() ?: 0L
+    val isRefundOverLimit = refundAmountValue > maxRefundable
 
     AlertDialog(
         onDismissRequest = { if (!submitting) onDismiss() },
@@ -1731,8 +1735,15 @@ private fun ReturnItemDialog(
                         refundAmountEdited = true
                         refundAmountText = digits
                     },
+                    isError = isRefundOverLimit,
                 )
-                if (includedCount > 0) {
+                if (isRefundOverLimit) {
+                    Text(
+                        "Melebihi total transaksi (maks ${maxRefundable.toRupiah()})",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                } else if (includedCount > 0) {
                     Text(
                         "Sugesti: ${suggestedRefund.toRupiah()} (tanpa prorata diskon/pajak)",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
@@ -1755,7 +1766,7 @@ private fun ReturnItemDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = !submitting && includedCount > 0,
+                enabled = !submitting && includedCount > 0 && !isRefundOverLimit,
                 onClick = {
                     val items =
                         rows.filter { it.included }.map { row ->
@@ -1936,6 +1947,7 @@ private fun RefundMethodToggle(
 private fun RefundAmountField(
     value: String,
     onValueChange: (String) -> Unit,
+    isError: Boolean = false,
 ) {
     BasicTextField(
         value = value,
@@ -1956,8 +1968,11 @@ private fun RefundAmountField(
                         .fillMaxSize()
                         .clip(RoundedCornerShape(10.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
-                        .padding(horizontal = 12.dp),
+                        .border(
+                            width = 1.dp,
+                            color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant,
+                            shape = RoundedCornerShape(10.dp),
+                        ).padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(

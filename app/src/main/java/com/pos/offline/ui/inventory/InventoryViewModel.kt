@@ -109,12 +109,28 @@ class InventoryViewModel(
     private val _pendingDelete = MutableStateFlow<ProductEntity?>(null)
     val pendingDelete: StateFlow<ProductEntity?> = _pendingDelete.asStateFlow()
 
+    // Snapshot produk yang sedang diedit, agar hapus/simpan tidak bergantung
+    // pada `products.value` yang bisa saja sudah difilter/di-sort sehingga
+    // tidak memuat produk tsb (mis. saat search query aktif atau mode "Terlaris").
+    private var editingProductSnapshot: ProductEntity? = null
+
+    private val _isSaving = MutableStateFlow(false)
+    val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
+
     private val _messages = Channel<String>(capacity = Channel.BUFFERED)
     val messages = _messages.receiveAsFlow()
 
     data class ScanNotFoundState(val barcode: String)
     private val _scanNotFound = MutableStateFlow<ScanNotFoundState?>(null)
     val scanNotFound: StateFlow<ScanNotFoundState?> = _scanNotFound.asStateFlow()
+
+    // Opsi C: produk dengan barcode yang di-scan DITEMUKAN tapi berstatus
+    // soft-deleted (active = false). Dipisah dari ScanNotFoundState agar UI
+    // bisa menawarkan "Pulihkan produk ini?" alih-alih "Tambah produk baru"
+    // yang ujung-ujungnya akan gagal karena barcode masih dianggap terpakai.
+    data class DeletedProductFoundState(val product: ProductEntity)
+    private val _deletedProductFound = MutableStateFlow<DeletedProductFoundState?>(null)
+    val deletedProductFound: StateFlow<DeletedProductFoundState?> = _deletedProductFound.asStateFlow()
 
     enum class ImportStatus { NEW, CONFLICT, DUPLICATE_IN_FILE }
     data class ImportReviewItem(val row: ImportedProductRow, val status: ImportStatus, val conflictWith: ProductEntity? = null)
@@ -224,12 +240,29 @@ class InventoryViewModel(
         return cleaned.ifBlank { null }
     }
 
+    /**
+     * Opsi C: intersepsi status barcode SEJAK SCAN, bukan saat "Simpan".
+     * - Barcode tidak ditemukan sama sekali -> alur lama (tawarkan tambah produk baru).
+     * - Barcode ditemukan & aktif -> buka form edit seperti biasa.
+     * - Barcode ditemukan tapi produk sudah soft-deleted -> tawarkan pemulihan,
+     *   supaya user tidak capek isi form baru lalu ditolak saat Simpan.
+     */
     fun onBarcodeScanned(raw: String?) {
         val sanitized = sanitizeScannedCode(raw)
         if (sanitized == null) { notify("Gagal memindai kode. Coba pindai ulang."); return }
         viewModelScope.launch {
-            val product = try { productRepository.getProductByBarcodeAny(sanitized) } catch (e: Exception) { notify("Gagal memindai: ${e.message ?: "kesalahan tak dikenal"}."); return@launch }
-            if (product != null && product.active) startEdit(product) else _scanNotFound.value = ScanNotFoundState(sanitized)
+            val product =
+                try {
+                    productRepository.getProductByBarcodeAny(sanitized)
+                } catch (e: Exception) {
+                    notify("Gagal memindai: ${e.message ?: "kesalahan tak dikenal"}.")
+                    return@launch
+                }
+            when {
+                product == null -> _scanNotFound.value = ScanNotFoundState(sanitized)
+                product.active -> startEdit(product)
+                else -> _deletedProductFound.value = DeletedProductFoundState(product)
+            }
         }
     }
 
@@ -237,40 +270,76 @@ class InventoryViewModel(
     fun startAddFromScanned() {
         val barcode = _scanNotFound.value?.barcode ?: return
         _scanNotFound.value = null
+        editingProductSnapshot = null
         _form.value = ProductFormState(barcode = barcode)
+    }
+
+    fun dismissDeletedProductFound() { _deletedProductFound.value = null }
+
+    /**
+     * User setuju memulihkan produk yang sudah soft-deleted: aktifkan kembali
+     * lalu langsung buka form edit agar kasir bisa perbarui harga/stok sebelum
+     * dipakai lagi (data lama seperti nama/kategori tetap dipertahankan).
+     */
+    fun restoreDeletedProduct() {
+        val target = _deletedProductFound.value?.product ?: return
+        _deletedProductFound.value = null
+        viewModelScope.launch {
+            try {
+                productRepository.setActive(target.id, true)
+                val refreshed = productRepository.getById(target.id) ?: target.copy(active = true)
+                startEdit(refreshed)
+                notify("Produk \"${refreshed.name}\" dipulihkan. Perbarui datanya jika perlu, lalu simpan.")
+            } catch (e: Exception) {
+                notify("Gagal memulihkan produk: ${e.message ?: "kesalahan tak dikenal"}.")
+            }
+        }
     }
 
     fun search(q: String) { _searchQuery.value = q }
     fun setSortOption(option: ProductSortOption) { _sortOption.value = option }
-    fun startAdd() { _form.value = ProductFormState() }
+
+    fun startAdd() {
+        editingProductSnapshot = null
+        _form.value = ProductFormState()
+    }
 
     fun startEdit(product: ProductEntity) {
+        editingProductSnapshot = product
         _form.value = ProductFormState(id=product.id, name=product.name, sku=product.sku, barcode=product.barcode ?: "", category=product.category, price=product.price, cost=product.cost, stock=product.stock, createdAt=product.createdAt)
     }
 
     fun dismissForm() { _form.value = null }
 
-    fun save(state: ProductFormState) = viewModelScope.launch {
-        val name = state.name.trim()
-        if (name.isBlank()) { notify("Nama produk wajib diisi."); return@launch }
-        if (state.price < 0) { notify("Harga tidak boleh negatif."); return@launch }
-        if (state.stock < 0) { notify("Stok tidak boleh negatif."); return@launch }
+    fun save(state: ProductFormState) {
+        if (_isSaving.value) return
+        viewModelScope.launch {
+            _isSaving.value = true
+            try {
+                val name = state.name.trim()
+                if (name.isBlank()) { notify("Nama produk wajib diisi."); return@launch }
+                if (state.price < 0) { notify("Harga tidak boleh negatif."); return@launch }
+                if (state.stock < 0) { notify("Stok tidak boleh negatif."); return@launch }
 
-        val sku = state.sku.trim().ifBlank { "SKU-${System.currentTimeMillis()}" }
-        val barcode = state.barcode.trim().ifBlank { null }
-        val category = state.category.trim()
-        val now = System.currentTimeMillis()
+                val sku = state.sku.trim().ifBlank { "SKU-${System.currentTimeMillis()}" }
+                val barcode = state.barcode.trim().ifBlank { null }
+                val category = state.category.trim()
+                val now = System.currentTimeMillis()
 
-        val entity = ProductEntity(id=state.id, name=name, sku=sku, barcode=barcode, category=category, price=state.price, cost=state.cost, stock=state.stock, active=true, createdAt=if (state.isNew) now else state.createdAt, updatedAt=now)
-        try {
-            productRepository.save(entity)
-            notify(if (state.isNew) "Produk ditambahkan." else "Produk diperbarui.")
-            _form.value = null
-        } catch (e: SQLiteConstraintException) { notify("Gagal menyimpan: SKU atau Barcode sudah dipakai produk lain.") }
-        catch (e: Exception) { notify("Gagal menyimpan: ${e.message ?: "kesalahan tak dikenal"}.") }
+                val entity = ProductEntity(id=state.id, name=name, sku=sku, barcode=barcode, category=category, price=state.price, cost=state.cost, stock=state.stock, active=true, createdAt=if (state.isNew) now else state.createdAt, updatedAt=now)
+                productRepository.save(entity)
+                notify(if (state.isNew) "Produk ditambahkan." else "Produk diperbarui.")
+                _form.value = null
+            } catch (e: SQLiteConstraintException) {
+                notify("Gagal menyimpan: SKU atau Barcode sudah dipakai produk lain.")
+            } catch (e: Exception) {
+                notify("Gagal menyimpan: ${e.message ?: "kesalahan tak dikenal"}.")
+            } finally {
+                _isSaving.value = false
+            }
+        }
     }
 
-    fun requestDelete(product: ProductEntity) { _pendingDelete.value = product }
     fun cancelDelete() { _pendingDelete.value = null }
     fun confirmDelete() = viewModelScope.launch {
         val target = _pendingDelete.value ?: return@launch
@@ -280,7 +349,14 @@ class InventoryViewModel(
     }
 
     fun requestDeleteFromForm(id: Long) {
-        val target = products.value.find { it.id == id } ?: return
+        // Prioritaskan snapshot produk yang sedang diedit (selalu akurat),
+        // baru fallback ke list yang sedang tampil (bisa saja sudah difilter/disortir).
+        val target = editingProductSnapshot?.takeIf { it.id == id }
+            ?: products.value.find { it.id == id }
+        if (target == null) {
+            notify("Produk tidak ditemukan (mungkin sudah dihapus atau tersaring dari daftar).")
+            return
+        }
         _form.value = null
         _pendingDelete.value = target
     }

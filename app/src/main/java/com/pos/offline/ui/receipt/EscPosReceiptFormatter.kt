@@ -192,7 +192,10 @@ object EscPosReceiptFormatter {
         val original =
             try {
                 BitmapFactory.decodeByteArray(logoBytes, 0, logoBytes.size)
-            } catch (e: Exception) {
+            } catch (t: Throwable) {
+                // Throwable (bukan hanya Exception) karena bitmap besar/korup
+                // berisiko OutOfMemoryError, yang WAJIB tidak sampai meng-crash
+                // alur cetak struk.
                 null
             } ?: return null
 
@@ -202,17 +205,27 @@ object EscPosReceiptFormatter {
                 val newWidth = (original.width * ratio).toInt().coerceAtLeast(1)
                 try {
                     Bitmap.createScaledBitmap(original, newWidth, MAX_IMAGE_HEIGHT_PX, true)
-                } catch (e: Exception) {
+                } catch (t: Throwable) {
                     original
                 }
             } else {
                 original
             }
 
-        return try {
-            PrinterTextParserImg.bitmapToHexadecimalString(printer, resized, true)
-        } catch (e: Exception) {
-            null
+        val hex =
+            try {
+                PrinterTextParserImg.bitmapToHexadecimalString(printer, resized, true)
+            } catch (t: Throwable) {
+                null
+            }
+
+        // Bebaskan native memory secepatnya, jangan menunggu GC — logo dicetak
+        // berulang kali setiap transaksi.
+        if (resized !== original) {
+            runCatching { resized.recycle() }
         }
+        runCatching { original.recycle() }
+
+        return hex
     }
 }
