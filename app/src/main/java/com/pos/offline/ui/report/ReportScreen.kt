@@ -214,19 +214,53 @@ fun ReportScreen(
 
             item(key = "sales_report_generator") {
                 val salesData by viewModel.salesReportData.collectAsStateWithLifecycle()
-                val showProducts by viewModel.showProductListInReport.collectAsStateWithLifecycle()
+                val salesReportIsMonthly by viewModel.salesReportIsMonthly.collectAsStateWithLifecycle()
+                val includeSalesSummary by viewModel.includeSalesSummary.collectAsStateWithLifecycle()
+                val includeProductsSold by viewModel.includeProductsSold.collectAsStateWithLifecycle()
+                val includeDeadStock by viewModel.includeDeadStock.collectAsStateWithLifecycle()
+                val canGenerateReport by viewModel.canGenerateReport.collectAsStateWithLifecycle()
                 val context = LocalContext.current
                 val scope = rememberCoroutineScope()
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Generate Laporan Penjualan", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp), fontWeight = FontWeight.SemiBold)
+
+                    Text(
+                        "Pilih bagian laporan (bisa lebih dari satu):",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = showProducts, onCheckedChange = viewModel::toggleShowProductList)
-                        Text("Tampilkan Produk Terjual", style = MaterialTheme.typography.bodySmall)
+                        Checkbox(checked = includeSalesSummary, onCheckedChange = viewModel::toggleIncludeSalesSummary)
+                        Text("Laporan Penjualan", style = MaterialTheme.typography.bodySmall)
                     }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = includeProductsSold, onCheckedChange = viewModel::toggleIncludeProductsSold)
+                        Text("Produk Terjual", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = includeDeadStock, onCheckedChange = viewModel::toggleIncludeDeadStock)
+                        Text("Dead Stock (Tidak Laku)", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (!canGenerateReport) {
+                        Text(
+                            "Pilih minimal satu bagian laporan.",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { viewModel.generateSalesReport(false) }, modifier = Modifier.weight(1f)) { Text("Harian") }
-                        Button(onClick = { viewModel.generateSalesReport(true) }, modifier = Modifier.weight(1f)) { Text("Bulanan") }
+                        Button(
+                            onClick = { viewModel.generateSalesReport(false) },
+                            enabled = canGenerateReport,
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Harian") }
+                        Button(
+                            onClick = { viewModel.generateSalesReport(true) },
+                            enabled = canGenerateReport,
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Bulanan") }
                     }
 
                     salesData?.let { data ->
@@ -240,14 +274,24 @@ fun ReportScreen(
 
                                 Spacer(Modifier.height(8.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(onClick = { viewModel.printSalesReport(false) }, modifier = Modifier.weight(1f)) { Text("Cetak Harian") }
-                                    OutlinedButton(onClick = {
-                                        scope.launch {
-                                            val lines = ReceiptManager.buildSalesReportLines(data, null, "Laporan Harian", null, null)
-                                            val file = ReceiptManager.exportPdfFromLines(context, lines, "Laporan_Harian")
-                                            context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
-                                        }
-                                    }, modifier = Modifier.weight(1f)) { Text("PDF Harian") }
+                                    OutlinedButton(
+                                        onClick = { viewModel.printSalesReport() },
+                                        enabled = canGenerateReport,
+                                        modifier = Modifier.weight(1f),
+                                    ) { Text(if (salesReportIsMonthly) "Cetak Bulanan" else "Cetak Harian") }
+                                    OutlinedButton(
+                                        onClick = {
+                                            scope.launch {
+                                                val lines = viewModel.buildCurrentReportLinesForExport() ?: return@launch
+                                                val suffix = if (salesReportIsMonthly) "Bulanan" else "Harian"
+                                                val file = ReceiptManager.exportPdfFromLines(context, lines, "Laporan_$suffix")
+                                                context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
+                                                viewModel.notifyPdfExported()
+                                            }
+                                        },
+                                        enabled = canGenerateReport,
+                                        modifier = Modifier.weight(1f),
+                                    ) { Text(if (salesReportIsMonthly) "PDF Bulanan" else "PDF Harian") }
                                 }
                             }
                         }

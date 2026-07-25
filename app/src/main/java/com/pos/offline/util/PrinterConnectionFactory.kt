@@ -183,8 +183,11 @@ class PrinterConnectionFactory(
     }
 
     suspend fun printRawLines(printer: PrinterEntity, lines: List<ReceiptLine>): PrintResult {
-        val markup = ReceiptManager.linesToEscPosMarkup(lines)
-        val outcome = executePrintJob(printer, false) { listOf(markup) }
+        // Laporan bisa ratusan baris — pecah per chunk biar parser Dantsu
+        // nggak nerima 1 String raksasa, dan biar lewat jeda antar-chunk
+        // yang sudah ada di executePrintJob().
+        val chunkedMarkups = lines.chunked(REPORT_LINE_CHUNK_SIZE).map { ReceiptManager.linesToEscPosMarkup(it) }
+        val outcome = executePrintJob(printer, false) { chunkedMarkups }
         return when (outcome) {
             is JobOutcome.Success -> PrintResult.Success(printer, outcome.statusQueryFailed, outcome.nearEndWarning)
             is JobOutcome.Failure -> PrintResult.Failure(printer, outcome.message, outcome.statusQueryFailed)
@@ -291,6 +294,7 @@ class PrinterConnectionFactory(
                         markups.forEachIndexed { index, markup ->
                             if (index == markups.lastIndex) {
                                 escPosPrinter.printFormattedTextAndCut(markup)
+                                delay(preDisconnectDelayMs(markup.length))
                             } else {
                                 escPosPrinter.printFormattedText(markup)
                                 delay(1500)
@@ -502,6 +506,16 @@ class PrinterConnectionFactory(
             success
         }
 
+    private fun preDisconnectDelayMs(lastChunkChars: Int): Long {
+        // KRITIS: byte chunk terakhir (bawa perintah cut) belum tentu selesai
+        // ditransfer OS ke printer saat printFormattedTextAndCut() return —
+        // disconnect terlalu cepat memutus buffer yg masih terisi, terutama
+        // di Bluetooth. Skala dari panjang chunk TERAKHIR saja karena chunk
+        // sebelumnya sudah dapat jeda 1500ms di loop (lih. executePrintJob).
+        val scaled = PRE_DISCONNECT_BASE_DELAY_MS + (lastChunkChars / 1000) * PRE_DISCONNECT_MS_PER_1K_CHARS
+        return scaled.coerceIn(PRE_DISCONNECT_BASE_DELAY_MS, PRE_DISCONNECT_MAX_DELAY_MS)
+    }
+
     private fun connectionErrorMessage(
         printer: PrinterEntity,
         targetLabel: String,
@@ -540,6 +554,10 @@ class PrinterConnectionFactory(
         private const val CONNECT_TIMEOUT_MS = 5_000L
         private const val RETRY_ATTEMPTS_TOTAL = 3
         private const val RETRY_DELAY_MS = 1_500L
+        private const val REPORT_LINE_CHUNK_SIZE = 150
+        private const val PRE_DISCONNECT_BASE_DELAY_MS = 800L
+        private const val PRE_DISCONNECT_MS_PER_1K_CHARS = 300L
+        private const val PRE_DISCONNECT_MAX_DELAY_MS = 5_000L
         private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
     }
 }

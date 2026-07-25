@@ -304,12 +304,24 @@ object ReceiptManager {
         return sb.toString()
     }
 
+    /**
+     * Bangun baris laporan penjualan. Setiap section (ringkasan penjualan,
+     * produk terjual, dead-stock) bisa dipilih independen lewat parameter
+     * boolean di bawah — kasir bebas kombinasikan salah satu, dua, atau
+     * ketiganya sekaligus dalam satu dokumen cetak/PDF.
+     *
+     * Header toko & info periode selalu ditampilkan sebagai konteks,
+     * terlepas dari section mana yang dipilih.
+     */
     fun buildSalesReportLines(
         data: SalesReportData,
         storeProfile: StoreProfileEntity?,
         periodLabel: String,
         printedBy: String?,
         shiftId: String?,
+        includeSalesSummary: Boolean = true,
+        includeProductsSold: Boolean = true,
+        includeDeadStock: Boolean = true,
     ): List<ReceiptLine> {
         val lines = mutableListOf<ReceiptLine>()
         val storeName = storeProfile?.storeName?.trim()?.ifBlank { "Kasir Offline" } ?: "Kasir Offline"
@@ -319,41 +331,52 @@ object ReceiptManager {
         lines += ReceiptLine(left = periodLabel, align = ReceiptAlign.CENTER)
         lines += ReceiptLine(left = "Dicetak: ${dateFmt.format(Date())}", align = ReceiptAlign.CENTER)
         if (printedBy != null) lines += ReceiptLine(left = "Kasir: $printedBy", right = shiftId?.let { "Shift: $it" } ?: "")
-        lines += divider()
 
-        lines += ReceiptLine(left = "Total Transaksi", right = "${data.summary.transactionCount} struk")
-        lines += ReceiptLine(left = "Penjualan (sblm diskon)", right = data.summary.subtotalSum.toRupiah())
-        if (data.diskon > 0) lines += ReceiptLine(left = "Diskon", right = "- ${data.diskon.toRupiah()}")
-        if (data.summary.taxSum > 0) lines += ReceiptLine(left = "Pajak", right = data.summary.taxSum.toRupiah())
-        lines += ReceiptLine(left = "PENDAPATAN BERSIH", right = data.pendapatanBersih.toRupiah(), bold = true, large = true)
-        if (data.returnsTotal > 0) lines += ReceiptLine(left = "  (Termasuk Retur)", right = "- ${data.returnsTotal.toRupiah()}")
-
-        lines += ReceiptLine(left = "Laba Bersih", right = data.labaBersih.toRupiah(), bold = true)
-        lines += divider()
-
-        lines += ReceiptLine(left = "Metode Pembayaran", align = ReceiptAlign.CENTER, bold = true)
-        data.payments.forEach {
-            val label = PaymentMethod.fromStorage(it.paymentMethod).label
-            lines += ReceiptLine(left = label, right = "${it.count}x  ${it.total.toRupiah()}")
-        }
-        lines += divider()
-
-        if (data.products.isNotEmpty()) {
-            lines += ReceiptLine(left = "Detail Produk Terjual", align = ReceiptAlign.CENTER, bold = true)
+        if (includeSalesSummary) {
             lines += divider()
-            data.products.forEach { p ->
-                if (p.qtySold > 0) {
+            lines += ReceiptLine(left = "Total Transaksi", right = "${data.summary.transactionCount} struk")
+            lines += ReceiptLine(left = "Penjualan (sblm diskon)", right = data.summary.subtotalSum.toRupiah())
+            if (data.diskon > 0) lines += ReceiptLine(left = "Diskon", right = "- ${data.diskon.toRupiah()}")
+            if (data.summary.taxSum > 0) lines += ReceiptLine(left = "Pajak", right = data.summary.taxSum.toRupiah())
+            lines += ReceiptLine(left = "PENDAPATAN BERSIH", right = data.pendapatanBersih.toRupiah(), bold = true, large = true)
+            if (data.returnsTotal > 0) lines += ReceiptLine(left = "  (Termasuk Retur)", right = "- ${data.returnsTotal.toRupiah()}")
+            lines += ReceiptLine(left = "Laba Bersih", right = data.labaBersih.toRupiah(), bold = true)
+            lines += divider()
+
+            lines += ReceiptLine(left = "Metode Pembayaran", align = ReceiptAlign.CENTER, bold = true)
+            data.payments.forEach {
+                val label = PaymentMethod.fromStorage(it.paymentMethod).label
+                lines += ReceiptLine(left = label, right = "${it.count}x  ${it.total.toRupiah()}")
+            }
+            lines += divider()
+        }
+
+        if (includeProductsSold) {
+            val soldProducts = data.products.filter { it.qtySold > 0 }
+            lines += ReceiptLine(left = "--- Produk Terjual ---", align = ReceiptAlign.CENTER, bold = true)
+            lines += divider()
+            if (soldProducts.isEmpty()) {
+                lines += ReceiptLine(left = "Tidak ada produk yang terjual pada periode ini.", align = ReceiptAlign.CENTER)
+            } else {
+                soldProducts.forEach { p ->
                     lines += ReceiptLine(left = p.productName, right = "${p.qtySold}x  ${p.revenue.toRupiah()}")
                 }
             }
             lines += divider()
+        }
+
+        if (includeDeadStock) {
             val deadStock = data.products.filter { it.qtySold == 0 }
-            if (deadStock.isNotEmpty()) {
-                lines += ReceiptLine(left = "Stok Dead-Stock (0 laku):", align = ReceiptAlign.LEFT, bold = true)
+            lines += ReceiptLine(left = "--- Produk Tidak Laku ---", align = ReceiptAlign.CENTER, bold = true)
+            lines += divider()
+            if (deadStock.isEmpty()) {
+                lines += ReceiptLine(left = "Tidak ada produk yang tidak laku pada periode ini.", align = ReceiptAlign.CENTER)
+            } else {
                 deadStock.forEach {
                     lines += ReceiptLine(left = it.productName, right = "0x")
                 }
             }
+            lines += divider()
         }
 
         lines += ReceiptLine(left = "")

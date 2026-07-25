@@ -22,6 +22,7 @@ import com.pos.offline.data.repository.StoreProfileRepository
 import com.pos.offline.data.repository.TransactionRepository
 import com.pos.offline.data.repository.VoidOutcome
 import com.pos.offline.ui.receipt.PrintUiState
+import com.pos.offline.ui.receipt.ReceiptLine
 import com.pos.offline.ui.receipt.ReceiptManager
 import com.pos.offline.util.PrintCoordinator
 import com.pos.offline.util.toRupiah
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -393,31 +395,118 @@ class ReportViewModel(
     private val _salesReportData = MutableStateFlow<SalesReportData?>(null)
     val salesReportData: StateFlow<SalesReportData?> = _salesReportData.asStateFlow()
 
-    private val _showProductListInReport = MutableStateFlow(false)
-    val showProductListInReport: StateFlow<Boolean> = _showProductListInReport.asStateFlow()
+    // Menyimpan tipe periode (harian/bulanan) dari laporan yang TERAKHIR di-generate,
+    // dipakai agar label & isi tombol Cetak/PDF selalu sinkron dengan data yang tampil
+    // (sebelumnya tombol selalu berlabel "Harian" walau data yang di-generate Bulanan).
+    private val _salesReportIsMonthly = MutableStateFlow(false)
+    val salesReportIsMonthly: StateFlow<Boolean> = _salesReportIsMonthly.asStateFlow()
 
-    fun toggleShowProductList(show: Boolean) {
-        _showProductListInReport.value = show
+    // Tiga section laporan bisa dipilih independen: kasir bebas pilih salah satu,
+    // dua, atau ketiganya sekaligus untuk dicetak/di-export dalam satu dokumen.
+    private val _includeSalesSummary = MutableStateFlow(true)
+    val includeSalesSummary: StateFlow<Boolean> = _includeSalesSummary.asStateFlow()
+
+    private val _includeProductsSold = MutableStateFlow(false)
+    val includeProductsSold: StateFlow<Boolean> = _includeProductsSold.asStateFlow()
+
+    private val _includeDeadStock = MutableStateFlow(false)
+    val includeDeadStock: StateFlow<Boolean> = _includeDeadStock.asStateFlow()
+
+    val canGenerateReport: StateFlow<Boolean> =
+        combine(_includeSalesSummary, _includeProductsSold, _includeDeadStock) { sales, sold, dead ->
+            sales || sold || dead
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    fun toggleIncludeSalesSummary(checked: Boolean) {
+        _includeSalesSummary.value = checked
     }
 
-    fun generateSalesReport(isMonthly: Boolean) {
-        viewModelScope.launch {
-            val now = LocalDate.now(zone)
-            val (start, end) = getReportRange(now, isMonthly)
-            val data = reportRepository.buildSalesReport(start, end, _showProductListInReport.value)
-            _salesReportData.value = data
+    fun toggleIncludeProductsSold(checked: Boolean) {
+        _includeProductsSold.value = checked
+    }
+
+    fun toggleIncludeDeadStock(checked: Boolean) {
+        _includeDeadStock.value = checked
+    }
+
+    private fun periodLabelFor(
+        now: LocalDate,
+        isMonthly: Boolean,
+    ): String = if (isMonthly) "Bulanan: ${now.month.name} ${now.year}" else "Harian: ${now.format(dateFmt)}"
+
+    // Parameter boolean ke reportRepository.buildSalesReport hanya berfungsi sebagai
+    // sakelar performa (skip query produk kalau tidak dibutuhkan) — dikonfirmasi user.
+    private fun needsProductData(): Boolean = _includeProductsSold.value || _includeDeadStock.value
+
+    /**
+     * Bangun catatan singkat kalau section yang dipilih ternyata kosong,
+     * ditampilkan sebagai tambahan pesan snackbar setelah cetak/PDF berhasil.
+     * Hanya berlaku untuk section Produk Terjual & Dead Stock — section
+     * Laporan Penjualan selalu tampil dengan angka (termasuk nol), jadi
+     * tidak dianggap "kosong".
+     */
+    private fun buildEmptyStateNote(data: SalesReportData): String? {
+        val soldEmpty = _includeProductsSold.value && data.products.none { it.qtySold > 0 }
+        val deadEmpty = _includeDeadStock.value && data.products.none { it.qtySold == 0 }
+        return when {
+            soldEmpty && deadEmpty -> "tidak ada produk yang terjual maupun tidak laku pada periode ini"
+            soldEmpty -> "tidak ada produk yang terjual pada periode ini"
+            deadEmpty -> "tidak ada produk yang tidak laku pada periode ini"
+            else -> null
         }
     }
 
-    fun printSalesReport(isMonthly: Boolean) {
+    private fun appendEmptyStateNote(
+        baseMessage: String,
+        data: SalesReportData?,
+    ): String {
+        val note = data?.let { buildEmptyStateNote(it) } ?: return baseMessage
+        return "$baseMessage (Catatan: $note)"
+    }
+
+    fun generateSalesReport(isMonthly: Boolean) {
+        if (!(_includeSalesSummary.value || _includeProductsSold.value || _includeDeadStock.value)) {
+            return
+        }
         viewModelScope.launch {
             val now = LocalDate.now(zone)
             val (start, end) = getReportRange(now, isMonthly)
-            val data = reportRepository.buildSalesReport(start, end, _showProductListInReport.value)
-            val profile = storeProfileRepository.get()
-            val periodLabel = if (isMonthly) "Bulanan: ${now.month.name} ${now.year}" else "Harian: ${now.format(dateFmt)}"
-            val shift = shiftRepository.getOpenShift()
-            val lines = ReceiptManager.buildSalesReportLines(data, profile, periodLabel, shift?.cashierName, shift?.id?.toString())
+            val data = reportRepository.buildSalesReport(start, end, needsProductData())
+            _salesReportData.value = data
+            _salesReportIsMonthly.value = isMonthly
+        }
+    }
+
+    /**
+     * Membangun ulang baris laporan dari data yang sudah di-generate + section
+     * yang sedang dicentang saat ini. Dipakai baik oleh printSalesReport()
+     * maupun tombol "PDF" di UI, supaya kedua jalur selalu konsisten.
+     */
+    suspend fun buildCurrentReportLinesForExport(): List<ReceiptLine>? {
+        val data = _salesReportData.value ?: return null
+        val profile = storeProfileRepository.get()
+        val now = LocalDate.now(zone)
+        val periodLabel = periodLabelFor(now, _salesReportIsMonthly.value)
+        val shift = shiftRepository.getOpenShift()
+        return ReceiptManager.buildSalesReportLines(
+            data = data,
+            storeProfile = profile,
+            periodLabel = periodLabel,
+            printedBy = shift?.cashierName,
+            shiftId = shift?.id?.toString(),
+            includeSalesSummary = _includeSalesSummary.value,
+            includeProductsSold = _includeProductsSold.value,
+            includeDeadStock = _includeDeadStock.value,
+        )
+    }
+
+    fun printSalesReport() {
+        viewModelScope.launch {
+            val lines = buildCurrentReportLinesForExport()
+            if (lines == null) {
+                _messages.emit(ReportMessage("Generate laporan terlebih dahulu.", isError = true))
+                return@launch
+            }
 
             val printer = printerRepository.getDefault()
             if (printer == null) {
@@ -426,13 +515,35 @@ class ReportViewModel(
             }
 
             val outcome = printCoordinator.printCustomLines(printer, lines)
+            val reportData = _salesReportData.value
             when (outcome) {
-                is com.pos.offline.util.ReceiptPrintOutcome.Success -> _messages.emit(ReportMessage("Laporan berhasil dicetak.", isError = false))
-                is com.pos.offline.util.ReceiptPrintOutcome.SuccessWithNotice -> _messages.emit(ReportMessage("Laporan dicetak: ${outcome.notice}", isError = false))
-                is com.pos.offline.util.ReceiptPrintOutcome.Failed -> _messages.emit(ReportMessage("Gagal mencetak laporan: ${outcome.attempts.firstOrNull()?.message ?: "Unknown"}", isError = true))
-                com.pos.offline.util.ReceiptPrintOutcome.AlreadyInProgress -> _messages.emit(ReportMessage("Sedang mencetak, mohon tunggu...", isError = false))
-                com.pos.offline.util.ReceiptPrintOutcome.NoPrinterConfigured -> _messages.emit(ReportMessage("Printer belum diatur.", isError = true))
+                is com.pos.offline.util.ReceiptPrintOutcome.Success ->
+                    _messages.emit(ReportMessage(appendEmptyStateNote("Laporan berhasil dicetak.", reportData), isError = false))
+                is com.pos.offline.util.ReceiptPrintOutcome.SuccessWithNotice ->
+                    _messages.emit(ReportMessage(appendEmptyStateNote("Laporan dicetak: ${outcome.notice}", reportData), isError = false))
+                is com.pos.offline.util.ReceiptPrintOutcome.Failed ->
+                    _messages.emit(ReportMessage("Gagal mencetak laporan: ${outcome.attempts.firstOrNull()?.message ?: "Unknown"}", isError = true))
+                com.pos.offline.util.ReceiptPrintOutcome.AlreadyInProgress ->
+                    _messages.emit(ReportMessage("Sedang mencetak, mohon tunggu...", isError = false))
+                com.pos.offline.util.ReceiptPrintOutcome.NoPrinterConfigured ->
+                    _messages.emit(ReportMessage("Printer belum diatur.", isError = true))
             }
+        }
+    }
+
+    /**
+     * Dipanggil dari UI (ReportScreen) setelah file PDF laporan berhasil dibuat
+     * dan intent share dimulai, untuk menampilkan snackbar konfirmasi + catatan
+     * kalau ada section yang kosong.
+     */
+    fun notifyPdfExported() {
+        viewModelScope.launch {
+            _messages.emit(
+                ReportMessage(
+                    appendEmptyStateNote("Laporan PDF berhasil dibuat.", _salesReportData.value),
+                    isError = false,
+                ),
+            )
         }
     }
 
