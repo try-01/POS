@@ -1,5 +1,5 @@
 # =========================================================
-# 1. ATURAN UMUM & METADATA (Untuk Crashlytics/Loging)
+# 1. ATURAN UMUM & METADATA
 # =========================================================
 -keepattributes Signature, InnerClasses, EnclosingMethod, Deprecated, SourceFile, LineNumberTable
 -keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations, RuntimeVisibleTypeAnnotations, AnnotationDefault
@@ -9,31 +9,40 @@
 # =========================================================
 # 2. ROOM DATABASE & PARCELABLE
 # =========================================================
-# Menjaga nama field Entity agar tidak diobfuscate (menghindari error KSP/Room saat mapping SQLite)
 -keep @androidx.room.Entity class * { *; }
 -keepclassmembers class * {
     @androidx.room.Ignore <fields>;
 }
 
-# Standar Android untuk objek Parcelable
 -keep class * implements android.os.Parcelable {
     public static final android.os.Parcelable$Creator *;
 }
 
 # =========================================================
-# 3. APACHE POI & XMLBEANS (OPTIMALISASI EXCEL)
+# 3. APACHE POI & XMLBEANS (PERBAIKAN CRASH W5/index.xsb)
 # =========================================================
-# HANYA keep skema XML yang di-load via Reflection oleh POI.
-# Jangan pernah menge-keep org.apache.poi.** secara keseluruhan!
--keep class org.apache.xmlbeans.** { *; }
--keep class com.microsoft.schemas.** { *; }
--keep class org.openxmlformats.** { *; }
--keep class schemaorg_apache_xmlbeans.** { *; }
-
+# 1. Cegah R8 mengubah nama paket (Package Repackaging/Obfuscation)
+-keeppackagenames org.apache.poi.**
 -keeppackagenames org.apache.xmlbeans.**
 -keeppackagenames org.openxmlformats.**
 -keeppackagenames schemaorg_apache_xmlbeans.**
 -keeppackagenames com.microsoft.schemas.**
+
+# 2. Pertahankan struktur folder direktori tempat file .xsb disimpan
+-keepdirectories org.apache.poi.**
+-keepdirectories org.apache.xmlbeans.**
+-keepdirectories org.openxmlformats.**
+-keepdirectories schemaorg_apache_xmlbeans.**
+-keepdirectories com.microsoft.schemas.**
+
+# 3. Keep penuh seluruh kelas POI & XMLBeans agar loader skema .xsb tidak rusak
+-keep class org.apache.poi.** { *; }
+-keep class org.apache.xmlbeans.** { *; }
+-keep class org.openxmlformats.** { *; }
+-keep class schemaorg_apache_xmlbeans.** { *; }
+-keep class com.microsoft.schemas.** { *; }
+-keep class org.etsi.** { *; }
+-keep class org.w3.** { *; }
 
 # =========================================================
 # 4. ESCPOS THERMAL PRINTER
@@ -41,10 +50,8 @@
 -keep class com.dantsu.escposprinter.** { *; }
 
 # =========================================================
-# 5. DONTWARN (MENYEMBUNYIKAN WARNING DEPENDENSI JAVA DESKTOP)
+# 5. DONTWARN (SUPPRESS WARNINGS)
 # =========================================================
-# Library POI dan MLKit sering mencari class Java Desktop (java.awt, javax.imageio)
-# yang tidak ada di Android. Kita beri tahu ProGuard untuk mengabaikannya.
 -dontwarn androidx.camera.**
 -dontwarn com.google.mlkit.**
 -dontwarn java.awt.**
