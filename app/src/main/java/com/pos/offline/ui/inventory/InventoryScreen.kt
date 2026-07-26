@@ -71,6 +71,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -91,6 +93,7 @@ import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 import com.pos.offline.ui.components.rememberBarcodeScanner
 import com.pos.offline.util.ExcelManager
 import com.pos.offline.util.toRupiah
+import com.pos.offline.ui.inventory.sanitizeScannedCode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -106,6 +109,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
     val isSaving by viewModel.isSaving.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     val sortOption by viewModel.sortOption.collectAsStateWithLifecycle()
     val topSalesRange by viewModel.topSalesRange.collectAsStateWithLifecycle()
 
@@ -230,7 +234,11 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                     .imePadding(),
             ) {
                 if (products.isEmpty()) {
-                    EmptyInventory(hasQuery = query.isNotEmpty())
+                    EmptyInventory(
+                        hasQuery = query.isNotEmpty(),
+                        isTopSalesEmpty = sortOption == ProductSortOption.TERLARIS,
+                        topSalesRangeLabel = topSalesRange.label,
+                    )
                 } else {
                     LazyColumn(
                         contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 96.dp),
@@ -274,6 +282,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             checkBarcodeConflict = viewModel::checkBarcodeConflict,
             checkSkuConflict = viewModel::checkSkuConflict,
             onDeleteRequest = { viewModel.requestDeleteFromForm(state.id) },
+            onScanError = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
         )
     }
 
@@ -641,7 +650,11 @@ private fun StockBadge(stock: Int) {
 }
 
 @Composable
-private fun EmptyInventory(hasQuery: Boolean) {
+private fun EmptyInventory(
+    hasQuery: Boolean,
+    isTopSalesEmpty: Boolean = false,
+    topSalesRangeLabel: String = "",
+) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
@@ -652,16 +665,27 @@ private fun EmptyInventory(hasQuery: Boolean) {
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                if (hasQuery) "Produk tidak ditemukan" else "Belum ada produk",
+                when {
+                    isTopSalesEmpty -> "Belum ada penjualan untuk ${topSalesRangeLabel.lowercase()}"
+                    hasQuery -> "Produk tidak ditemukan"
+                    else -> "Belum ada produk"
+                },
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             )
-            if (!hasQuery) {
-                Text(
-                    "Ketuk tombol + untuk mulai",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                )
+            when {
+                isTopSalesEmpty ->
+                    Text(
+                        "Katalog produk tetap ada — coba pilih rentang waktu lain",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
+                !hasQuery ->
+                    Text(
+                        "Ketuk tombol + untuk mulai",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
             }
         }
     }
@@ -808,10 +832,11 @@ private fun ProductFormDialog(
     checkBarcodeConflict: suspend (String, Long) -> String?,
     checkSkuConflict: suspend (String, Long) -> String?,
     onDeleteRequest: () -> Unit,
+    onScanError: (String) -> Unit,
 ) {
     var name by remember(state.id) { mutableStateOf(state.name) }
     var sku by remember(state.id) { mutableStateOf(state.sku) }
-    var barcode by remember(state.id) { mutableStateOf(state.barcode ?: "") }
+    var barcode by remember(state.id) { mutableStateOf(state.barcode) }
     var category by remember(state.id) { mutableStateOf(state.category) }
     var price by remember(state.id) {
         mutableStateOf(if (state.price > 0) state.price.toString() else "")
@@ -825,6 +850,8 @@ private fun ProductFormDialog(
 
     var barcodeConflict by remember(state.id) { mutableStateOf<String?>(null) }
     var skuConflict by remember(state.id) { mutableStateOf<String?>(null) }
+    var isCheckingBarcode by remember(state.id) { mutableStateOf(false) }
+    var isCheckingSku by remember(state.id) { mutableStateOf(false) }
 
     val context = LocalContext.current
     val hasCamera =
@@ -832,7 +859,17 @@ private fun ProductFormDialog(
             context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
         }
 
-    val launchScanner = rememberBarcodeScanner(onScanned = { code -> barcode = code })
+    val launchScanner =
+        rememberBarcodeScanner(
+            onScanned = { code ->
+                val sanitized = sanitizeScannedCode(code)
+                if (sanitized != null) {
+                    barcode = sanitized
+                } else {
+                    onScanError("Gagal memindai kode. Coba pindai ulang.")
+                }
+            },
+        )
 
     val configuration = LocalConfiguration.current
     val maxContentHeight = (configuration.screenHeightDp * 0.42f).dp
@@ -842,24 +879,30 @@ private fun ProductFormDialog(
         val trimmed = barcode.trim()
         if (trimmed.isBlank()) {
             barcodeConflict = null
+            isCheckingBarcode = false
             return@LaunchedEffect
         }
+        isCheckingBarcode = true
         kotlinx.coroutines.delay(300) // debounce, hindari query tiap keystroke
         barcodeConflict = checkBarcodeConflict(trimmed, state.id)
+        isCheckingBarcode = false
     }
 
     LaunchedEffect(sku) {
         val trimmed = sku.trim()
         if (trimmed.isBlank()) {
             skuConflict = null
+            isCheckingSku = false
             return@LaunchedEffect
         }
+        isCheckingSku = true
         kotlinx.coroutines.delay(300)
         skuConflict = checkSkuConflict(trimmed, state.id)
+        isCheckingSku = false
     }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text(if (state.isNew) "Tambah Produk" else "Edit Produk", style = MaterialTheme.typography.titleMedium) },
         text = {
             val priceLong = price.toLongOrNull() ?: 0L
@@ -996,7 +1039,8 @@ private fun ProductFormDialog(
                 TextButton(onClick = onDismiss, enabled = !isSaving) { Text("Batal") }
                 Spacer(Modifier.width(4.dp))
                 Button(
-                    enabled = !isSaving && name.isNotBlank() && barcodeConflict == null && skuConflict == null,
+                    enabled = !isSaving && !isCheckingBarcode && !isCheckingSku &&
+                        name.isNotBlank() && barcodeConflict == null && skuConflict == null,
                     onClick = {
                         onSave(
                             ProductFormState(
@@ -1037,7 +1081,7 @@ private fun NumberField(
 ) {
     OutlinedTextField(
         value = value,
-        onValueChange = { input -> onValueChange(input.filter { it.isDigit() }) },
+        onValueChange = { input -> onValueChange(input.filter { it.isDigit() }.take(9)) },
         label = { Text(label, style = MaterialTheme.typography.bodySmall) },
         singleLine = true,
         textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),

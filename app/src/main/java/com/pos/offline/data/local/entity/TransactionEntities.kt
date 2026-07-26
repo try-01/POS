@@ -18,7 +18,14 @@ data class TransactionEntity(
     val tax: Long, // nominal pajak (Rupiah), dihitung setelah diskon
     val total: Long, // subtotal - diskon + pajak (yang harus dibayar)
     val paidAmount: Long, // uang diterima dari pelanggan
-    val change: Long,
+    val change: Long, // paidAmount - total (boleh negatif = kurang bayar/nego)
+    // Kembalian yang BENAR-BENAR diserahkan secara fisik ke pembeli.
+    // - Saat change <= 0 (kurang bayar/pas): selalu 0, tidak relevan.
+    // - Saat change > 0: 0 <= changeGiven <= change. Selisihnya = tip yang
+    //   sengaja tidak diambil pembeli sebagai ucapan terima kasih.
+    // Sumber kebenaran untuk uang FISIK yang masuk laci: paidAmount - changeGiven.
+    @ColumnInfo(defaultValue = "0")
+    val changeGiven: Long = 0L,
     @ColumnInfo(defaultValue = "'CASH'")
     val paymentMethod: String = PaymentMethod.CASH.name,
     val cashierId: Long? = null,

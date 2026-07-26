@@ -35,7 +35,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -84,6 +88,9 @@ data class ReportMessage(
 
 enum class ReportTab { TRANSACTIONS, SHIFTS }
 
+/** Tipe periode laporan penjualan (Harian/Bulanan) yang sedang ditampilkan (toggle). */
+enum class ReportPeriodType { DAILY, MONTHLY }
+
 data class ClosedShiftDetail(
     val shift: ShiftEntity,
     val summary: ShiftSummary,
@@ -102,6 +109,34 @@ data class ReturnSummary(
 data class PendingPrintTarget(
     val checkoutResult: CheckoutResult,
     val availablePrinters: List<PrinterEntity>,
+)
+
+/**
+ * State UI laporan penjualan hasil auto-refetch. Hidden = tidak ada periode
+ * dipilih ATAU tidak ada checkbox section yang aktif (collapsed). Loading =
+ * query sedang berjalan (data lama TIDAK ditampilkan basi, sengaja diganti
+ * indikator loading agar user tidak salah baca angka lama). Loaded = data
+ * final untuk kombinasi periode+checkbox yang SEDANG aktif saat ini.
+ */
+sealed class SalesReportUiState {
+    object Hidden : SalesReportUiState()
+
+    data class Loading(
+        val periodType: ReportPeriodType,
+    ) : SalesReportUiState()
+
+    data class Loaded(
+        val periodType: ReportPeriodType,
+        val data: SalesReportData,
+    ) : SalesReportUiState()
+}
+
+/** Snapshot kombinasi periode + checkbox yang valid untuk di-fetch. */
+private data class ReportSelection(
+    val periodType: ReportPeriodType,
+    val includeSalesSummary: Boolean,
+    val includeProductsSold: Boolean,
+    val includeDeadStock: Boolean,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -391,18 +426,15 @@ class ReportViewModel(
         _printUiState.value = PrintUiState.Result(outcome, result)
     }
 
-    // ==================== SALES REPORT ====================
-    private val _salesReportData = MutableStateFlow<SalesReportData?>(null)
-    val salesReportData: StateFlow<SalesReportData?> = _salesReportData.asStateFlow()
+    // ==================== SALES REPORT (auto-refetch) ====================
 
-    // Menyimpan tipe periode (harian/bulanan) dari laporan yang TERAKHIR di-generate,
-    // dipakai agar label & isi tombol Cetak/PDF selalu sinkron dengan data yang tampil
-    // (sebelumnya tombol selalu berlabel "Harian" walau data yang di-generate Bulanan).
-    private val _salesReportIsMonthly = MutableStateFlow(false)
-    val salesReportIsMonthly: StateFlow<Boolean> = _salesReportIsMonthly.asStateFlow()
+    // Periode yang sedang ditampilkan. null = collapsed/tersembunyi. Tap tombol
+    // yang SAMA lagi (lihat toggleReportPeriod) akan set balik ke null, sehingga
+    // detail bisa ditutup — sebelumnya tombol ini cuma bisa "buka", tidak bisa
+    // "tutup", karena hanya memanggil fungsi generate satu arah.
+    private val _selectedPeriodType = MutableStateFlow<ReportPeriodType?>(null)
+    val selectedPeriodType: StateFlow<ReportPeriodType?> = _selectedPeriodType.asStateFlow()
 
-    // Tiga section laporan bisa dipilih independen: kasir bebas pilih salah satu,
-    // dua, atau ketiganya sekaligus untuk dicetak/di-export dalam satu dokumen.
     private val _includeSalesSummary = MutableStateFlow(true)
     val includeSalesSummary: StateFlow<Boolean> = _includeSalesSummary.asStateFlow()
 
@@ -417,16 +449,84 @@ class ReportViewModel(
             sales || sold || dead
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
+    /**
+     * Sumber kebenaran tunggal untuk tampilan laporan. Reaktif terhadap
+     * PERUBAHAN periode ATAU checkbox mana pun — tidak perlu tombol
+     * "generate" terpisah lagi.
+     *
+     * Keamanan terhadap leak/lag/regresi:
+     * - debounce(300ms): user yang cepat centang beberapa checkbox berturut-turut
+     *   tidak memicu query DB bertubi-tubi; hanya kombinasi FINAL yang di-fetch.
+     * - distinctUntilChanged(): kalau hasil akhir sama dengan kombinasi
+     *   sebelumnya (mis. user centang-lalu-uncheck balik ke semula), tidak
+     *   ada fetch ulang yang sia-sia.
+     * - flatMapLatest: kalau kombinasi berubah SAAT query sebelumnya masih
+     *   berjalan, query lama otomatis dibatalkan (bukan diabaikan hasilnya
+     *   setelah selesai) — mencegah race "hasil query lama menimpa yang baru".
+     * - stateIn(WhileSubscribed(5000)): seluruh chain di atas HANYA aktif
+     *   selama ReportScreen benar-benar mengamati (collectAsStateWithLifecycle).
+     *   Saat user pindah tab/keluar layar >5 detik, coroutine ini otomatis
+     *   dibatalkan total — tidak ada query/collector yang menggantung di
+     *   background selamanya (no leak).
+     */
+    val salesReportUiState: StateFlow<SalesReportUiState> =
+        combine(
+            _selectedPeriodType,
+            _includeSalesSummary,
+            _includeProductsSold,
+            _includeDeadStock,
+        ) { periodType, sales, sold, dead ->
+            if (periodType == null || !(sales || sold || dead)) {
+                null
+            } else {
+                ReportSelection(periodType, sales, sold, dead)
+            }
+        }
+            .debounce(REPORT_DEBOUNCE_MS)
+            .distinctUntilChanged()
+            .flatMapLatest { selection ->
+                if (selection == null) {
+                    flowOf(SalesReportUiState.Hidden)
+                } else {
+                    flow {
+                        emit(SalesReportUiState.Loading(selection.periodType))
+                        val now = LocalDate.now(zone)
+                        val (start, end) = getReportRange(now, selection.periodType == ReportPeriodType.MONTHLY)
+                        val fetchProducts = selection.includeProductsSold || selection.includeDeadStock
+                        val data = reportRepository.buildSalesReport(start, end, fetchProducts)
+                        emit(SalesReportUiState.Loaded(selection.periodType, data))
+                    }
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SalesReportUiState.Hidden)
+
+    /** Tap tombol periode: pilih baru, atau tutup jika tombol yang sama ditekan lagi. */
+    fun toggleReportPeriod(periodType: ReportPeriodType) {
+        _selectedPeriodType.value = if (_selectedPeriodType.value == periodType) null else periodType
+    }
+
     fun toggleIncludeSalesSummary(checked: Boolean) {
         _includeSalesSummary.value = checked
+        collapseIfNothingSelected()
     }
 
     fun toggleIncludeProductsSold(checked: Boolean) {
         _includeProductsSold.value = checked
+        collapseIfNothingSelected()
     }
 
     fun toggleIncludeDeadStock(checked: Boolean) {
         _includeDeadStock.value = checked
+        collapseIfNothingSelected()
+    }
+
+    // Kalau user uncheck SEMUA section sementara detail sedang terbuka,
+    // otomatis collapse detailnya — mencegah tombol periode terlihat
+    // "aktif ter-highlight" padahal kontennya kosong/hidden.
+    private fun collapseIfNothingSelected() {
+        if (!(_includeSalesSummary.value || _includeProductsSold.value || _includeDeadStock.value)) {
+            _selectedPeriodType.value = null
+        }
     }
 
     private fun periodLabelFor(
@@ -434,59 +534,13 @@ class ReportViewModel(
         isMonthly: Boolean,
     ): String = if (isMonthly) "Bulanan: ${now.month.name} ${now.year}" else "Harian: ${now.format(dateFmt)}"
 
-    // Parameter boolean ke reportRepository.buildSalesReport hanya berfungsi sebagai
-    // sakelar performa (skip query produk kalau tidak dibutuhkan) — dikonfirmasi user.
-    private fun needsProductData(): Boolean = _includeProductsSold.value || _includeDeadStock.value
-
-    /**
-     * Bangun catatan singkat kalau section yang dipilih ternyata kosong,
-     * ditampilkan sebagai tambahan pesan snackbar setelah cetak/PDF berhasil.
-     * Hanya berlaku untuk section Produk Terjual & Dead Stock — section
-     * Laporan Penjualan selalu tampil dengan angka (termasuk nol), jadi
-     * tidak dianggap "kosong".
-     */
-    private fun buildEmptyStateNote(data: SalesReportData): String? {
-        val soldEmpty = _includeProductsSold.value && data.products.none { it.qtySold > 0 }
-        val deadEmpty = _includeDeadStock.value && data.products.none { it.qtySold == 0 }
-        return when {
-            soldEmpty && deadEmpty -> "tidak ada produk yang terjual maupun tidak laku pada periode ini"
-            soldEmpty -> "tidak ada produk yang terjual pada periode ini"
-            deadEmpty -> "tidak ada produk yang tidak laku pada periode ini"
-            else -> null
-        }
-    }
-
-    private fun appendEmptyStateNote(
-        baseMessage: String,
-        data: SalesReportData?,
-    ): String {
-        val note = data?.let { buildEmptyStateNote(it) } ?: return baseMessage
-        return "$baseMessage (Catatan: $note)"
-    }
-
-    fun generateSalesReport(isMonthly: Boolean) {
-        if (!(_includeSalesSummary.value || _includeProductsSold.value || _includeDeadStock.value)) {
-            return
-        }
-        viewModelScope.launch {
-            val now = LocalDate.now(zone)
-            val (start, end) = getReportRange(now, isMonthly)
-            val data = reportRepository.buildSalesReport(start, end, needsProductData())
-            _salesReportData.value = data
-            _salesReportIsMonthly.value = isMonthly
-        }
-    }
-
-    /**
-     * Membangun ulang baris laporan dari data yang sudah di-generate + section
-     * yang sedang dicentang saat ini. Dipakai baik oleh printSalesReport()
-     * maupun tombol "PDF" di UI, supaya kedua jalur selalu konsisten.
-     */
-    suspend fun buildCurrentReportLinesForExport(): List<ReceiptLine>? {
-        val data = _salesReportData.value ?: return null
+    private suspend fun buildReportLines(
+        periodType: ReportPeriodType,
+        data: SalesReportData,
+    ): List<ReceiptLine> {
         val profile = storeProfileRepository.get()
         val now = LocalDate.now(zone)
-        val periodLabel = periodLabelFor(now, _salesReportIsMonthly.value)
+        val periodLabel = periodLabelFor(now, periodType == ReportPeriodType.MONTHLY)
         val shift = shiftRepository.getOpenShift()
         return ReceiptManager.buildSalesReportLines(
             data = data,
@@ -500,14 +554,40 @@ class ReportViewModel(
         )
     }
 
+    /** Dipakai tombol PDF di UI. Ambil snapshot data yang SEDANG Loaded saat ini. */
+    suspend fun buildCurrentReportLinesForExport(): List<ReceiptLine>? {
+        val state = salesReportUiState.value as? SalesReportUiState.Loaded ?: return null
+        return buildReportLines(state.periodType, state.data)
+    }
+
+    private fun buildEmptyStateNote(data: SalesReportData): String? {
+        val soldEmpty = _includeProductsSold.value && data.products.none { it.qtySold > 0 }
+        val deadEmpty = _includeDeadStock.value && data.products.none { it.qtySold == 0 }
+        return when {
+            soldEmpty && deadEmpty -> "tidak ada produk yang terjual maupun tidak laku pada periode ini"
+            soldEmpty -> "tidak ada produk yang terjual pada periode ini"
+            deadEmpty -> "tidak ada produk yang tidak laku pada periode ini"
+            else -> null
+        }
+    }
+
+    private fun appendEmptyStateNote(
+        baseMessage: String,
+        data: SalesReportData,
+    ): String {
+        val note = buildEmptyStateNote(data) ?: return baseMessage
+        return "$baseMessage (Catatan: $note)"
+    }
+
     fun printSalesReport() {
         viewModelScope.launch {
-            val lines = buildCurrentReportLinesForExport()
-            if (lines == null) {
-                _messages.emit(ReportMessage("Generate laporan terlebih dahulu.", isError = true))
+            val state = salesReportUiState.value as? SalesReportUiState.Loaded
+            if (state == null) {
+                _messages.emit(ReportMessage("Pilih Harian/Bulanan dan tunggu laporan selesai dimuat.", isError = true))
                 return@launch
             }
 
+            val lines = buildReportLines(state.periodType, state.data)
             val printer = printerRepository.getDefault()
             if (printer == null) {
                 _messages.emit(ReportMessage("Printer belum diatur.", isError = true))
@@ -515,12 +595,11 @@ class ReportViewModel(
             }
 
             val outcome = printCoordinator.printCustomLines(printer, lines)
-            val reportData = _salesReportData.value
             when (outcome) {
                 is com.pos.offline.util.ReceiptPrintOutcome.Success ->
-                    _messages.emit(ReportMessage(appendEmptyStateNote("Laporan berhasil dicetak.", reportData), isError = false))
+                    _messages.emit(ReportMessage(appendEmptyStateNote("Laporan berhasil dicetak.", state.data), isError = false))
                 is com.pos.offline.util.ReceiptPrintOutcome.SuccessWithNotice ->
-                    _messages.emit(ReportMessage(appendEmptyStateNote("Laporan dicetak: ${outcome.notice}", reportData), isError = false))
+                    _messages.emit(ReportMessage(appendEmptyStateNote("Laporan dicetak: ${outcome.notice}", state.data), isError = false))
                 is com.pos.offline.util.ReceiptPrintOutcome.Failed ->
                     _messages.emit(ReportMessage("Gagal mencetak laporan: ${outcome.attempts.firstOrNull()?.message ?: "Unknown"}", isError = true))
                 com.pos.offline.util.ReceiptPrintOutcome.AlreadyInProgress ->
@@ -531,19 +610,11 @@ class ReportViewModel(
         }
     }
 
-    /**
-     * Dipanggil dari UI (ReportScreen) setelah file PDF laporan berhasil dibuat
-     * dan intent share dimulai, untuk menampilkan snackbar konfirmasi + catatan
-     * kalau ada section yang kosong.
-     */
+    /** Dipanggil dari UI setelah intent share PDF laporan dimulai. */
     fun notifyPdfExported() {
         viewModelScope.launch {
-            _messages.emit(
-                ReportMessage(
-                    appendEmptyStateNote("Laporan PDF berhasil dibuat.", _salesReportData.value),
-                    isError = false,
-                ),
-            )
+            val state = salesReportUiState.value as? SalesReportUiState.Loaded ?: return@launch
+            _messages.emit(ReportMessage(appendEmptyStateNote("Laporan PDF berhasil dibuat.", state.data), isError = false))
         }
     }
 
@@ -577,7 +648,12 @@ class ReportViewModel(
         val completed = txs.filterNot { it.isVoid }
         val voidedCount = txs.size - completed.size
 
-        val totalRevenue = completed.sumOf { it.total }
+        // Uang RIIL yang diterima per transaksi (bukan nominal `total`),
+        // menangani kasus nego harga di lapangan: paidAmount - kembalian
+        // yang benar2 diberikan (untuk sekarang: MAX(change,0), sebelum
+        // field changeGiven tersedia — lihat catatan Batch B).
+        fun actualReceived(tx: TransactionEntity) = tx.paidAmount - tx.change.coerceAtLeast(0L)
+
         val totalDiscount = completed.sumOf { it.discount }
         val totalTax = completed.sumOf { it.tax }
         val count = completed.size
@@ -585,15 +661,16 @@ class ReportViewModel(
         val cashRevenue =
             completed
                 .filter { it.paymentMethod == PaymentMethod.CASH.name }
-                .sumOf { it.total }
+                .sumOf(::actualReceived)
         val qrisRevenue =
             completed
                 .filter { it.paymentMethod == PaymentMethod.QRIS.name }
-                .sumOf { it.total }
+                .sumOf(::actualReceived)
+        val totalRevenue = completed.sumOf(::actualReceived)
         val hourly = MutableList(24) { 0L }
         for (tx in completed) {
             val hour = Instant.ofEpochMilli(tx.createdAt).atZone(zone).hour
-            hourly[hour] += tx.total
+            hourly[hour] += actualReceived(tx)
         }
 
         val average = if (count > 0) totalRevenue / count else 0L
@@ -649,5 +726,7 @@ class ReportViewModel(
             DateTimeFormatter
                 .ofPattern("EEEE, d MMMM yyyy · HH:mm:ss", Locale.forLanguageTag("id-ID"))
                 .withZone(ZoneId.systemDefault())
+
+        private const val REPORT_DEBOUNCE_MS = 300L
     }
 }

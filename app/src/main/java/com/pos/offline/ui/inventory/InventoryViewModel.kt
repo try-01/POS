@@ -12,6 +12,10 @@ import com.pos.offline.util.ExcelImportResult
 import com.pos.offline.util.ExcelManager
 import com.pos.offline.util.ExcelOutcome
 import com.pos.offline.util.ImportedProductRow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +29,11 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -68,6 +76,14 @@ enum class TopSalesRange(val label: String) {
     BULAN_INI("Bulan Ini")
 }
 
+// Top-level agar bisa dipakai ulang di InventoryScreen.kt (form scanner inline)
+// tanpa perlu melewati referensi ViewModel.
+internal fun sanitizeScannedCode(raw: String?): String? {
+    if (raw.isNullOrBlank()) return null
+    val cleaned = raw.trim().filter { c -> c.isLetterOrDigit() || c in "-_./: #" }.take(128)
+    return cleaned.ifBlank { null }
+}
+
 @OptIn(kotlinx.coroutines.FlowPreview::class, ExperimentalCoroutinesApi::class)
 class InventoryViewModel(
     private val appContext: Context,
@@ -83,9 +99,19 @@ class InventoryViewModel(
     private val _topSalesRange = MutableStateFlow(TopSalesRange.HARI_INI)
     val topSalesRange: StateFlow<TopSalesRange> = _topSalesRange.asStateFlow()
 
+    // Debounce HANYA diterapkan pada sumber query pencarian, bukan pada hasil
+    // combine gabungan (query, sort, range). Delay dinamis:
+    // - query kosong (initial load / pencarian dihapus) -> 0ms, instan.
+    // - query terisi -> 180ms, hindari query DB tiap keystroke.
+    // Perubahan sort/range tidak lagi ikut ter-delay karena tidak digabung
+    // SEBELUM debounce seperti versi lama.
+    private val debouncedSearchQuery: Flow<String> =
+        _searchQuery
+            .debounce { query -> if (query.isBlank()) 0L else 180L }
+            .distinctUntilChanged()
+
     val products: StateFlow<List<ProductEntity>> =
-        combine(_searchQuery, _sortOption, _topSalesRange) { query, sort, range -> Triple(query, sort, range) }
-            .debounce(180)
+        combine(debouncedSearchQuery, _sortOption, _topSalesRange) { query, sort, range -> Triple(query, sort, range) }
             .distinctUntilChanged()
             .flatMapLatest { (query, sort, range) ->
                 if (sort == ProductSortOption.TERLARIS) {
@@ -202,15 +228,40 @@ class InventoryViewModel(
     private suspend fun validateImportedRows(rows: List<ImportedProductRow>): List<ImportReviewItem> {
         val barcodeCounts = rows.mapNotNull { it.barcode }.groupingBy { it }.eachCount()
         val skuCounts = rows.groupingBy { it.sku }.eachCount()
-        return rows.map { row ->
-            val duplicateInFile = (row.barcode != null && (barcodeCounts[row.barcode] ?: 0) > 1) || (skuCounts[row.sku] ?: 0) > 1
-            val dbConflict = row.barcode?.let { productRepository.getProductByBarcodeAny(it) } ?: productRepository.getProductBySku(row.sku)
-            val status = when {
-                duplicateInFile -> ImportStatus.DUPLICATE_IN_FILE
-                dbConflict != null -> ImportStatus.CONFLICT
-                else -> ImportStatus.NEW
-            }
-            ImportReviewItem(row, status, dbConflict)
+        // Batas konkurensi disengaja KECIL (4) dan pakai Semaphore (bukan
+        // chunk statis) supaya:
+        // 1. AMAN untuk file impor sangat besar (ribuan baris) — async
+        //    dibuat untuk SEMUA baris sekaligus, tapi hanya 4 yang benar2
+        //    berjalan bersamaan; sisanya antre otomatis lewat Semaphore.
+        //    Coroutine itu ringan (bukan thread), jadi tidak akan membebani
+        //    memori meski jumlah baris sangat banyak.
+        // 2. Tidak ada batch-stall: baris lambat di satu grup tidak lagi
+        //    menahan grup berikutnya (beda dari pendekatan chunked+awaitAll
+        //    sebelumnya).
+        // 3. Aman terlepas dari konfigurasi WAL PosDatabase: kalau WAL aktif
+        //    -> dapat speedup nyata dari query paralel; kalau tidak -> Room
+        //    tetap menyerialisasi akses secara internal, hasilnya seperti
+        //    sekuensial tapi TIDAK crash/corrupt.
+        val concurrencyLimit = Semaphore(4)
+        return coroutineScope {
+            rows
+                .map { row ->
+                    async(Dispatchers.IO) {
+                        concurrencyLimit.withPermit {
+                            val duplicateInFile =
+                                (row.barcode != null && (barcodeCounts[row.barcode] ?: 0) > 1) || (skuCounts[row.sku] ?: 0) > 1
+                            val dbConflict =
+                                row.barcode?.let { productRepository.getProductByBarcodeAny(it) }
+                                    ?: productRepository.getProductBySku(row.sku)
+                            val status = when {
+                                duplicateInFile -> ImportStatus.DUPLICATE_IN_FILE
+                                dbConflict != null -> ImportStatus.CONFLICT
+                                else -> ImportStatus.NEW
+                            }
+                            ImportReviewItem(row, status, dbConflict)
+                        }
+                    }
+                }.awaitAll()
         }
     }
 
@@ -232,12 +283,6 @@ class InventoryViewModel(
             catch (e: Exception) { notify("Gagal impor: ${e.message ?: "kesalahan tak dikenal"}") }
             finally { _excelState.value = _excelState.value.copy(isCommitting = false) }
         }
-    }
-
-    private fun sanitizeScannedCode(raw: String?): String? {
-        if (raw.isNullOrBlank()) return null
-        val cleaned = raw.trim().filter { c -> c.isLetterOrDigit() || c in "-_./: #" }.take(128)
-        return cleaned.ifBlank { null }
     }
 
     /**

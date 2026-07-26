@@ -5,16 +5,35 @@ import androidx.room.Query
 import com.pos.offline.data.local.entity.ProductEntity
 import kotlinx.coroutines.flow.Flow
 
-data class SalesSummary(val transactionCount: Int, val subtotalSum: Long, val taxSum: Long, val totalSum: Long)
+data class SalesSummary(
+    val transactionCount: Int,
+    val subtotalSum: Long,
+    val taxSum: Long,
+    val totalSum: Long,
+    // Uang RIIL yang diterima (paidAmount - kembalian yg benar2 diberikan),
+    // BUKAN nilai nominal transaksi (totalSum). Menangani kasus nego harga
+    // di lapangan (paid < total). Field ditaruh di AKHIR agar tidak merusak
+    // positional destructuring lama jika ada.
+    val actualReceivedSum: Long,
+)
 data class ProfitAndItemsSummary(val itemsSoldSum: Int, val revenueSum: Long, val costSum: Long)
-data class PaymentMethodSummary(val paymentMethod: String, val total: Long, val count: Int)
+data class PaymentMethodSummary(
+    val paymentMethod: String,
+    val total: Long, // nominal transaksi (on-paper) — dipertahankan utk breakdown
+    val count: Int,
+    val actualReceived: Long, // uang riil diterima per metode pembayaran
+)
 data class ProductSalesRow(val productId: Long, val productName: String, val sku: String, val price: Long, val stock: Int, val qtySold: Int, val revenue: Long)
 
 @Dao
 interface ReportDao {
+    // NOTE: MAX(change, 0) di sini adalah fungsi SCALAR (2 argumen), dievaluasi
+    // per-baris SEBELUM di-SUM — bukan fungsi aggregate. Pola sama dengan
+    // ShiftDao.cashRevenueForShift/qrisRevenueForShift.
     @Query("""
         SELECT COUNT(*) as transactionCount, COALESCE(SUM(subtotal),0) as subtotalSum,
-               COALESCE(SUM(tax),0) as taxSum, COALESCE(SUM(total),0) as totalSum
+               COALESCE(SUM(tax),0) as taxSum, COALESCE(SUM(total),0) as totalSum,
+               COALESCE(SUM(paidAmount - MAX(change,0)),0) as actualReceivedSum
         FROM transactions WHERE createdAt BETWEEN :start AND :end AND status = 'COMPLETED'
     """)
     suspend fun getSalesSummary(start: Long, end: Long): SalesSummary
@@ -38,7 +57,8 @@ interface ReportDao {
     suspend fun getRestockedReturnsCost(start: Long, end: Long): Long
 
     @Query("""
-        SELECT paymentMethod, COALESCE(SUM(total),0) as total, COUNT(*) as count
+        SELECT paymentMethod, COALESCE(SUM(total),0) as total, COUNT(*) as count,
+               COALESCE(SUM(paidAmount - MAX(change,0)),0) as actualReceived
         FROM transactions WHERE createdAt BETWEEN :start AND :end AND status = 'COMPLETED'
         GROUP BY paymentMethod
     """)

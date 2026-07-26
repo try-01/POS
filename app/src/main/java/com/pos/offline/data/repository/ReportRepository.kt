@@ -23,10 +23,17 @@ class ReportRepository(private val reportDao: ReportDao) {
         val profitItems = reportDao.getProfitAndItemsSummary(start, end)
         val payments = reportDao.getPaymentMethodSummary(start, end)
         val returns = reportDao.getReturnsTotal(start, end)
-        
+
+        // Diskon tetap dihitung dari nilai NOMINAL (subtotal/tax/total) —
+        // TIDAK terpengaruh oleh nego/tip, karena itu murni angka "on paper"
+        // hasil kalkulasi diskon+pajak saat checkout.
         val diskon = summary.subtotalSum + summary.taxSum - summary.totalSum
-        val pendapatanBersih = summary.totalSum - returns
-        
+
+        // Pendapatan bersih kini berbasis uang RIIL yang diterima
+        // (actualReceivedSum), bukan nilai nominal transaksi (totalSum).
+        // Ini yang mencerminkan "uang di laci = uang di app".
+        val pendapatanBersih = summary.actualReceivedSum - returns
+
         val restockedCost = reportDao.getRestockedReturnsCost(start, end)
         val netCogs = profitItems.costSum - restockedCost
         val labaBersih = pendapatanBersih - netCogs

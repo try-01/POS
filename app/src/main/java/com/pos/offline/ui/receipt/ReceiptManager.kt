@@ -105,7 +105,11 @@ object ReceiptManager {
         val payLabel = paymentMethodLabel(tx.paymentMethod)
         gridItems.add(Pair(payLabel, tx.paidAmount.toRupiah()))
 
-        if (tx.change > 0) gridItems.add(Pair("Kembali", tx.change.toRupiah()))
+        if (tx.change > 0) {
+            gridItems.add(Pair("Kembali", tx.change.toRupiah()))
+        } else if (tx.change < 0) {
+            gridItems.add(Pair("Kurang Bayar", kotlin.math.abs(tx.change).toRupiah()))
+        }
         if (tx.discount > 0) gridItems.add(Pair("Diskon", tx.discount.toRupiah()))
         if (tx.tax > 0) gridItems.add(Pair("Pajak", tx.tax.toRupiah()))
 
@@ -338,7 +342,7 @@ object ReceiptManager {
             lines += ReceiptLine(left = "Penjualan (sblm diskon)", right = data.summary.subtotalSum.toRupiah())
             if (data.diskon > 0) lines += ReceiptLine(left = "Diskon", right = "- ${data.diskon.toRupiah()}")
             if (data.summary.taxSum > 0) lines += ReceiptLine(left = "Pajak", right = data.summary.taxSum.toRupiah())
-            lines += ReceiptLine(left = "PENDAPATAN BERSIH", right = data.pendapatanBersih.toRupiah(), bold = true, large = true)
+            lines += ReceiptLine(left = "PENDAPATAN BERSIH", right = data.pendapatanBersih.toRupiah(), bold = true)
             if (data.returnsTotal > 0) lines += ReceiptLine(left = "  (Termasuk Retur)", right = "- ${data.returnsTotal.toRupiah()}")
             lines += ReceiptLine(left = "Laba Bersih", right = data.labaBersih.toRupiah(), bold = true)
             lines += divider()
@@ -346,7 +350,9 @@ object ReceiptManager {
             lines += ReceiptLine(left = "Metode Pembayaran", align = ReceiptAlign.CENTER, bold = true)
             data.payments.forEach {
                 val label = PaymentMethod.fromStorage(it.paymentMethod).label
-                lines += ReceiptLine(left = label, right = "${it.count}x  ${it.total.toRupiah()}")
+                // Uang riil diterima, bukan nominal transaksi — konsisten dg
+                // tujuan "uang di laci = uang di app".
+                lines += ReceiptLine(left = label, right = "${it.count}x  ${it.actualReceived.toRupiah()}")
             }
             lines += divider()
         }

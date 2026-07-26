@@ -123,6 +123,8 @@ object EscPosReceiptFormatter {
 
         if (transaction.change > 0) {
             gridItems.add(Pair("Kembali", transaction.change.toRupiah()))
+        } else if (transaction.change < 0) {
+            gridItems.add(Pair("Kurang Bayar", kotlin.math.abs(transaction.change).toRupiah()))
         }
         if (transaction.discount > 0) {
             gridItems.add(Pair("Diskon", transaction.discount.toRupiah()))

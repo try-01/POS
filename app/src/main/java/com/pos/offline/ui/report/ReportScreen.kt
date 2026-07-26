@@ -1,5 +1,10 @@
 package com.pos.offline.ui.report
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.rememberCoroutineScope
@@ -213,8 +218,8 @@ fun ReportScreen(
             }
 
             item(key = "sales_report_generator") {
-                val salesData by viewModel.salesReportData.collectAsStateWithLifecycle()
-                val salesReportIsMonthly by viewModel.salesReportIsMonthly.collectAsStateWithLifecycle()
+                val selectedPeriodType by viewModel.selectedPeriodType.collectAsStateWithLifecycle()
+                val salesReportUiState by viewModel.salesReportUiState.collectAsStateWithLifecycle()
                 val includeSalesSummary by viewModel.includeSalesSummary.collectAsStateWithLifecycle()
                 val includeProductsSold by viewModel.includeProductsSold.collectAsStateWithLifecycle()
                 val includeDeadStock by viewModel.includeDeadStock.collectAsStateWithLifecycle()
@@ -223,7 +228,7 @@ fun ReportScreen(
                 val scope = rememberCoroutineScope()
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Generate Laporan Penjualan", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp), fontWeight = FontWeight.SemiBold)
+                    Text("Laporan Penjualan", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp), fontWeight = FontWeight.SemiBold)
 
                     Text(
                         "Pilih bagian laporan (bisa lebih dari satu):",
@@ -250,51 +255,38 @@ fun ReportScreen(
                         )
                     }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = { viewModel.generateSalesReport(false) },
-                            enabled = canGenerateReport,
-                            modifier = Modifier.weight(1f),
-                        ) { Text("Harian") }
-                        Button(
-                            onClick = { viewModel.generateSalesReport(true) },
-                            enabled = canGenerateReport,
-                            modifier = Modifier.weight(1f),
-                        ) { Text("Bulanan") }
-                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "Tampilkan periode (tap lagi untuk menutup):",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                    ReportPeriodToggleRow(
+                        selected = selectedPeriodType,
+                        enabled = canGenerateReport,
+                        onSelect = viewModel::toggleReportPeriod,
+                    )
 
-                    salesData?.let { data ->
-                        GlassCard(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), contentPadding = PaddingValues(12.dp)) {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                SummaryLine("Total Transaksi", "${data.summary.transactionCount} struk")
-                                SummaryLine("Pendapatan Bersih", data.pendapatanBersih.toRupiah(), emphasize = true)
-                                SummaryLine("Laba Bersih", data.labaBersih.toRupiah(), color = MaterialTheme.colorScheme.primary)
-                                if (data.diskon > 0) SummaryLine("Diskon", "- ${data.diskon.toRupiah()}")
-                                if (data.summary.taxSum > 0) SummaryLine("Pajak", data.summary.taxSum.toRupiah())
-
-                                Spacer(Modifier.height(8.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(
-                                        onClick = { viewModel.printSalesReport() },
-                                        enabled = canGenerateReport,
-                                        modifier = Modifier.weight(1f),
-                                    ) { Text(if (salesReportIsMonthly) "Cetak Bulanan" else "Cetak Harian") }
-                                    OutlinedButton(
-                                        onClick = {
-                                            scope.launch {
-                                                val lines = viewModel.buildCurrentReportLinesForExport() ?: return@launch
-                                                val suffix = if (salesReportIsMonthly) "Bulanan" else "Harian"
-                                                val file = ReceiptManager.exportPdfFromLines(context, lines, "Laporan_$suffix")
-                                                context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
-                                                viewModel.notifyPdfExported()
-                                            }
-                                        },
-                                        enabled = canGenerateReport,
-                                        modifier = Modifier.weight(1f),
-                                    ) { Text(if (salesReportIsMonthly) "PDF Bulanan" else "PDF Harian") }
+                    AnimatedVisibility(
+                        visible = salesReportUiState !is SalesReportUiState.Hidden,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically(),
+                    ) {
+                        SalesReportResultCard(
+                            uiState = salesReportUiState,
+                            onPrint = viewModel::printSalesReport,
+                            onExportPdf = {
+                                scope.launch {
+                                    val lines = viewModel.buildCurrentReportLinesForExport() ?: return@launch
+                                    val isMonthly =
+                                        (salesReportUiState as? SalesReportUiState.Loaded)?.periodType == ReportPeriodType.MONTHLY
+                                    val suffix = if (isMonthly) "Bulanan" else "Harian"
+                                    val file = ReceiptManager.exportPdfFromLines(context, lines, "Laporan_$suffix")
+                                    context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
+                                    viewModel.notifyPdfExported()
                                 }
-                            }
-                        }
+                            },
+                        )
                     }
                 }
             }
@@ -476,6 +468,115 @@ fun ReportScreen(
             },
             onDismiss = viewModel::closeReturnDetail,
         )
+    }
+}
+
+@Composable
+private fun ReportPeriodToggleRow(
+    selected: ReportPeriodType?,
+    enabled: Boolean,
+    onSelect: (ReportPeriodType) -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        ReportPeriodChip(
+            label = "Harian",
+            isSelected = selected == ReportPeriodType.DAILY,
+            enabled = enabled,
+            onClick = { onSelect(ReportPeriodType.DAILY) },
+            modifier = Modifier.weight(1f),
+        )
+        ReportPeriodChip(
+            label = "Bulanan",
+            isSelected = selected == ReportPeriodType.MONTHLY,
+            enabled = enabled,
+            onClick = { onSelect(ReportPeriodType.MONTHLY) },
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun ReportPeriodChip(
+    label: String,
+    isSelected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+            color =
+                when {
+                    isSelected -> MaterialTheme.colorScheme.onPrimary
+                    !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+        )
+    }
+}
+
+@Composable
+private fun SalesReportResultCard(
+    uiState: SalesReportUiState,
+    onPrint: () -> Unit,
+    onExportPdf: () -> Unit,
+) {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        contentPadding = PaddingValues(12.dp),
+    ) {
+        when (uiState) {
+            is SalesReportUiState.Loading -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Memuat laporan...", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            is SalesReportUiState.Loaded -> {
+                val data = uiState.data
+                val periodLabel = if (uiState.periodType == ReportPeriodType.MONTHLY) "Bulanan" else "Harian"
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SummaryLine("Total Transaksi", "${data.summary.transactionCount} struk")
+                    SummaryLine("Pendapatan Bersih", data.pendapatanBersih.toRupiah(), emphasize = true)
+                    SummaryLine("Laba Bersih", data.labaBersih.toRupiah(), color = MaterialTheme.colorScheme.primary)
+                    if (data.diskon > 0) SummaryLine("Diskon", "- ${data.diskon.toRupiah()}")
+                    if (data.summary.taxSum > 0) SummaryLine("Pajak", data.summary.taxSum.toRupiah())
+
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = onPrint, modifier = Modifier.weight(1f)) { Text("Cetak $periodLabel") }
+                        OutlinedButton(onClick = onExportPdf, modifier = Modifier.weight(1f)) { Text("PDF $periodLabel") }
+                    }
+                }
+            }
+
+            SalesReportUiState.Hidden -> Unit
+        }
     }
 }
 

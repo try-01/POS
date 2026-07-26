@@ -87,17 +87,30 @@ interface ShiftDao {
         return updated
     }
 
+    // Uang tunai FISIK yang benar-benar masuk laci, bukan nilai nominal
+    // transaksi (total). Rumus: paidAmount - MAX(change, 0).
+    //   - change >= 0 (kembalian diberikan)      -> hasil = total (sama seperti dulu)
+    //   - change <  0 (kurang bayar, "Tetap Lanjutkan") -> hasil = paidAmount (uang fisik aktual)
+    // Wajib pakai ini utk expectedCashInDrawer, BUKAN sum(total), agar
+    // rekonsiliasi kas saat tutup shift akurat terhadap kasus nego/pembulatan.
     @Query(
         """
-        SELECT COALESCE(SUM(total), 0) FROM transactions
+        SELECT COALESCE(SUM(paidAmount - MAX(change, 0)), 0) FROM transactions
         WHERE shiftId = :shiftId AND paymentMethod = 'CASH' AND status = 'COMPLETED'
         """,
     )
     suspend fun cashRevenueForShift(shiftId: Long): Long
 
+    // Disamakan dengan cashRevenueForShift: uang QRIS yang benar-benar
+    // diterima, bukan nilai nominal transaksi (total). Menangani kasus
+    // nego harga di lapangan (paid < total via QRIS). Keterbatasan yang
+    // diketahui: untuk kasus "tip" (paid > total, kelebihan sengaja TIDAK
+    // dikembalikan), formula ini tetap meng-clamp ke `total` karena sistem
+    // belum punya field untuk membedakan "kembalian diberikan" vs "kembalian
+    // jadi tip" — sama seperti keterbatasan pada cashRevenueForShift.
     @Query(
         """
-        SELECT COALESCE(SUM(total), 0) FROM transactions
+        SELECT COALESCE(SUM(paidAmount - MAX(change, 0)), 0) FROM transactions
         WHERE shiftId = :shiftId AND paymentMethod = 'QRIS' AND status = 'COMPLETED'
         """,
     )

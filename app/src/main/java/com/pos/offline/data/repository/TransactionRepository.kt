@@ -78,6 +78,12 @@ class TransactionRepository(
         cashierId: Long? = null,
         cashierName: String = "",
         shiftId: Long? = null,
+        // null = default (kembalian diberikan PENUH, perilaku lama/backward-
+        // compatible). Diisi eksplisit oleh kasir saat mau menyisakan sebagian
+        // sebagai tip (mis. change=Rp2.000, changeGivenOverride=Rp0 -> full tip).
+        // Nilai di luar rentang [0, max(change,0)] otomatis di-clamp ke rentang
+        // valid terdekat (defense-in-depth, independen dari validasi UI).
+        changeGivenOverride: Long? = null,
     ): CheckoutResult {
         require(cart.isNotEmpty()) { "Keranjang kosong" }
 
@@ -95,7 +101,14 @@ class TransactionRepository(
         val taxableBase = (subtotal - discountAmount).coerceAtLeast(0L) // DPP
         val tax = (taxableBase * taxRate).roundToRupiah()
         val total = taxableBase + tax
-        val change = (paid - total).coerceAtLeast(0L)
+        // SENGAJA TIDAK di-coerce ke 0: nilai negatif = pembayaran kurang dari
+        // total tapi transaksi tetap dilanjutkan (mis. nego harga/pembulatan
+        // di lapangan, dikonfirmasi via dialog "Tetap Lanjutkan"). Nilai asli
+        // (boleh negatif) WAJIB tersimpan apa adanya demi akurasi laporan.
+        val change = paid - total
+
+        val maxChangeGiven = change.coerceAtLeast(0L)
+        val changeGiven = (changeGivenOverride ?: maxChangeGiven).coerceIn(0L, maxChangeGiven)
 
         val invoiceId = "INV-${System.currentTimeMillis()}"
         val now = System.currentTimeMillis()
@@ -110,6 +123,7 @@ class TransactionRepository(
                 total = total,
                 paidAmount = paid,
                 change = change,
+                changeGiven = changeGiven,
                 paymentMethod = paymentMethod.name,
                 cashierId = cashierId,
                 cashierName = cashierName,

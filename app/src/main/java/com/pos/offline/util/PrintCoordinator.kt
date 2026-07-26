@@ -8,6 +8,7 @@ import com.pos.offline.data.repository.StoreProfileRepository
 import com.pos.offline.ui.receipt.EscPosReceiptFormatter
 import com.pos.offline.ui.receipt.ReceiptLine
 import com.pos.offline.ui.receipt.ReceiptManager
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -154,8 +155,16 @@ class PrintCoordinator(
             try {
                 withContext(Dispatchers.IO) { ReceiptManager.exportToPdf(appContext, result, storeProfile) }
             } catch (e: Exception) {
+                // Fire-and-forget disengaja: kegagalan fallback PDF tidak boleh
+                // menaikkan exception ke caller (semua printer sudah gagal,
+                // fallback ini sekadar "bonus" agar user tetap bisa share PDF).
+                Log.e(TAG, "Gagal membuat fallback PDF untuk transaksi ${result.transaction.id}", e)
                 null
             }
         return ReceiptPrintOutcome.Failed(failures, fallbackPdf)
+    }
+
+    companion object {
+        private const val TAG = "PrintCoordinator"
     }
 }

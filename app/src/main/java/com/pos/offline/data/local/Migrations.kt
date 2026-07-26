@@ -245,6 +245,25 @@ object Migrations {
             }
         }
 
+    val MIGRATION_12_13 =
+        object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Kembalian yang BENAR-BENAR diserahkan ke pembeli (fisik).
+                // Selisih `change - changeGiven` (saat change > 0) = tip yang
+                // sengaja tidak diambil pembeli.
+                db.execSQL(
+                    "ALTER TABLE transactions ADD COLUMN changeGiven INTEGER NOT NULL DEFAULT 0",
+                )
+                // Backfill data lama: sebelum fitur "change negatif/tip" ada,
+                // kolom `change` SELALU >= 0 dan SELALU diberikan penuh sbg
+                // kembalian. Maka changeGiven lama = change lama (identik
+                // dengan perilaku sebelumnya, tidak ada tip pada data historis).
+                db.execSQL(
+                    "UPDATE transactions SET changeGiven = CASE WHEN change > 0 THEN change ELSE 0 END",
+                )
+            }
+        }
+
     val ALL: Array<Migration> =
         arrayOf(
             MIGRATION_1_2,
@@ -258,5 +277,6 @@ object Migrations {
             MIGRATION_9_10,
             MIGRATION_10_11,
             MIGRATION_11_12,
+            MIGRATION_12_13,
         )
 }

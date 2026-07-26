@@ -17,11 +17,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
@@ -173,7 +171,7 @@ fun PosScreen(
     val isCartEmpty by remember { derivedStateOf { cart.isEmpty() } }
     val isProcessing by remember { derivedStateOf { checkoutState is CheckoutState.Processing } }
     val change by remember(paid, totals) {
-        derivedStateOf { (paid - totals.total).coerceAtLeast(0L) }
+        derivedStateOf { paid - totals.total }
     }
 
     val cartQtyByProductId by remember(cart) {
@@ -214,8 +212,9 @@ fun PosScreen(
                     openShift = activeShift,
                     isOpeningDrawer = isOpeningDrawer,
                     onClick = {
+                        val currentActiveShift = activeShift
                         when {
-                            activeShift != null -> viewModel.openEndShiftDialog(activeShift!!)
+                            currentActiveShift != null -> viewModel.openEndShiftDialog(currentActiveShift)
                             openShifts.isEmpty() -> viewModel.openStartShiftDialog()
                             // >1 shift terbuka & belum ada yang dipilih -> paksa pilih dulu.
                             else -> viewModel.openShiftListDialog()
@@ -769,8 +768,15 @@ private fun StartShiftDialog(
     onDismiss: () -> Unit,
     onConfirm: (cashierId: Long, startingCash: Long) -> Unit,
 ) {
-    var selectedCashier by remember(cashiers) { mutableStateOf(cashiers.firstOrNull()) }
+    var selectedCashier by remember { mutableStateOf(cashiers.firstOrNull()) }
     var startingCash by remember { mutableStateOf(0L) }
+
+    LaunchedEffect(cashiers) {
+        val current = selectedCashier
+        if (current == null || cashiers.none { it.id == current.id }) {
+            selectedCashier = cashiers.firstOrNull()
+        }
+    }
 
     AlertDialog(
         onDismissRequest = { if (!isProcessing) onDismiss() },
@@ -1590,7 +1596,14 @@ private fun TotalsSummary(
             onValueChange = onPaidChange,
             modifier = Modifier.fillMaxWidth().height(44.dp),
         )
-        if (paid > 0) SummaryLine("Kembalian", change.toRupiah(), color = MaterialTheme.colorScheme.primary)
+        if (paid > 0) {
+            val changeAbs = kotlin.math.abs(change)
+            if (change < 0L) {
+                SummaryLine("Kurang Bayar", changeAbs.toRupiah(), color = MaterialTheme.colorScheme.error)
+            } else {
+                SummaryLine("Kembalian", changeAbs.toRupiah(), color = MaterialTheme.colorScheme.primary)
+            }
+        }
     }
 }
 
@@ -2064,7 +2077,16 @@ private fun SuccessDialog(
                     }
                     Text("Total: ${result.transaction.total.toRupiah()}", fontWeight = FontWeight.SemiBold)
                     Text("Bayar: ${result.transaction.paidAmount.toRupiah()}")
-                    Text("Kembali: ${result.transaction.change.toRupiah()}", color = MaterialTheme.colorScheme.primary)
+                    val txChange = result.transaction.change
+                    if (txChange < 0L) {
+                        Text(
+                            "Kurang Bayar: ${kotlin.math.abs(txChange).toRupiah()}",
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    } else {
+                        Text("Kembali: ${txChange.toRupiah()}", color = MaterialTheme.colorScheme.primary)
+                    }
                 }
 
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
