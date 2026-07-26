@@ -104,6 +104,29 @@ class PosViewModel(
     private val _paid = MutableStateFlow(0L)
     val paid: StateFlow<Long> = _paid.asStateFlow()
 
+    /**
+     * Override manual "kembalian yang benar-benar diserahkan" ke pembeli.
+     * `null` = default, mengikuti nilai kembalian penuh secara otomatis
+     * (perilaku lama, backward-compatible). Diisi eksplisit oleh kasir lewat
+     * UI hanya saat mereka ingin menyisakan sebagian sebagai tip. Nilai ini
+     * BOLEH menjadi "stale" relatif terhadap total/pembayaran terbaru --
+     * clamp final ke rentang valid [0, max(change,0)] SELALU dihitung ulang
+     * di TransactionRepository.checkout() dari data checkout sebenarnya,
+     * bukan dari state UI yang sempat tersimpan di sini.
+     */
+    private val _changeGivenOverride = MutableStateFlow<Long?>(null)
+    val changeGivenOverride: StateFlow<Long?> = _changeGivenOverride.asStateFlow()
+
+    /**
+     * Hanya relevan untuk QRIS saat change > 0: apakah nominal kembalian
+     * benar-benar diserahkan sebagai uang TUNAI FISIK dari laci. Default
+     * true (skenario paling umum saat QRIS overpay: pembeli ingin pegang
+     * cash). Untuk CASH, nilai ini tidak berpengaruh (selalu dipaksa true
+     * di TransactionRepository).
+     */
+    private val _changeGivenInCash = MutableStateFlow(true)
+    val changeGivenInCash: StateFlow<Boolean> = _changeGivenInCash.asStateFlow()
+
     private val _paymentMethod = MutableStateFlow(PaymentMethod.CASH)
     val paymentMethod: StateFlow<PaymentMethod> = _paymentMethod.asStateFlow()
 
@@ -416,10 +439,33 @@ class PosViewModel(
 
     fun setPaid(value: Long) {
         _paid.value = value.coerceAtLeast(0L)
+        // Auto-reset: nominal "Bayar" berubah -> `change` & rentang valid
+        // changeGiven ikut berubah total. Override lama (mis. kasir sudah
+        // menurunkan kembalian jadi tip) sudah tidak relevan terhadap
+        // pembayaran baru ini -> kembali ke default (kembalian penuh)
+        // sampai kasir menyesuaikan ulang secara sadar.
+        _changeGivenOverride.value = null
+        _changeGivenInCash.value = true
+    }
+
+    /** Dipanggil dari UI saat kasir mengubah nilai "Kembalian Diberikan"
+     * secara manual. `null` berarti kembali ke default (kembalian penuh). */
+    fun setChangeGivenOverride(value: Long?) {
+        _changeGivenOverride.value = value
+    }
+
+    /** Dipanggil dari UI saat kasir mengubah toggle "Kembalian tunai dari
+     * laci?" — hanya relevan untuk QRIS saat change > 0. */
+    fun setChangeGivenInCash(value: Boolean) {
+        _changeGivenInCash.value = value
     }
 
     fun setPaymentMethod(method: PaymentMethod) {
         _paymentMethod.value = method
+        // Reset ke default saat metode bayar berganti — mencegah state toggle
+        // "nyangkut" dari transaksi/metode sebelumnya membingungkan konteks
+        // yang baru (mis. pindah dari QRIS ke CASH lalu balik ke QRIS lagi).
+        _changeGivenInCash.value = true
     }
 
     // Kebijakan SOFT-BLOCK: penambahan SELALU berhasil, tidak pernah ditolak
@@ -542,11 +588,15 @@ class PosViewModel(
                             cashierId = shift?.cashierId,
                             cashierName = shift?.cashierName ?: "",
                             shiftId = shift?.id,
+                            changeGivenOverride = _changeGivenOverride.value,
+                            changeGivenInCash = _changeGivenInCash.value,
                         )
                     _discountType.value = DiscountType.NOMINAL
                     _discountValue.value = 0.0
                     _taxRate.value = 0.0 // Reset tax rate agar tidak terbawa transaksi berikutnya
                     _paid.value = 0L
+                    _changeGivenOverride.value = null
+                    _changeGivenInCash.value = true
                     _paymentMethod.value = PaymentMethod.CASH
                     CheckoutState.Success(result)
                 } catch (e: InsufficientStockException) {

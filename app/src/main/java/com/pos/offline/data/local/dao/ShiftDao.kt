@@ -116,6 +116,23 @@ interface ShiftDao {
     )
     suspend fun qrisRevenueForShift(shiftId: Long): Long
 
+    // Uang TUNAI FISIK yang KELUAR dari laci sebagai kembalian untuk
+    // transaksi NON-TUNAI (QRIS) — skenario nyata di lapangan: pembeli
+    // bayar lebih via QRIS (mis. tidak bawa cash) lalu meminta kembaliannya
+    // dalam bentuk uang tunai. Transaksi QRIS TIDAK PERNAH menambah kas laci
+    // (uangnya digital), tapi BISA menguranginya jika kembaliannya fisik.
+    // WAJIB dikurangkan dari expectedCashInDrawer, TERPISAH dari
+    // qrisRevenueForShift (yang murni soal pendapatan/P&L, bukan pergerakan
+    // kas fisik) — dua konsep ini sengaja tidak digabung.
+    @Query(
+        """
+        SELECT COALESCE(SUM(changeGiven), 0) FROM transactions
+        WHERE shiftId = :shiftId AND paymentMethod = 'QRIS' AND status = 'COMPLETED'
+          AND changeGivenInCash = 1
+        """,
+    )
+    suspend fun qrisCashChangeOutForShift(shiftId: Long): Long
+
     @Query(
         """
         SELECT COALESCE(SUM(ti.unitCost * ti.quantity), 0)

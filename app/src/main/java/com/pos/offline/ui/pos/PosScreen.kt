@@ -42,6 +42,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AttachMoney
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
@@ -51,6 +52,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.PointOfSale
 import androidx.compose.material.icons.rounded.Print
+import androidx.compose.material.icons.rounded.QrCode
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
@@ -75,6 +77,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -149,6 +152,8 @@ fun PosScreen(
     val discountValue by viewModel.discountValue.collectAsStateWithLifecycle()
     val taxRate by viewModel.taxRate.collectAsStateWithLifecycle()
     val paid by viewModel.paid.collectAsStateWithLifecycle()
+    val changeGivenOverride by viewModel.changeGivenOverride.collectAsStateWithLifecycle()
+    val changeGivenInCash by viewModel.changeGivenInCash.collectAsStateWithLifecycle()
     val checkoutState by viewModel.checkoutState.collectAsStateWithLifecycle()
 
     val printUiState by viewModel.printUiState.collectAsStateWithLifecycle()
@@ -296,12 +301,16 @@ fun PosScreen(
                         taxRate = taxRate,
                         paid = paid,
                         change = change,
+                        changeGivenOverride = changeGivenOverride,
+                        changeGivenInCash = changeGivenInCash,
                         paymentMethod = paymentMethod,
                         stockByProductId = stockByProductId,
                         onDiscountTypeToggle = viewModel::toggleDiscountType,
                         onDiscountValueChange = viewModel::setDiscountValue,
                         onTaxRateChange = viewModel::setTaxRate,
                         onPaidChange = viewModel::setPaid,
+                        onChangeGivenOverrideChange = viewModel::setChangeGivenOverride,
+                        onChangeGivenInCashChange = viewModel::setChangeGivenInCash,
                         onPaymentMethodChange = viewModel::setPaymentMethod,
                         onSetQuantity = viewModel::setQuantityDirect,
                         onIncrease = viewModel::increaseQty,
@@ -342,12 +351,16 @@ fun PosScreen(
                         taxRate = taxRate,
                         paid = paid,
                         change = change,
+                        changeGivenOverride = changeGivenOverride,
+                        changeGivenInCash = changeGivenInCash,
                         paymentMethod = paymentMethod,
                         stockByProductId = stockByProductId,
                         onDiscountTypeToggle = viewModel::toggleDiscountType,
                         onDiscountValueChange = viewModel::setDiscountValue,
                         onTaxRateChange = viewModel::setTaxRate,
                         onPaidChange = viewModel::setPaid,
+                        onChangeGivenOverrideChange = viewModel::setChangeGivenOverride,
+                        onChangeGivenInCashChange = viewModel::setChangeGivenInCash,
                         onPaymentMethodChange = viewModel::setPaymentMethod,
                         onSetQuantity = viewModel::setQuantityDirect,
                         onIncrease = viewModel::increaseQty,
@@ -868,6 +881,13 @@ private fun EndShiftDialog(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
+                if (summary.qrisCashChangeOut > 0L) {
+                    SummaryLine(
+                        "Kembalian Tunai (dari QRIS)",
+                        "- ${summary.qrisCashChangeOut.toRupiah()}",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Estimasi di Laci", expected.toRupiah(), emphasize = true)
 
@@ -1040,12 +1060,16 @@ private fun CartPane(
     taxRate: Double,
     paid: Long,
     change: Long,
+    changeGivenOverride: Long?,
+    changeGivenInCash: Boolean,
     paymentMethod: PaymentMethod,
     stockByProductId: Map<Long, Int>,
     onDiscountTypeToggle: () -> Unit,
     onDiscountValueChange: (Double) -> Unit,
     onTaxRateChange: (Double) -> Unit,
     onPaidChange: (Long) -> Unit,
+    onChangeGivenOverrideChange: (Long?) -> Unit,
+    onChangeGivenInCashChange: (Boolean) -> Unit,
     onPaymentMethodChange: (PaymentMethod) -> Unit,
     onIncrease: (CartItemEntity) -> Unit,
     onDecrease: (CartItemEntity) -> Unit,
@@ -1227,6 +1251,8 @@ private fun CartPane(
                     TotalsSummary(
                         totals = totals,
                         change = change,
+                        changeGivenOverride = changeGivenOverride,
+                        changeGivenInCash = changeGivenInCash,
                         discountType = discountType,
                         discountValue = discountValue,
                         taxRate = taxRate,
@@ -1236,6 +1262,8 @@ private fun CartPane(
                         onDiscountValueChange = onDiscountValueChange,
                         onTaxRateChange = onTaxRateChange,
                         onPaidChange = onPaidChange,
+                        onChangeGivenOverrideChange = onChangeGivenOverrideChange,
+                        onChangeGivenInCashChange = onChangeGivenInCashChange,
                         onPaymentMethodChange = onPaymentMethodChange,
                     )
                     Spacer(Modifier.height(6.dp))
@@ -1529,6 +1557,8 @@ private fun CompactActionBox(
 private fun TotalsSummary(
     totals: Totals,
     change: Long,
+    changeGivenOverride: Long?,
+    changeGivenInCash: Boolean,
     discountType: DiscountType,
     discountValue: Double,
     taxRate: Double,
@@ -1538,6 +1568,8 @@ private fun TotalsSummary(
     onDiscountValueChange: (Double) -> Unit,
     onTaxRateChange: (Double) -> Unit,
     onPaidChange: (Long) -> Unit,
+    onChangeGivenOverrideChange: (Long?) -> Unit,
+    onChangeGivenInCashChange: (Boolean) -> Unit,
     onPaymentMethodChange: (PaymentMethod) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1597,13 +1629,189 @@ private fun TotalsSummary(
             modifier = Modifier.fillMaxWidth().height(44.dp),
         )
         if (paid > 0) {
-            val changeAbs = kotlin.math.abs(change)
-            if (change < 0L) {
-                SummaryLine("Kurang Bayar", changeAbs.toRupiah(), color = MaterialTheme.colorScheme.error)
-            } else {
-                SummaryLine("Kembalian", changeAbs.toRupiah(), color = MaterialTheme.colorScheme.primary)
+            when {
+                change < 0L -> {
+                    val changeAbs = kotlin.math.abs(change)
+                    SummaryLine("Kurang Bayar", changeAbs.toRupiah(), color = MaterialTheme.colorScheme.error)
+                }
+                change > 0L -> {
+                    Spacer(Modifier.height(2.dp))
+                    ChangeGivenField(
+                        maxChange = change,
+                        value = changeGivenOverride,
+                        onValueChange = onChangeGivenOverrideChange,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (paymentMethod == PaymentMethod.QRIS) {
+                        Spacer(Modifier.height(6.dp))
+                        val effectiveChangeGiven = changeGivenOverride?.coerceIn(0L, change) ?: change
+                        QrisCashChangeToggle(
+                            changeGivenAmount = effectiveChangeGiven,
+                            isCash = changeGivenInCash,
+                            onToggle = onChangeGivenInCashChange,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+                else -> {
+                    SummaryLine("Kembalian", 0L.toRupiah(), color = MaterialTheme.colorScheme.primary)
+                }
             }
         }
+    }
+}
+
+/**
+ * Field "Kembalian Diberikan" — hanya relevan saat `maxChange > 0`. Default
+ * (`value == null`) menampilkan `maxChange` penuh (perilaku lama: kembalian
+ * diberikan seutuhnya). Kasir bisa menurunkan nilainya bila sebagian
+ * kembalian sengaja tidak diambil pembeli — selisihnya otomatis ditampilkan
+ * sebagai "Tip".
+ *
+ * Catatan edge-case (belum ditangani, didiskusikan di respons): jika kasir
+ * menurunkan nilai ini lalu MENAIKKAN nominal "Bayar" setelahnya, nilai di
+ * sini tidak ikut menyesuaikan otomatis — selisihnya akan tercatat sebagai
+ * tip yang lebih besar dari yang mungkin dimaksud kasir.
+ */
+@Composable
+private fun ChangeGivenField(
+    maxChange: Long,
+    value: Long?,
+    onValueChange: (Long?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val effectiveValue = value?.coerceIn(0L, maxChange) ?: maxChange
+    var text by remember(effectiveValue) { mutableStateOf(effectiveValue.toString()) }
+    val tip = (maxChange - effectiveValue).coerceAtLeast(0L)
+
+    Column(modifier = modifier) {
+        BasicTextField(
+            value = text,
+            onValueChange = { input ->
+                val digits = input.filter { it.isDigit() }
+                text = digits
+                val parsed = (digits.toLongOrNull() ?: 0L).coerceIn(0L, maxChange)
+                // Kalau kasir mengetik ulang nilai = maxChange, kembalikan ke
+                // mode default (null) agar tetap otomatis mengikuti perubahan
+                // "Bayar" berikutnya, bukan "terkunci" ke angka lama.
+                onValueChange(if (parsed == maxChange) null else parsed)
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            singleLine = true,
+            visualTransformation = ThousandsSeparatorTransformation,
+            textStyle =
+                MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+            decorationBox = { innerTextField ->
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+                            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Kembalian Diberikan: ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Box(Modifier.weight(1f)) {
+                        if (text.isEmpty()) {
+                            Text(
+                                text = "0",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
+            },
+        )
+        if (tip > 0L) {
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "Tip: ${tip.toRupiah()}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 4.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Trigger psikologis untuk kasir: menampilkan secara EKSPLISIT (warna +
+ * ikon + nominal rupiah) bahwa kembalian dari transaksi QRIS ini akan
+ * mengurangi kas TUNAI di laci — bukan cuma checkbox polos yang gampang
+ * diabaikan. Default ON (tunai), karena skenario paling umum saat QRIS
+ * overpay adalah pembeli ingin memegang uang cash. Tidak berbentuk dialog
+ * konfirmasi (blocking) agar tidak menambah friksi untuk kasus yang cukup
+ * sering terjadi — cukup warna kontras + teks yang berubah real-time
+ * mengikuti state toggle, selalu terlihat tanpa perlu tap tambahan.
+ */
+@Composable
+private fun QrisCashChangeToggle(
+    changeGivenAmount: Long,
+    isCash: Boolean,
+    onToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val bgColor =
+        if (isCash) {
+            MaterialTheme.colorScheme.tertiaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        }
+    val contentColor =
+        if (isCash) {
+            MaterialTheme.colorScheme.onTertiaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    Column(
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(10.dp))
+                .background(bgColor)
+                .clickable { onToggle(!isCash) }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = if (isCash) Icons.Rounded.AttachMoney else Icons.Rounded.QrCode,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "Kembalian Tunai dari Laci?",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = contentColor,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(checked = isCash, onCheckedChange = onToggle)
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text =
+                if (isCash) {
+                    "⚠ ${changeGivenAmount.toRupiah()} akan diambil TUNAI dari laci meski dibayar via QRIS."
+                } else {
+                    "Kembalian dianggap dikembalikan non-tunai — tidak mengurangi kas laci."
+                },
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+            color = contentColor.copy(alpha = 0.85f),
+        )
     }
 }
 
@@ -2078,14 +2286,45 @@ private fun SuccessDialog(
                     Text("Total: ${result.transaction.total.toRupiah()}", fontWeight = FontWeight.SemiBold)
                     Text("Bayar: ${result.transaction.paidAmount.toRupiah()}")
                     val txChange = result.transaction.change
-                    if (txChange < 0L) {
-                        Text(
-                            "Kurang Bayar: ${kotlin.math.abs(txChange).toRupiah()}",
-                            color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    } else {
-                        Text("Kembali: ${txChange.toRupiah()}", color = MaterialTheme.colorScheme.primary)
+                    val txChangeGiven = result.transaction.changeGiven
+                    val isQrisCashOut =
+                        result.transaction.paymentMethod == PaymentMethod.QRIS.name &&
+                            result.transaction.changeGivenInCash
+                    when {
+                        txChange < 0L -> {
+                            Text(
+                                "Kurang Bayar: ${kotlin.math.abs(txChange).toRupiah()}",
+                                color = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        txChange == 0L -> {
+                            Text("Kembali: ${txChange.toRupiah()}", color = MaterialTheme.colorScheme.primary)
+                        }
+                        else -> {
+                            Text(
+                                if (isQrisCashOut) {
+                                    "Kembali Diberikan (Tunai dari Laci): ${txChangeGiven.toRupiah()}"
+                                } else {
+                                    "Kembali Diberikan: ${txChangeGiven.toRupiah()}"
+                                },
+                                color =
+                                    if (isQrisCashOut) {
+                                        MaterialTheme.colorScheme.tertiary
+                                    } else {
+                                        MaterialTheme.colorScheme.primary
+                                    },
+                                fontWeight = if (isQrisCashOut) FontWeight.SemiBold else FontWeight.Normal,
+                            )
+                            val tip = (txChange - txChangeGiven).coerceAtLeast(0L)
+                            if (tip > 0L) {
+                                Text(
+                                    "Tip: ${tip.toRupiah()}",
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        }
                     }
                 }
 

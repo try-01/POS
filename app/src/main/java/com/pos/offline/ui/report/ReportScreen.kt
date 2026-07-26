@@ -1620,7 +1620,30 @@ private fun TransactionDetailDialog(
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Total", tx.total.toRupiah(), emphasize = true)
                 SummaryLine("Bayar", tx.paidAmount.toRupiah())
-                SummaryLine("Kembali", tx.change.toRupiah(), color = MaterialTheme.colorScheme.primary)
+                when {
+                    tx.change < 0L -> {
+                        SummaryLine(
+                            "Kurang Bayar",
+                            kotlin.math.abs(tx.change).toRupiah(),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    tx.change == 0L -> {
+                        SummaryLine("Kembali", tx.change.toRupiah(), color = MaterialTheme.colorScheme.primary)
+                    }
+                    else -> {
+                        val isQrisCashOut = tx.paymentMethod == PaymentMethod.QRIS.name && tx.changeGivenInCash
+                        SummaryLine(
+                            if (isQrisCashOut) "Kembali Diberikan (Tunai dari Laci)" else "Kembali Diberikan",
+                            tx.changeGiven.toRupiah(),
+                            color = if (isQrisCashOut) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+                        )
+                        val tip = (tx.change - tx.changeGiven).coerceAtLeast(0L)
+                        if (tip > 0L) {
+                            SummaryLine("Tip", tip.toRupiah(), color = MaterialTheme.colorScheme.tertiary)
+                        }
+                    }
+                }
 
                 Spacer(Modifier.height(8.dp))
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
@@ -2265,6 +2288,13 @@ private fun ClosedShiftDetailDialog(
                     SummaryLine(
                         "Refund Tunai",
                         "- ${summary.cashRefunds.toRupiah()}",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (summary.qrisCashChangeOut > 0L) {
+                    SummaryLine(
+                        "Kembalian Tunai (dari QRIS)",
+                        "- ${summary.qrisCashChangeOut.toRupiah()}",
                         color = MaterialTheme.colorScheme.error,
                     )
                 }

@@ -37,13 +37,9 @@ sealed class VoidOutcome {
         val restoredStockCount: Int,
         val skippedStockCount: Int,
     ) : VoidOutcome()
-
     data object AlreadyVoided : VoidOutcome()
-
     data object NotFound : VoidOutcome()
-
     data object ShiftClosed : VoidOutcome()
-
     data object HasReturn : VoidOutcome()
 }
 
@@ -84,11 +80,15 @@ class TransactionRepository(
         // Nilai di luar rentang [0, max(change,0)] otomatis di-clamp ke rentang
         // valid terdekat (defense-in-depth, independen dari validasi UI).
         changeGivenOverride: Long? = null,
+        // Hanya relevan untuk QRIS saat change > 0: menandai apakah nominal
+        // changeGiven di atas benar-benar diserahkan sebagai UANG TUNAI FISIK
+        // dari laci (skenario: bayar QRIS lebih, minta kembalian cash). Untuk
+        // CASH, parameter ini DIABAIKAN — selalu dipaksa true di bawah
+        // (defense-in-depth, independen dari apa pun yang dikirim UI).
+        changeGivenInCash: Boolean = true,
     ): CheckoutResult {
         require(cart.isNotEmpty()) { "Keranjang kosong" }
-
         val subtotal = cart.sumOf { it.unitPrice * it.quantity.toLong() }
-
         val rawDiscountAmount =
             (
                 when (discountType) {
@@ -97,7 +97,6 @@ class TransactionRepository(
                 }
             ).coerceAtLeast(0L)
         val discountAmount = rawDiscountAmount.coerceAtMost(subtotal)
-
         val taxableBase = (subtotal - discountAmount).coerceAtLeast(0L) // DPP
         val tax = (taxableBase * taxRate).roundToRupiah()
         val total = taxableBase + tax
@@ -106,13 +105,13 @@ class TransactionRepository(
         // di lapangan, dikonfirmasi via dialog "Tetap Lanjutkan"). Nilai asli
         // (boleh negatif) WAJIB tersimpan apa adanya demi akurasi laporan.
         val change = paid - total
-
         val maxChangeGiven = change.coerceAtLeast(0L)
         val changeGiven = (changeGivenOverride ?: maxChangeGiven).coerceIn(0L, maxChangeGiven)
-
+        // CASH: kembalian tunai pasti tunai secara fisik, dipaksa true
+        // terlepas dari parameter yang dikirim (defense-in-depth).
+        val effectiveChangeGivenInCash = paymentMethod == PaymentMethod.CASH || changeGivenInCash
         val invoiceId = "INV-${System.currentTimeMillis()}"
         val now = System.currentTimeMillis()
-
         val transaction =
             TransactionEntity(
                 id = invoiceId,
@@ -124,6 +123,7 @@ class TransactionRepository(
                 paidAmount = paid,
                 change = change,
                 changeGiven = changeGiven,
+                changeGivenInCash = effectiveChangeGivenInCash,
                 paymentMethod = paymentMethod.name,
                 cashierId = cashierId,
                 cashierName = cashierName,
@@ -131,7 +131,6 @@ class TransactionRepository(
                 discountType = discountType.name,
                 discountValue = discountValue,
             )
-
         val items =
             cart.map { cartItem ->
                 val unitCost = productDao.getById(cartItem.productId)?.cost ?: 0L
@@ -145,7 +144,6 @@ class TransactionRepository(
                     unitCost = unitCost,
                 )
             }
-
         database.withTransaction {
             cart.forEach { item ->
                 // SOFT-BLOCK: decrementStock TIDAK LAGI mensyaratkan stock >= qty
@@ -163,7 +161,6 @@ class TransactionRepository(
             transactionDao.checkout(transaction, items)
             cartDao.clear()
         }
-
         return CheckoutResult(transaction, items)
     }
 
@@ -177,18 +174,15 @@ class TransactionRepository(
         val tx = transactionDao.getById(invoiceId) ?: return VoidOutcome.NotFound
         if (tx.isVoid) return VoidOutcome.AlreadyVoided
         if (tx.returnId != null) return VoidOutcome.HasReturn
-
         val shiftId = tx.shiftId
         if (shiftId != null) {
             val shift = shiftRepository.getById(shiftId)
             if (shift?.endedAt != null) return VoidOutcome.ShiftClosed
         }
-
         val items = transactionDao.getItems(invoiceId)
         val now = System.currentTimeMillis()
         var restored = 0
         var skipped = 0
-
         database.withTransaction {
             items.forEach { item ->
                 val pid = item.productId
@@ -206,7 +200,6 @@ class TransactionRepository(
                 reason = null,
             )
         }
-
         return VoidOutcome.Success(restoredStockCount = restored, skippedStockCount = skipped)
     }
 }

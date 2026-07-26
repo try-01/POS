@@ -27,7 +27,6 @@ object Migrations {
                 db.execSQL(
                     "ALTER TABLE transactions ADD COLUMN shiftId INTEGER",
                 )
-
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `cashiers` (
@@ -39,7 +38,6 @@ object Migrations {
                     )
                     """.trimIndent(),
                 )
-
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `shifts` (
@@ -105,7 +103,6 @@ object Migrations {
                 db.execSQL(
                     "ALTER TABLE transactions ADD COLUMN returnId INTEGER",
                 )
-
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `returns` (
@@ -130,7 +127,6 @@ object Migrations {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_returns_shiftId` ON `returns` (`shiftId`)",
                 )
-
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `return_items` (
@@ -150,7 +146,6 @@ object Migrations {
                 )
             }
         }
-
     val MIGRATION_7_8 =
         object : Migration(7, 8) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -174,7 +169,6 @@ object Migrations {
                     )
                     """.trimIndent(),
                 )
-
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `store_profile` (
@@ -187,7 +181,6 @@ object Migrations {
                     )
                     """.trimIndent(),
                 )
-
                 db.execSQL(
                     """
                     INSERT OR IGNORE INTO `store_profile`
@@ -197,20 +190,17 @@ object Migrations {
                 )
             }
         }
-
     val MIGRATION_8_9 =
         object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "ALTER TABLE products ADD COLUMN barcode TEXT",
                 )
-
                 db.execSQL(
                     "CREATE UNIQUE INDEX IF NOT EXISTS `index_products_barcode` ON `products` (`barcode`)",
                 )
             }
         }
-
     val MIGRATION_9_10 =
         object : Migration(9, 10) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -222,7 +212,6 @@ object Migrations {
                 )
             }
         }
-
         val MIGRATION_10_11 =
         object : Migration(10, 11) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -244,7 +233,6 @@ object Migrations {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_returns_returnedAt` ON `returns` (`returnedAt`)")
             }
         }
-
     val MIGRATION_12_13 =
         object : Migration(12, 13) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -263,7 +251,30 @@ object Migrations {
                 )
             }
         }
-
+    val MIGRATION_13_14 =
+        object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Menandai apakah `changeGiven` pada transaksi ini benar-benar
+                // KELUAR SEBAGAI UANG TUNAI FISIK dari laci. Relevan HANYA untuk
+                // transaksi QRIS dengan changeGiven > 0 — skenario nyata di
+                // lapangan: pembeli bayar lebih via QRIS (mis. tidak bawa cash),
+                // lalu kembaliannya diminta dalam bentuk uang tunai. Untuk CASH,
+                // nilai ini SELALU true (trivial — kembalian tunai pasti tunai),
+                // dipaksa juga di level TransactionRepository sbg defense-in-depth.
+                db.execSQL(
+                    "ALTER TABLE transactions ADD COLUMN changeGivenInCash INTEGER NOT NULL DEFAULT 1",
+                )
+                // Backfill data historis: sebelum fitur ini ada, tidak ada cara
+                // mengetahui apakah kembalian QRIS lama diberikan tunai atau
+                // tidak. Default KONSERVATIF = false untuk QRIS historis, agar
+                // TIDAK mengubah retroaktif expectedCashInDrawer pada shift lama
+                // yang sudah ditutup (shift lama sudah punya snapshot
+                // endingCashExpected tersendiri di tabel shifts).
+                db.execSQL(
+                    "UPDATE transactions SET changeGivenInCash = 0 WHERE paymentMethod = 'QRIS'",
+                )
+            }
+        }
     val ALL: Array<Migration> =
         arrayOf(
             MIGRATION_1_2,
@@ -278,5 +289,6 @@ object Migrations {
             MIGRATION_10_11,
             MIGRATION_11_12,
             MIGRATION_12_13,
+            MIGRATION_13_14,
         )
 }

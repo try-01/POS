@@ -26,6 +26,16 @@ data class TransactionEntity(
     // Sumber kebenaran untuk uang FISIK yang masuk laci: paidAmount - changeGiven.
     @ColumnInfo(defaultValue = "0")
     val changeGiven: Long = 0L,
+    // Menandai apakah `changeGiven` di atas benar-benar keluar sebagai uang
+    // TUNAI FISIK dari laci. Untuk CASH selalu true (dipaksa di
+    // TransactionRepository, independen dari nilai ini). Untuk QRIS, hanya
+    // relevan saat changeGiven > 0 — menampung skenario nyata di lapangan:
+    // pembeli bayar lebih via QRIS lalu meminta kembaliannya dalam bentuk
+    // tunai. Dipakai ShiftRepository untuk mengurangi expectedCashInDrawer
+    // meski transaksi aslinya non-tunai (QRIS tidak pernah menambah kas
+    // laci, tapi BISA menguranginya lewat jalur ini).
+    @ColumnInfo(defaultValue = "1")
+    val changeGivenInCash: Boolean = true,
     @ColumnInfo(defaultValue = "'CASH'")
     val paymentMethod: String = PaymentMethod.CASH.name,
     val cashierId: Long? = null,

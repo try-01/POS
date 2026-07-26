@@ -10,11 +10,16 @@ data class ShiftSummary(
     val qrisRevenue: Long,
     val totalCost: Long,
     val cashRefunds: Long,
+    // Uang tunai FISIK yang KELUAR dari laci sbg kembalian untuk transaksi
+    // QRIS (bukan pendapatan — murni pergerakan kas fisik). Menampung
+    // skenario: pembeli bayar lebih via QRIS, kembaliannya diminta tunai.
+    // Lihat ShiftDao.qrisCashChangeOutForShift.
+    val qrisCashChangeOut: Long = 0L,
 ) {
     val totalRevenue: Long get() = cashRevenue + qrisRevenue
     val grossProfit: Long get() = totalRevenue - totalCost
 
-    val expectedCashInDrawer: Long get() = startingCash + cashRevenue - cashRefunds
+    val expectedCashInDrawer: Long get() = startingCash + cashRevenue - cashRefunds - qrisCashChangeOut
 }
 
 sealed class ShiftStartOutcome {
@@ -86,6 +91,7 @@ class ShiftRepository(
             qrisRevenue = shiftDao.qrisRevenueForShift(shiftId),
             totalCost = shiftDao.totalCostForShift(shiftId),
             cashRefunds = shiftDao.cashRefundsForShift(shiftId),
+            qrisCashChangeOut = shiftDao.qrisCashChangeOutForShift(shiftId),
         )
     }
 
@@ -104,6 +110,7 @@ class ShiftRepository(
                 qrisRevenue = shiftDao.qrisRevenueForShift(shiftId),
                 totalCost = shiftDao.totalCostForShift(shiftId),
                 cashRefunds = shiftDao.cashRefundsForShift(shiftId),
+                qrisCashChangeOut = shiftDao.qrisCashChangeOutForShift(shiftId),
             )
 
         val updated =
