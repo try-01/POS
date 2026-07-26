@@ -469,7 +469,7 @@ class ReportViewModel(
      *   dibatalkan total — tidak ada query/collector yang menggantung di
      *   background selamanya (no leak).
      */
-    val salesReportUiState: StateFlow<SalesReportUiState> =
+   val salesReportUiState: StateFlow<SalesReportUiState> =
         combine(
             _selectedPeriodType,
             _includeSalesSummary,
@@ -486,7 +486,8 @@ class ReportViewModel(
             .distinctUntilChanged()
             .flatMapLatest { selection ->
                 if (selection == null) {
-                    flowOf(SalesReportUiState.Hidden)
+                    // PERBAIKAN: Tambahkan tipe eksplist <SalesReportUiState> di sini
+                    flowOf<SalesReportUiState>(SalesReportUiState.Hidden)
                 } else {
                     flow {
                         emit(SalesReportUiState.Loading(selection.periodType))
