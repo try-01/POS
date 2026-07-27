@@ -113,6 +113,7 @@ import com.pos.offline.ui.receipt.PrintUiState
 import com.pos.offline.ui.receipt.forTransaction
 import com.pos.offline.util.ReceiptPrintOutcome
 import com.pos.offline.util.toRupiah
+import com.pos.offline.util.formatQuantity
 import kotlinx.coroutines.delay
 import java.io.File
 import java.time.Instant
@@ -1790,7 +1791,7 @@ private fun ReturnItemDialog(
         )
     }
 
-    val suggestedRefund = rows.filter { it.included }.sumOf { it.unitPrice * it.quantity.toLong() }
+    val suggestedRefund = rows.filter { it.included }.sumOf { kotlin.math.round(it.unitPrice * it.quantity).toLong() }
 
     var refundAmountEdited by remember(tx.id) { mutableStateOf(false) }
     var refundAmountText by remember(tx.id) { mutableStateOf("") }

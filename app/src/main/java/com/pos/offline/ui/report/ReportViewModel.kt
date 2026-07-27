@@ -26,6 +26,7 @@ import com.pos.offline.ui.receipt.ReceiptLine
 import com.pos.offline.ui.receipt.ReceiptManager
 import com.pos.offline.util.PrintCoordinator
 import com.pos.offline.util.toRupiah
+import com.pos.offline.util.formatQuantity
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow

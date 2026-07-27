@@ -477,7 +477,7 @@ class PosViewModel(
                 productId = product.id,
                 name = product.name,
                 unitPrice = product.price,
-                delta = 1,
+                delta = 1.0,
                 maxStock = product.stock,
             )
         if (result.crossedIntoExcess) {
@@ -534,7 +534,7 @@ class PosViewModel(
                 productId = item.productId,
                 name = item.name,
                 unitPrice = item.unitPrice,
-                delta = -1,
+                delta = -1.0,
             )
         }
 

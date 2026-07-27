@@ -129,6 +129,7 @@ import com.pos.offline.ui.receipt.PrintUiState
 import com.pos.offline.ui.receipt.forTransaction
 import com.pos.offline.util.ReceiptPrintOutcome
 import com.pos.offline.util.toRupiah
+import com.pos.offline.util.formatQuantity
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
