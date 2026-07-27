@@ -259,7 +259,11 @@ object ReceiptManager {
         storeProfile: StoreProfileEntity? = null,
     ): Intent {
         val bitmap = renderToBitmap(result, storeProfile = storeProfile)
-        val dir = File(context.cacheDir, "shared_receipts").apply { mkdirs() }
+        val dir = File(context.cacheDir, "shared_receipts").apply { 
+            mkdirs()
+            // Bersihkan file temporer lama agar cache tidak membengkak
+            listFiles()?.forEach { oldFile -> runCatching { oldFile.delete() } }
+        }
         val file = File(dir, "${result.transaction.id}_${System.currentTimeMillis()}.png")
         FileOutputStream(file).use { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }
 

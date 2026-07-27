@@ -140,7 +140,7 @@ private data class ReportSelection(
     val includeDeadStock: Boolean,
 )
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
 class ReportViewModel(
     private val transactionRepository: TransactionRepository,
     private val shiftRepository: ShiftRepository,

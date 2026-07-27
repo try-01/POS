@@ -32,6 +32,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -100,16 +109,37 @@ fun BarcodeScannerCamera(
                     proxy.close()
                     return@setAnalyzer
                 }
-                val input = InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
-                scanner
-                    .process(input)
-                    .addOnSuccessListener { barcodes ->
-                        barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }?.rawValue?.let { code ->
-                            if (scanned.compareAndSet(false, true)) {
-                                mainHandler.post { onBarcodeScanned(code) }
+                try {
+                    val input = InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
+                    scanner
+                        .process(input)
+                        .addOnSuccessListener { barcodes ->
+                            val imgW = proxy.width.toFloat()
+                            val imgH = proxy.height.toFloat()
+
+                            // Filter ROI: Hanya ambil barcode yang titik pusatnya ada di zona tengah layar (X: 20-80%, Y: 25-75%)
+                            val targetBarcode = barcodes.firstOrNull { barcode ->
+                                val raw = barcode.rawValue
+                                if (raw.isNullOrBlank()) return@firstOrNull false
+
+                                val rect = barcode.boundingBox ?: return@firstOrNull true
+                                val normX = rect.centerX() / imgW
+                                val normY = rect.centerY() / imgH
+
+                                // Abaikan barcode di pinggir layar
+                                normX in 0.20f..0.80f && normY in 0.25f..0.75f
                             }
-                        }
-                    }.addOnCompleteListener { proxy.close() }
+
+                            targetBarcode?.rawValue?.let { code ->
+                                if (scanned.compareAndSet(false, true)) {
+                                    mainHandler.post { onBarcodeScanned(code) }
+                                }
+                            }
+                        }.addOnCompleteListener { proxy.close() }
+                } catch (e: Exception) {
+                    android.util.Log.e("BarcodeScannerCamera", "Error membungkus frame gambar", e)
+                    proxy.close()
+                }
             }
 
             provider.unbindAll()
@@ -153,6 +183,9 @@ fun BarcodeScannerCamera(
                 previewView
             },
         )
+
+        // Bingkai visual target di tengah layar
+        ScannerViewfinder(modifier = Modifier.fillMaxSize())
 
         cameraError?.let { message ->
             Box(
@@ -295,4 +328,54 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
             }
         }
     }
+}
+
+@Composable
+private fun ScannerViewfinder(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.drawWithCache {
+            val boxWidth = size.width * 0.75f
+            val boxHeight = size.height * 0.35f
+            val left = (size.width - boxWidth) / 2f
+            val top = (size.height - boxHeight) / 2f
+            val right = left + boxWidth
+            val bottom = top + boxHeight
+
+            val cornerRadiusPx = 16.dp.toPx()
+            val strokeWidthPx = 3.dp.toPx()
+
+            val outerRect = Rect(0f, 0f, size.width, size.height)
+            val boxRect = RoundRect(
+                rect = Rect(left, top, right, bottom),
+                cornerRadius = CornerRadius(cornerRadiusPx)
+            )
+
+            val overlayPath = Path().apply { addRect(outerRect) }
+            val cutoutPath = Path().apply { addRoundRect(boxRect) }
+            val dimmedPath = Path.combine(
+                operation = PathOperation.Difference,
+                path1 = overlayPath,
+                path2 = cutoutPath
+            )
+
+            val boxOffset = Offset(left, top)
+            val boxSize = Size(boxWidth, boxHeight)
+            val strokeStyle = Stroke(width = strokeWidthPx)
+
+            onDrawWithContent {
+                drawContent()
+                // Gambar overlay redup di luar bingkai
+                drawPath(dimmedPath, Color.Black.copy(alpha = 0.55f))
+
+                // Gambar garis bingkai putih di tengah
+                drawRoundRect(
+                    color = Color.White,
+                    topLeft = boxOffset,
+                    size = boxSize,
+                    cornerRadius = CornerRadius(cornerRadiusPx),
+                    style = strokeStyle
+                )
+            }
+        }
+    )
 }

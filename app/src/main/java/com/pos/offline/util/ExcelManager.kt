@@ -75,10 +75,10 @@ object ExcelManager {
         } catch (e: Exception) {
             ExcelOutcome.Error(e)
         } finally {
-            // FIXED: Isolasi error penutupan dan pastikan temp files dihancurkan
+            // 1. Tutup output stream terlebih dahulu (pastikan file hasil ekspor ter-flush sempurna)
             runCatching { outputStream?.close() }
+            // 2. Menutup workbook dan merilis seluruh resource internal POI
             runCatching { workbook.close() }
-            runCatching { workbook.dispose() } // Hapus temporary file dari disk
         }
     }
 
