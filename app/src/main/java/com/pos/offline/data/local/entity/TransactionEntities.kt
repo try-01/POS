@@ -66,7 +66,7 @@ data class TransactionItemEntity(
     val transactionId: String,
     val productName: String,
     val unitPrice: Long,
-    val quantity: Int,
+    val quantity: Double,
     val lineTotal: Long,
     @ColumnInfo(defaultValue = "0")
     val unitCost: Long = 0L,

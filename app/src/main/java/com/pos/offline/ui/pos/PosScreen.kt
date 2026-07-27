@@ -88,6 +88,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -179,22 +182,28 @@ fun PosScreen(
         derivedStateOf { paid - totals.total }
     }
 
-    val cartQtyByProductId by remember(cart) {
-        derivedStateOf { cart.associate { it.productId to it.quantity } }
+    val cartQtyByProductId = remember(cart) {
+        cart.associate { it.productId to it.quantity }
     }
-    val stockByProductId by remember(products) {
-        derivedStateOf { products.associate { it.id to it.stock } }
+    
+    val stockByProductId = remember(products) {
+        products.associate { it.id to it.stock }
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(viewModel) {
-        viewModel.uiEvents.collect { event ->
-            when (event) {
-                is PosUiEvent.ShowMessage -> {
-                    snackbarHostState.showSnackbar(
-                        message = event.message,
-                        duration = SnackbarDuration.Short,
-                    )
+    val lifecycleOwner = LocalLifecycleOwner.current // FIXED: Mengambil Lifecycle Owner dari lokal
+
+    // FIXED: Membungkus pengumpulan event agar berhenti ketika aplikasi masuk background
+    LaunchedEffect(viewModel, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewModel.uiEvents.collect { event ->
+                when (event) {
+                    is PosUiEvent.ShowMessage -> {
+                        snackbarHostState.showSnackbar(
+                            message = event.message,
+                            duration = SnackbarDuration.Short,
+                        )
+                    }
                 }
             }
         }
@@ -850,7 +859,8 @@ private fun EndShiftDialog(
     var hasBeenEdited by remember { mutableStateOf(false) }
     val expected = summary.expectedCashInDrawer
     val difference = actualCash - expected
-    val hasInput = hasBeenEdited
+    val isCleanZeroAllowed = actualCash == 0L && expected == 0L
+    val hasInput = hasBeenEdited || isCleanZeroAllowed 
 
     AlertDialog(
         onDismissRequest = { if (!isProcessing) onDismiss() },
@@ -944,7 +954,7 @@ private fun EndShiftDialog(
 private fun ProductPane(
     modifier: Modifier,
     products: List<ProductEntity>,
-    cartQtyByProductId: Map<Long, Int>,
+    cartQtyByProductId: Map<Long, Double>,
     onAdd: (ProductEntity) -> Unit,
 ) {
     LazyVerticalGrid(
@@ -959,7 +969,7 @@ private fun ProductPane(
             key = { it.id },
             contentType = { "product" },
         ) { product ->
-            val qtyInCart = cartQtyByProductId[product.id] ?: 0
+            val qtyInCart = cartQtyByProductId[product.id] ?: 0.0
             val remainingStock = product.stock - qtyInCart
             ProductCard(
                 product = product,
@@ -973,10 +983,10 @@ private fun ProductPane(
 @Composable
 private fun ProductCard(
     product: ProductEntity,
-    remainingStock: Int,
+    remainingStock: Double,
     onAdd: () -> Unit,
 ) {
-    val outOfStock = remainingStock <= 0
+    val outOfStock = remainingStock <= 0.0
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(6.dp),
@@ -1007,7 +1017,7 @@ private fun ProductCard(
                         color = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        text = if (outOfStock) "Habis" else "Stok: $remainingStock",
+                        text = if (outOfStock) "Habis" else "Stok: ${remainingStock.formatQuantity()}",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         color =
                             if (outOfStock) {
@@ -1063,7 +1073,7 @@ private fun CartPane(
     changeGivenOverride: Long?,
     changeGivenInCash: Boolean,
     paymentMethod: PaymentMethod,
-    stockByProductId: Map<Long, Int>,
+    stockByProductId: Map<Long, Double>,
     onDiscountTypeToggle: () -> Unit,
     onDiscountValueChange: (Double) -> Unit,
     onTaxRateChange: (Double) -> Unit,
@@ -1073,7 +1083,7 @@ private fun CartPane(
     onPaymentMethodChange: (PaymentMethod) -> Unit,
     onIncrease: (CartItemEntity) -> Unit,
     onDecrease: (CartItemEntity) -> Unit,
-    onSetQuantity: (CartItemEntity, Int) -> Unit,
+    onSetQuantity: (CartItemEntity, Double) -> Unit,
     onRemove: (CartItemEntity) -> Unit,
     onClear: () -> Unit,
     onCheckout: () -> Unit,
@@ -1445,7 +1455,7 @@ private fun CartRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${item.unitPrice.toRupiah()} × ${item.quantity}",
+                "${item.unitPrice.toRupiah()} × ${item.quantity.formatQuantity()}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             )
@@ -1488,7 +1498,7 @@ private fun CartRow(
 
 @Composable
 private fun QuantityStepper(
-    qty: Int,
+    qty: Double,
     canIncrease: Boolean,
     onDecrease: () -> Unit,
     onIncrease: () -> Unit,
@@ -1500,13 +1510,13 @@ private fun QuantityStepper(
         Box(
             modifier =
                 Modifier
-                    .width(32.dp)
+                    .width(36.dp)
                     .clip(RoundedCornerShape(6.dp))
                     .clickable(onClick = onQuantityClick),
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = "$qty",
+                text = qty.formatQuantity(),
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
                 textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
@@ -2148,19 +2158,19 @@ private fun DecimalField(
 @Composable
 private fun QuantityEditDialog(
     item: CartItemEntity,
-    maxStock: Int?,
-    onConfirm: (Int) -> Unit,
+    maxStock: Double?,
+    onConfirm: (Double) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var fieldValue by remember {
-        val initial = item.quantity.toString()
+        val initial = item.quantity.formatQuantity()
         mutableStateOf(TextFieldValue(text = initial, selection = TextRange(0, initial.length)))
     }
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
-    fun confirmWith(qty: Int) = onConfirm(qty.coerceAtLeast(0))
+    fun confirmWith(qty: Double) = onConfirm(qty.coerceAtLeast(0.0))
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2176,7 +2186,7 @@ private fun QuantityEditDialog(
                 )
                 if (maxStock != null) {
                     Text(
-                        "Stok tersedia: $maxStock",
+                        "Stok tersedia: ${maxStock.formatQuantity()}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                     )
@@ -2186,17 +2196,28 @@ private fun QuantityEditDialog(
                 BasicTextField(
                     value = fieldValue,
                     onValueChange = { newValue ->
-                        val digits = newValue.text.filter { it.isDigit() }.take(5)
-                        fieldValue = newValue.copy(text = digits)
+                        val cleaned = buildString {
+                            var dotSeen = false
+                            for (c in newValue.text) {
+                                when {
+                                    c.isDigit() -> append(c)
+                                    c == '.' && !dotSeen -> {
+                                        append(c)
+                                        dotSeen = true
+                                    }
+                                }
+                            }
+                        }.take(8)
+                        fieldValue = newValue.copy(text = cleaned)
                     },
                     keyboardOptions =
                         KeyboardOptions(
-                            keyboardType = KeyboardType.Number,
+                            keyboardType = KeyboardType.Decimal,
                             imeAction = ImeAction.Done,
                         ),
                     keyboardActions =
                         KeyboardActions(
-                            onDone = { confirmWith(fieldValue.text.toIntOrNull() ?: item.quantity) },
+                            onDone = { confirmWith(fieldValue.text.toDoubleOrNull() ?: item.quantity) },
                         ),
                     singleLine = true,
                     textStyle =
@@ -2229,20 +2250,20 @@ private fun QuantityEditDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    listOf(10, 20, 50, 100).forEach { shortcut ->
+                    listOf(1.0, 5.0, 10.0, 20.0).forEach { shortcut ->
                         FilledTonalButton(
                             onClick = { confirmWith(shortcut) },
                             modifier = Modifier.weight(1f),
                             contentPadding = PaddingValues(vertical = 8.dp),
                         ) {
-                            Text("$shortcut", style = MaterialTheme.typography.bodyMedium)
+                            Text(shortcut.formatQuantity(), style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { confirmWith(fieldValue.text.toIntOrNull() ?: item.quantity) }) {
+            TextButton(onClick = { confirmWith(fieldValue.text.toDoubleOrNull() ?: item.quantity) }) {
                 Text("Terapkan")
             }
         },

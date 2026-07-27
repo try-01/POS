@@ -23,7 +23,7 @@ data class CartItemEntity(
     val productId: Long,
     val name: String, // snapshot nama produk
     val unitPrice: Long, // snapshot harga saat ditambahkan (Rupiah)
-    val quantity: Int = 1,
+    val quantity: Double = 1.0,
 ) {
-    val lineTotal: Long get() = unitPrice * quantity.toLong()
+    val lineTotal: Long get() = kotlin.math.round(unitPrice * quantity).toLong()
 }

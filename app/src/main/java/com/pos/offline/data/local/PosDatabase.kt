@@ -45,7 +45,7 @@ private data class SeedProduct(
         PrinterEntity::class,
         StoreProfileEntity::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 abstract class PosDatabase : RoomDatabase() {
@@ -80,7 +80,6 @@ abstract class PosDatabase : RoomDatabase() {
                         "pos.db",
                     ).addCallback(SEED_CALLBACK)
                     .addMigrations(*Migrations.ALL)
-                    .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
                     .also { INSTANCE = it }
             }
@@ -113,7 +112,7 @@ abstract class PosDatabase : RoomDatabase() {
                             "INSERT INTO products " +
                                 "(name, sku, barcode, category, price, cost, stock, active, createdAt, updatedAt) " +
                                 "VALUES (?, ?, NULL, '', ?, ?, ?, 1, ?, ?)",
-                            arrayOf<Any>(s.name, s.sku, s.price, s.cost, 25, now, now),
+                            arrayOf<Any>(s.name, s.sku, s.price, s.cost, 25.0, now, now),
                         )
                     }
 

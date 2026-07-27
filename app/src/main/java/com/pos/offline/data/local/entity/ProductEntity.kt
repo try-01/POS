@@ -23,7 +23,7 @@ data class ProductEntity(
     val price: Long,
     @ColumnInfo(name = "cost", defaultValue = "0")
     val cost: Long = 0L,
-    val stock: Int,
+    val stock: Double,
     val active: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),

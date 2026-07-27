@@ -60,7 +60,7 @@ sealed interface PosUiEvent {
  * di-update sementara pembeli sudah menunggu di kasir. */
 data class StockWarningInfo(
     val productName: String,
-    val currentStock: Int,
+    val currentStock: Double,
 )
 
 sealed interface CheckoutState {
@@ -496,9 +496,9 @@ class PosViewModel(
     // ditolak, hanya diberi peringatan kalau melewati stok tercatat.
     fun setQuantityDirect(
         item: CartItemEntity,
-        newQuantity: Int,
+        newQuantity: Double,
     ) = viewModelScope.launch {
-        if (newQuantity <= 0) {
+        if (newQuantity <= 0.0) {
             cartRepository.remove(item.productId)
             return@launch
         }
@@ -520,11 +520,11 @@ class PosViewModel(
                     productId = item.productId,
                     name = item.name,
                     unitPrice = item.unitPrice,
-                    delta = 1,
+                    delta = 1.0,
                     maxStock = stock,
                 )
             if (result.crossedIntoExcess) {
-                _stockWarning.value = StockWarningInfo(item.name, stock ?: 0)
+                _stockWarning.value = StockWarningInfo(item.name, stock ?: 0.0)
             }
         }
 
@@ -573,7 +573,7 @@ class PosViewModel(
 
             _checkoutState.value = CheckoutState.Processing
             _printUiState.value = PrintUiState.Idle
-            _checkoutState.value =
+            _stockWarning.value = null
                 try {
                     val currentTotal = totals.value.total
                     val effectivePaid = if (_paid.value <= 0L) currentTotal else _paid.value
@@ -673,7 +673,7 @@ class PosViewModel(
             discountValue: Double,
             taxRate: Double,
         ): Totals {
-            val subtotal = items.sumOf { it.unitPrice * it.quantity.toLong() }
+            val subtotal = items.sumOf { kotlin.math.round(it.unitPrice * it.quantity).toLong() }
 
             val rawDiscountAmount =
                 (

@@ -49,7 +49,7 @@ interface ProductDao {
     )
     suspend fun decrementStock(
         id: Long,
-        qty: Int,
+        qty: Double,
         now: Long,
     ): Int
 
@@ -62,7 +62,7 @@ interface ProductDao {
     )
     suspend fun incrementStock(
         id: Long,
-        qty: Int,
+        qty: Double,
         now: Long,
     )
 
@@ -92,6 +92,6 @@ interface ProductDao {
     suspend fun getBySku(sku: String): ProductEntity?
 
     @Transaction
-    @Insert(onConflict = OnConflictStrategy.ABORT)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(products: List<ProductEntity>)
 }

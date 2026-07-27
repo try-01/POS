@@ -275,6 +275,120 @@ object Migrations {
                 )
             }
         }
+    val MIGRATION_14_15 =
+        object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1. TABEL PRODUCTS (stock: INTEGER -> REAL)
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `products_new` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `sku` TEXT NOT NULL,
+                        `barcode` TEXT,
+                        `price` INTEGER NOT NULL,
+                        `cost` INTEGER NOT NULL DEFAULT 0,
+                        `stock` REAL NOT NULL,
+                        `active` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        `category` TEXT NOT NULL DEFAULT ''
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `products_new` (`id`, `name`, `sku`, `barcode`, `price`, `cost`, `stock`, `active`, `createdAt`, `updatedAt`, `category`)
+                    SELECT `id`, `name`, `sku`, `barcode`, `price`, `cost`, CAST(`stock` AS REAL), `active`, `createdAt`, `updatedAt`, `category`
+                    FROM `products`
+                    """.trimIndent(),
+                )
+                db.execSQL("DROP TABLE `products`")
+                db.execSQL("ALTER TABLE `products_new` RENAME TO `products`")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_products_sku` ON `products` (`sku`)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_products_barcode` ON `products` (`barcode`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_products_name` ON `products` (`name`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_products_category` ON `products` (`category`)")
+
+                // 2. TABEL CART_ITEMS (quantity: INTEGER -> REAL)
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `cart_items_new` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `productId` INTEGER NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `unitPrice` INTEGER NOT NULL,
+                        `quantity` REAL NOT NULL DEFAULT 1,
+                        FOREIGN KEY(`productId`) REFERENCES `products`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `cart_items_new` (`id`, `productId`, `name`, `unitPrice`, `quantity`)
+                    SELECT `id`, `productId`, `name`, `unitPrice`, CAST(`quantity` AS REAL)
+                    FROM `cart_items`
+                    """.trimIndent(),
+                )
+                db.execSQL("DROP TABLE `cart_items`")
+                db.execSQL("ALTER TABLE `cart_items_new` RENAME TO `cart_items`")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_cart_items_productId` ON `cart_items` (`productId`)")
+
+                // 3. TABEL TRANSACTION_ITEMS (quantity: INTEGER -> REAL)
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `transaction_items_new` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `transactionId` TEXT NOT NULL,
+                        `productName` TEXT NOT NULL,
+                        `unitPrice` INTEGER NOT NULL,
+                        `quantity` REAL NOT NULL,
+                        `lineTotal` INTEGER NOT NULL,
+                        `unitCost` INTEGER NOT NULL DEFAULT 0,
+                        `productId` INTEGER
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `transaction_items_new` (`id`, `transactionId`, `productName`, `unitPrice`, `quantity`, `lineTotal`, `unitCost`, `productId`)
+                    SELECT `id`, `transactionId`, `productName`, `unitPrice`, CAST(`quantity` AS REAL), `lineTotal`, `unitCost`, `productId`
+                    FROM `transaction_items`
+                    """.trimIndent(),
+                )
+                db.execSQL("DROP TABLE `transaction_items`")
+                db.execSQL("ALTER TABLE `transaction_items_new` RENAME TO `transaction_items`")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transaction_items_transactionId` ON `transaction_items` (`transactionId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transaction_items_productId` ON `transaction_items` (`productId`)")
+
+                // 4. TABEL RETURN_ITEMS (quantityReturned: INTEGER -> REAL)
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `return_items_new` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `returnId` INTEGER NOT NULL,
+                        `transactionItemId` INTEGER NOT NULL,
+                        `productId` INTEGER,
+                        `productName` TEXT NOT NULL,
+                        `unitPrice` INTEGER NOT NULL,
+                        `quantityReturned` REAL NOT NULL,
+                        `restocked` INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `return_items_new` (`id`, `returnId`, `transactionItemId`, `productId`, `productName`, `unitPrice`, `quantityReturned`, `restocked`)
+                    SELECT `id`, `returnId`, `transactionItemId`, `productId`, `productName`, `unitPrice`, CAST(`quantityReturned` AS REAL), `restocked`
+                    FROM `return_items`
+                    """.trimIndent(),
+                )
+                db.execSQL("DROP TABLE `return_items`")
+                db.execSQL("ALTER TABLE `return_items_new` RENAME TO `return_items`")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_return_items_returnId` ON `return_items` (`returnId`)")
+            }
+        }
+
     val ALL: Array<Migration> =
         arrayOf(
             MIGRATION_1_2,
@@ -290,5 +404,6 @@ object Migrations {
             MIGRATION_11_12,
             MIGRATION_12_13,
             MIGRATION_13_14,
+            MIGRATION_14_15,
         )
 }

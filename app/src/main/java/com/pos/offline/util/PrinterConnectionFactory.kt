@@ -490,27 +490,31 @@ class PrinterConnectionFactory(
         return ConnectionResolution.Ready(UsbConnection(usbManager, device), printer.label)
     }
 
-    private suspend fun connectWithTimeout(connection: DeviceConnection): Boolean =
-        supervisorScope {
-            val connectJob = async(Dispatchers.IO) { connection.connect() }
-            val watchdog =
-                launch(Dispatchers.IO) {
-                    delay(CONNECT_TIMEOUT_MS)
-                    if (connectJob.isActive) {
-                        (connection as? CancellableBluetoothConnection)?.forceCloseIfStuck()
-                        connectJob.cancel()
-                    }
+private suspend fun connectWithTimeout(connection: DeviceConnection): Boolean =
+    supervisorScope {
+        val connectJob = async(Dispatchers.IO) { connection.connect() }
+        val watchdog =
+            launch(Dispatchers.IO) {
+                delay(CONNECT_TIMEOUT_MS)
+                if (connectJob.isActive) {
+                    // Penanganan khusus Bluetooth
+                    (connection as? CancellableBluetoothConnection)?.forceCloseIfStuck()
+                    // Penanganan universal (USB/TCP Dantsu library)
+                    runCatching { connection.disconnect() }
+                    
+                    connectJob.cancel()
                 }
-            val success =
-                try {
-                    connectJob.await()
-                    true
-                } catch (e: Exception) {
-                    false
-                }
-            watchdog.cancel()
-            success
-        }
+            }
+        val success =
+            try {
+                connectJob.await()
+                true
+            } catch (e: Exception) {
+                false
+            }
+        watchdog.cancel()
+        success
+    }
 
     private fun preDisconnectDelayMs(lastChunkChars: Int): Long {
         // KRITIS: byte chunk terakhir (bawa perintah cut) belum tentu selesai

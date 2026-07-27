@@ -88,9 +88,9 @@ object ReceiptManager {
 
         for (item in result.items) {
             val name = item.productName.trim().ifEmpty { "(Tanpa nama)" }
-            if (item.quantity > 1) {
+            if (item.quantity > 1.0) {
                 lines += ReceiptLine(left = name, bold = true)
-                lines += ReceiptLine(left = "  ${item.quantity} x ${item.unitPrice.toRupiah()}", right = item.lineTotal.toRupiah())
+                lines += ReceiptLine(left = "  ${item.quantity.formatQuantity()} x ${item.unitPrice.toRupiah()}", right = item.lineTotal.toRupiah())
             } else {
                 lines += ReceiptLine(left = name, right = item.lineTotal.toRupiah(), bold = true)
             }
@@ -358,21 +358,21 @@ object ReceiptManager {
         }
 
         if (includeProductsSold) {
-            val soldProducts = data.products.filter { it.qtySold > 0 }
+            val soldProducts = data.products.filter { it.qtySold > 0.0 }
             lines += ReceiptLine(left = "--- Produk Terjual ---", align = ReceiptAlign.CENTER, bold = true)
             lines += divider()
             if (soldProducts.isEmpty()) {
                 lines += ReceiptLine(left = "Tidak ada produk yang terjual pada periode ini.", align = ReceiptAlign.CENTER)
             } else {
                 soldProducts.forEach { p ->
-                    lines += ReceiptLine(left = p.productName, right = "${p.qtySold}x  ${p.revenue.toRupiah()}")
+                    lines += ReceiptLine(left = p.productName, right = "${p.qtySold.formatQuantity()}x  ${p.revenue.toRupiah()}")
                 }
             }
             lines += divider()
         }
 
         if (includeDeadStock) {
-            val deadStock = data.products.filter { it.qtySold == 0 }
+            val deadStock = data.products.filter { it.qtySold == 0.0 }
             lines += ReceiptLine(left = "--- Produk Tidak Laku ---", align = ReceiptAlign.CENTER, bold = true)
             lines += divider()
             if (deadStock.isEmpty()) {

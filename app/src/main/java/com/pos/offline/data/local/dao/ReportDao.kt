@@ -16,14 +16,14 @@ data class SalesSummary(
     // positional destructuring lama jika ada.
     val actualReceivedSum: Long,
 )
-data class ProfitAndItemsSummary(val itemsSoldSum: Int, val revenueSum: Long, val costSum: Long)
+data class ProfitAndItemsSummary(val itemsSoldSum: Double, val revenueSum: Long, val costSum: Long)
 data class PaymentMethodSummary(
     val paymentMethod: String,
     val total: Long, // nominal transaksi (on-paper) — dipertahankan utk breakdown
     val count: Int,
     val actualReceived: Long, // uang riil diterima per metode pembayaran
 )
-data class ProductSalesRow(val productId: Long, val productName: String, val sku: String, val price: Long, val stock: Int, val qtySold: Int, val revenue: Long)
+data class ProductSalesRow(val productId: Long, val productName: String, val sku: String, val price: Long, val stock: Double, val qtySold: Double, val revenue: Long)
 
 @Dao
 interface ReportDao {

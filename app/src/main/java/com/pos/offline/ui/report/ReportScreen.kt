@@ -1219,7 +1219,7 @@ private fun ReturnDetailDialog(
                 SummaryLine("Shift", header.shiftId?.let { "#$it" } ?: "Tanpa shift")
 
                 Spacer(Modifier.height(10.dp))
-                Text("Item Diretur ($totalQty)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Text("Item Diretur (${totalQty.formatQuantity()})", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
 
                 items.forEach { item ->
@@ -1263,13 +1263,13 @@ private fun ReturnDetailItemRow(item: ReturnItemEntity) {
             Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                 Text(item.productName, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp))
                 Text(
-                    "${item.quantityReturned} x ${item.unitPrice.toRupiah()}",
+                    "${item.quantityReturned.formatQuantity()} x ${item.unitPrice.toRupiah()}",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
             }
             Text(
-                (item.unitPrice * item.quantityReturned.toLong()).toRupiah(),
+                kotlin.math.round(item.unitPrice * item.quantityReturned).toLong().toRupiah(),
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                 fontWeight = FontWeight.SemiBold,
             )
@@ -1595,7 +1595,7 @@ private fun TransactionDetailDialog(
                                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                             )
                             Text(
-                                "${item.quantity} x ${item.unitPrice.toRupiah()}",
+                                "${item.quantity.formatQuantity()} x ${item.unitPrice.toRupiah()}",
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             )
@@ -1760,9 +1760,9 @@ private data class ReturnRowState(
     val productId: Long?,
     val productName: String,
     val unitPrice: Long,
-    val maxQuantity: Int,
+    val maxQuantity: Double,
     val included: Boolean = false,
-    val quantity: Int = maxQuantity,
+    val quantity: Double = maxQuantity,
     val restocked: Boolean = productId != null,
 )
 
@@ -1876,7 +1876,7 @@ private fun ReturnItemDialog(
                         onQuantityChange = { qty ->
                             rows =
                                 rows.toMutableList().also {
-                                    it[index] = row.copy(quantity = qty.coerceIn(1, row.maxQuantity))
+                                    it[index] = row.copy(quantity = qty.coerceIn(0.1, row.maxQuantity))
                                 }
                         },
                         onRestockedChange = { checked ->
@@ -1967,7 +1967,7 @@ private fun ReturnItemDialog(
 private fun ReturnItemRow(
     row: ReturnRowState,
     onToggleIncluded: (Boolean) -> Unit,
-    onQuantityChange: (Int) -> Unit,
+    onQuantityChange: (Double) -> Unit,
     onRestockedChange: (Boolean) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -1981,7 +1981,7 @@ private fun ReturnItemRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    "${row.unitPrice.toRupiah()} · maks ${row.maxQuantity}",
+                    "${row.unitPrice.toRupiah()} · maks ${row.maxQuantity.formatQuantity()}",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
@@ -1994,10 +1994,10 @@ private fun ReturnItemRow(
             ) {
                 MiniStepper(
                     qty = row.quantity,
-                    canDecrease = row.quantity > 1,
+                    canDecrease = row.quantity > 1.0,
                     canIncrease = row.quantity < row.maxQuantity,
-                    onDecrease = { onQuantityChange(row.quantity - 1) },
-                    onIncrease = { onQuantityChange(row.quantity + 1) },
+                    onDecrease = { onQuantityChange(row.quantity - 1.0) },
+                    onIncrease = { onQuantityChange(row.quantity + 1.0) },
                 )
                 Spacer(Modifier.width(12.dp))
                 Row(
@@ -2030,7 +2030,7 @@ private fun ReturnItemRow(
 
 @Composable
 private fun MiniStepper(
-    qty: Int,
+    qty: Double,
     canDecrease: Boolean,
     canIncrease: Boolean,
     onDecrease: () -> Unit,
@@ -2049,8 +2049,8 @@ private fun MiniStepper(
             Icon(Icons.Rounded.Remove, contentDescription = "Kurangi jumlah", modifier = Modifier.size(14.dp))
         }
         Text(
-            "$qty",
-            modifier = Modifier.width(28.dp),
+            qty.formatQuantity(),
+            modifier = Modifier.width(36.dp),
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,

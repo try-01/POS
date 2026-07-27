@@ -37,6 +37,6 @@ data class ReturnItemEntity(
     val productId: Long? = null,
     val productName: String,
     val unitPrice: Long,
-    val quantityReturned: Int,
+    val quantityReturned: Double,
     val restocked: Boolean,
 )

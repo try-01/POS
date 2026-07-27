@@ -17,7 +17,7 @@ data class ReturnItemInput(
     val productId: Long?,
     val productName: String,
     val unitPrice: Long,
-    val quantityReturned: Int,
+    val quantityReturned: Double,
     val restocked: Boolean,
 )
 
@@ -105,7 +105,7 @@ class ReturnRepository(
         itemInputs.forEach { input ->
             val original = originalItems[input.transactionItemId]
             if (original == null ||
-                input.quantityReturned <= 0 ||
+                input.quantityReturned <= 0.0 ||
                 input.quantityReturned > original.quantity
             ) {
                 return ReturnOutcome.InvalidQuantity(input.productName)

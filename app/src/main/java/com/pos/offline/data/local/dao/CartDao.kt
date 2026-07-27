@@ -22,22 +22,14 @@ import kotlinx.coroutines.flow.Flow
  * yang membuat permintaan qty menjadi negatif, tetap di-floor ke 0).
  */
 data class CartQuantityChangeResult(
-    val previousQty: Int,
-    val requestedQty: Int,
-    val finalQty: Int,
-    val maxStock: Int?,
+    val previousQty: Double,
+    val requestedQty: Double,
+    val finalQty: Double,
+    val maxStock: Double?,
 ) {
     val wasClamped: Boolean get() = finalQty != requestedQty
     val exceedsStock: Boolean get() = maxStock != null && finalQty > maxStock
 
-    /**
-     * True HANYA pada tap/aksi yang membuat qty MELEWATI batas stok untuk
-     * pertama kali (previousQty masih <= maxStock, finalQty sudah > maxStock).
-     * Dipakai untuk menampilkan dialog peringatan SEKALI SAJA saat momen
-     * transisi — bukan pada setiap tap berikutnya selama qty sudah kelebihan
-     * (mencegah dialog blocking muncul berulang-ulang & mengganggu alur kasir
-     * yang sering dikejar waktu pembeli).
-     */
     val crossedIntoExcess: Boolean
         get() = maxStock != null && previousQty <= maxStock && finalQty > maxStock
 }
@@ -56,7 +48,7 @@ interface CartDao {
     @Query("UPDATE cart_items SET quantity = :qty WHERE productId = :productId")
     suspend fun updateQuantity(
         productId: Long,
-        qty: Int,
+        qty: Double,
     )
 
     @Query("DELETE FROM cart_items WHERE productId = :productId")
@@ -65,29 +57,21 @@ interface CartDao {
     @Query("DELETE FROM cart_items")
     suspend fun clear()
 
-    /**
-     * Mengubah kuantitas item di cart secara atomic sebesar [delta] (bisa +/-),
-     * dalam satu transaksi Room (aman dari race condition tap cepat berulang).
-     *
-     * [maxStock] TIDAK memblokir kenaikan qty (lihat dokumentasi
-     * [CartQuantityChangeResult]) — hanya dipakai untuk menghitung
-     * [CartQuantityChangeResult.exceedsStock] sebagai sinyal peringatan UI.
-     */
     @Transaction
     suspend fun applyQuantityDelta(
         productId: Long,
         name: String,
         unitPrice: Long,
-        delta: Int,
-        maxStock: Int? = null,
+        delta: Double,
+        maxStock: Double? = null,
     ): CartQuantityChangeResult {
         val existing = findByProduct(productId)
-        val previousQty = existing?.quantity ?: 0
+        val previousQty = existing?.quantity ?: 0.0
         val requestedQty = previousQty + delta
-        val finalQty = requestedQty.coerceAtLeast(0)
+        val finalQty = requestedQty.coerceAtLeast(0.0)
 
         when {
-            finalQty <= 0 -> if (existing != null) remove(productId)
+            finalQty <= 0.0 -> if (existing != null) remove(productId)
             existing == null -> upsert(CartItemEntity(productId = productId, name = name, unitPrice = unitPrice, quantity = finalQty))
             else -> updateQuantity(productId, finalQty)
         }

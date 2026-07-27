@@ -44,7 +44,7 @@ data class ProductFormState(
     val category: String = "",
     val price: Long = 0L,
     val cost: Long = 0L,
-    val stock: Int = 0,
+    val stock: Double = 0.0,
     val createdAt: Long = System.currentTimeMillis(),
 ) {
     val isNew: Boolean get() = id == 0L
@@ -363,7 +363,7 @@ class InventoryViewModel(
                 val name = state.name.trim()
                 if (name.isBlank()) { notify("Nama produk wajib diisi."); return@launch }
                 if (state.price < 0) { notify("Harga tidak boleh negatif."); return@launch }
-                if (state.stock < 0) { notify("Stok tidak boleh negatif."); return@launch }
+                if (state.stock < 0.0) { notify("Stok tidak boleh negatif."); return@launch }
 
                 val sku = state.sku.trim().ifBlank { "SKU-${System.currentTimeMillis()}" }
                 val barcode = state.barcode.trim().ifBlank { null }

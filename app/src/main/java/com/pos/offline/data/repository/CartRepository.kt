@@ -20,15 +20,15 @@ class CartRepository(
         productId: Long,
         name: String,
         unitPrice: Long,
-        delta: Int,
-        maxStock: Int? = null,
+        delta: Double,
+        maxStock: Double? = null,
     ): CartQuantityChangeResult = cartDao.applyQuantityDelta(productId, name, unitPrice, delta, maxStock)
 
     suspend fun setQuantity(
         productId: Long,
-        qty: Int,
+        qty: Double,
     ) {
-        if (qty <= 0) {
+        if (qty <= 0.0) {
             cartDao.remove(productId)
         } else {
             cartDao.updateQuantity(productId, qty)

@@ -20,9 +20,17 @@ class LogoImageProcessor(
             try {
                 val original = decodeBitmapSafely(uri) ?: return@withContext null
                 val resized = resizeToFit(original, MAX_DIMENSION)
+                if (original !== resized) {
+                    original.recycle()
+                }
                 val grayscale = toGrayscale(resized)
+                if (resized !== grayscale) {
+                    resized.recycle()
+                }
                 val output = ByteArrayOutputStream()
                 grayscale.compress(Bitmap.CompressFormat.PNG, 100, output)
+                grayscale.recycle()
+
                 output.toByteArray()
             } catch (e: Exception) {
                 null

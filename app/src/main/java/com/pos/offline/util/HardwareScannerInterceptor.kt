@@ -12,42 +12,43 @@ class HardwareScannerInterceptor(
     private val buffer = StringBuilder()
     private var lastCharTime = 0L
 
-    fun onKeyEvent(event: KeyEvent) {
-        if (event.action != KeyEvent.ACTION_DOWN) return
+// FIXED: Refactor 'onKeyEvent' di HardwareScannerInterceptor.kt
+fun onKeyEvent(event: KeyEvent) {
+    if (event.action != KeyEvent.ACTION_DOWN) return
+    if (event.deviceId == KeyCharacterMap.VIRTUAL_KEYBOARD) return
 
-        if (event.deviceId == KeyCharacterMap.VIRTUAL_KEYBOARD) return
+    val now = System.currentTimeMillis()
+    val isEnter = event.keyCode == KeyEvent.KEYCODE_ENTER ||
+                  event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
 
-        val now = System.currentTimeMillis()
-        val isEnter =
-            event.keyCode == KeyEvent.KEYCODE_ENTER ||
-                event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+    if (isEnter) {
+        val candidate = buffer.toString()
+        val lastGapFast = buffer.isNotEmpty() && (now - lastCharTime) <= maxCharGapMs
+        buffer.clear()
 
-        if (isEnter) {
-            val candidate = buffer.toString()
-            val lastGapFast = buffer.isNotEmpty() && (now - lastCharTime) <= maxCharGapMs
-            buffer.clear()
+        val validBarcode = lastGapFast &&
+                candidate.length in minLength..maxLength &&
+                candidate.all { it.isLetterOrDigit() || it == '-' }
 
-            // FIX: Mengizinkan karakter alfanumerik (Code128) ditambah tanda hubung
-            val validBarcode =
-                lastGapFast &&
-                    candidate.length in minLength..maxLength &&
-                    candidate.all { it.isLetterOrDigit() || it == '-' }
-
-            if (validBarcode) onBarcodeDetected(candidate)
-            return
-        }
-
-        val char = event.unicodeChar.toChar()
-        // FIX: Hanya terima huruf, angka, dan tanda hubung. Karakter lain (seperti spasi) membatalkan buffer.
-        if (!char.isLetterOrDigit() && char != '-') {
-            buffer.clear()
-            return
-        }
-
-        if (buffer.isNotEmpty() && (now - lastCharTime) > maxCharGapMs) {
-            buffer.clear() // jeda kelamaan -> ini awal input baru
-        }
-        buffer.append(char)
-        lastCharTime = now
+        if (validBarcode) onBarcodeDetected(candidate)
+        return
     }
+
+    val charCode = event.unicodeChar
+    if (charCode == 0) return // FIXED: Abaikan modifier key/sinyal hantu hardware scanner
+
+    val char = charCode.toChar()
+    
+    // Hanya izinkan alfanumerik dan tanda hubung
+    if (!char.isLetterOrDigit() && char != '-') {
+        buffer.clear()
+        return
+    }
+
+    if (buffer.isNotEmpty() && (now - lastCharTime) > maxCharGapMs) {
+        buffer.clear()
+    }
+    buffer.append(char)
+    lastCharTime = now
+}
 }

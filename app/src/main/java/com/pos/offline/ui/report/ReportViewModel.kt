@@ -337,7 +337,7 @@ class ReportViewModel(
                     val methodLabel = if (refundMethod == PaymentMethod.QRIS) "QRIS" else "Tunai"
                     _messages.emit(
                         ReportMessage(
-                            "Retur berhasil diproses. $totalQty item · ${refundAmount.toRupiah()} " +
+                            "Retur berhasil diproses. ${totalQty.formatQuantity()} item · ${refundAmount.toRupiah()} " +
                                 "dikembalikan via $methodLabel.",
                             isError = false,
                         ),
@@ -562,8 +562,8 @@ class ReportViewModel(
     }
 
     private fun buildEmptyStateNote(data: SalesReportData): String? {
-        val soldEmpty = _includeProductsSold.value && data.products.none { it.qtySold > 0 }
-        val deadEmpty = _includeDeadStock.value && data.products.none { it.qtySold == 0 }
+        val soldEmpty = _includeProductsSold.value && data.products.none { it.qtySold > 0.0 }
+        val deadEmpty = _includeDeadStock.value && data.products.none { it.qtySold == 0.0 }
         return when {
             soldEmpty && deadEmpty -> "tidak ada produk yang terjual maupun tidak laku pada periode ini"
             soldEmpty -> "tidak ada produk yang terjual pada periode ini"
@@ -630,14 +630,8 @@ class ReportViewModel(
     }
 
     private fun dayBounds(date: LocalDate): Pair<Long, Long> {
-        val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
-        val end =
-            date
-                .plusDays(1)
-                .atStartOfDay(zone)
-                .toInstant()
-                .toEpochMilli()
-        return start to end
+        val timestamp = date.atStartOfDay(zone).toInstant().toEpochMilli()
+        return com.pos.offline.util.getAbsoluteDayRange(timestamp)
     }
 
     private fun aggregate(

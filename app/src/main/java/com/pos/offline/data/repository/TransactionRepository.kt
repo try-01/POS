@@ -88,7 +88,7 @@ class TransactionRepository(
         changeGivenInCash: Boolean = true,
     ): CheckoutResult {
         require(cart.isNotEmpty()) { "Keranjang kosong" }
-        val subtotal = cart.sumOf { it.unitPrice * it.quantity.toLong() }
+        val subtotal = cart.sumOf { kotlin.math.round(it.unitPrice * it.quantity).toLong() }
         val rawDiscountAmount =
             (
                 when (discountType) {
@@ -140,7 +140,7 @@ class TransactionRepository(
                     productName = cartItem.name,
                     unitPrice = cartItem.unitPrice,
                     quantity = cartItem.quantity,
-                    lineTotal = cartItem.unitPrice * cartItem.quantity.toLong(),
+                    lineTotal = kotlin.math.round(cartItem.unitPrice * cartItem.quantity).toLong(),
                     unitCost = unitCost,
                 )
             }

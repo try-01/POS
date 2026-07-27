@@ -26,7 +26,7 @@ data class ImportedProductRow(
     val category: String?,
     val price: Long,
     val cost: Long,
-    val stock: Int,
+    val stock: Double,
 )
 
 data class ExcelImportResult(
@@ -44,6 +44,7 @@ object ExcelManager {
     ): ExcelOutcome =
         withContext(Dispatchers.IO) {
             val workbook = SXSSFWorkbook(100)
+            var outputStream: java.io.OutputStream? = null
             try {
                 val sheet = workbook.createSheet("Produk")
                 val header = sheet.createRow(0)
@@ -61,19 +62,25 @@ object ExcelManager {
                     row.createCell(3).setCellValue(p.category)
                     row.createCell(4).setCellValue(p.price.toDouble())
                     row.createCell(5).setCellValue(p.cost.toDouble())
-                    row.createCell(6).setCellValue(p.stock.toDouble())
+                    row.createCell(6).setCellValue(p.stock)
                 }
 
-                context.contentResolver.openOutputStream(destinationUri)?.use { workbook.write(it) }
-                    ?: return@withContext ExcelOutcome.Error(IOException("Tidak bisa membuka output stream"))
-
+            outputStream = context.contentResolver.openOutputStream(destinationUri)
+            if (outputStream != null) {
+                workbook.write(outputStream)
                 ExcelOutcome.Success
-            } catch (e: Exception) {
-                ExcelOutcome.Error(e)
-            } finally {
-                workbook.close()
+            } else {
+                ExcelOutcome.Error(IOException("Tidak bisa membuka output stream"))
             }
+        } catch (e: Exception) {
+            ExcelOutcome.Error(e)
+        } finally {
+            // FIXED: Isolasi error penutupan dan pastikan temp files dihancurkan
+            runCatching { outputStream?.close() }
+            runCatching { workbook.close() }
+            runCatching { workbook.dispose() } // Hapus temporary file dari disk
         }
+    }
 
     /**
      * Membersihkan & menormalkan string angka dari berbagai gaya penulisan umum
@@ -160,10 +167,10 @@ object ExcelManager {
                     fun parseQty(
                         s: String,
                         field: String,
-                    ): Int {
+                    ): Double {
                         val value = parseFlexibleNumber(s) ?: error("$field tidak valid: \"$s\"")
                         require(value >= 0) { "$field bernilai negatif" }
-                        return round(value).toInt()
+                        return value
                     }
 
                     for (i in 1..sheet.lastRowNum) {

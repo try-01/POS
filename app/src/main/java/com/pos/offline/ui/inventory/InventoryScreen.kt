@@ -93,6 +93,7 @@ import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 import com.pos.offline.ui.components.rememberBarcodeScanner
 import com.pos.offline.util.ExcelManager
 import com.pos.offline.util.toRupiah
+import com.pos.offline.util.formatQuantity
 import com.pos.offline.ui.inventory.sanitizeScannedCode
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -631,16 +632,16 @@ private fun CompactIconAction(
 }
 
 @Composable
-private fun StockBadge(stock: Int) {
+private fun StockBadge(stock: Double) {
     val color =
         when {
-            stock <= 0 -> MaterialTheme.colorScheme.error
-            stock <= 5 -> Color(0xFFF5A623)
+            stock <= 0.0 -> MaterialTheme.colorScheme.error
+            stock <= 5.0 -> Color(0xFFF5A623)
             else -> MaterialTheme.colorScheme.primary
         }
     Surface(color = color.copy(alpha = 0.16f), shape = RoundedCornerShape(6.dp)) {
         Text(
-            text = if (stock <= 0) "Habis" else "Stok $stock",
+            text = if (stock <= 0.0) "Habis" else "Stok ${stock.formatQuantity()}",
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
             color = color,
@@ -842,7 +843,7 @@ private fun ProductFormDialog(
         mutableStateOf(if (state.price > 0) state.price.toString() else "")
     }
     var stock by remember(state.id) {
-        mutableStateOf(if (state.stock > 0) state.stock.toString() else "")
+        mutableStateOf(if (state.stock > 0.0) state.stock.formatQuantity() else "")
     }
     var cost by remember(state.id) {
         mutableStateOf(if (state.cost > 0) state.cost.toString() else "")
@@ -1002,7 +1003,7 @@ private fun ProductFormDialog(
                     MoneyNumberField(cost, { cost = it }, "Modal", Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumberField(stock, { stock = it }, "Stok", Modifier.weight(1f))
+                    DecimalNumberField(stock, { stock = it }, "Stok", Modifier.weight(1f))
                     OutlinedTextField(
                         value = (priceLong - costLong).toRupiah(),
                         onValueChange = {},
@@ -1051,7 +1052,7 @@ private fun ProductFormDialog(
                                 category = category.trim(),
                                 price = price.toLongOrNull() ?: 0L,
                                 cost = cost.toLongOrNull() ?: 0L,
-                                stock = stock.toIntOrNull() ?: 0,
+                                stock = stock.toDoubleOrNull() ?: 0.0,
                                 createdAt = state.createdAt,
                             ),
                         )
@@ -1086,6 +1087,39 @@ private fun NumberField(
         singleLine = true,
         textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        shape = RoundedCornerShape(10.dp),
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun DecimalNumberField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { input ->
+            val cleaned = buildString {
+                var dotSeen = false
+                for (c in input) {
+                    when {
+                        c.isDigit() -> append(c)
+                        c == '.' && !dotSeen -> {
+                            append(c)
+                            dotSeen = true
+                        }
+                    }
+                }
+            }.take(10)
+            onValueChange(cleaned)
+        },
+        label = { Text(label, style = MaterialTheme.typography.bodySmall) },
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         shape = RoundedCornerShape(10.dp),
         modifier = modifier,
     )
