@@ -2,9 +2,12 @@ package com.pos.offline.ui.components
 
 import android.os.Handler
 import android.os.Looper
+import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
@@ -32,22 +35,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Size as GeometrySize
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
@@ -62,6 +64,10 @@ import com.pos.offline.util.rememberCameraPermissionState
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
+/**
+ * Komponen Scanner Kamera dengan batas ROI presisi, resolusi optimal 720p,
+ * dan dukungan Auto-Focus bawaan CameraX.
+ */
 @Composable
 fun BarcodeScannerCamera(
     onBarcodeScanned: (String) -> Unit,
@@ -69,22 +75,22 @@ fun BarcodeScannerCamera(
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val executor = remember { Executors.newSingleThreadExecutor() }
-    val mainHandler = remember { Handler(Looper.getMainLooper()) } // Handler untuk pindah ke Main Thread
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
-    val scanner =
-        remember {
-            BarcodeScanning.getClient(
-                BarcodeScannerOptions
-                    .Builder()
-                    .setBarcodeFormats(
-                        Barcode.FORMAT_EAN_13,
-                        Barcode.FORMAT_EAN_8,
-                        Barcode.FORMAT_UPC_A,
-                        Barcode.FORMAT_UPC_E,
-                        Barcode.FORMAT_CODE_128,
-                    ).build(),
-            )
-        }
+    // Konfigurasi format barcode
+    val scanner = remember {
+        BarcodeScanning.getClient(
+            BarcodeScannerOptions.Builder()
+                .setBarcodeFormats(
+                    Barcode.FORMAT_EAN_13,
+                    Barcode.FORMAT_EAN_8,
+                    Barcode.FORMAT_UPC_A,
+                    Barcode.FORMAT_UPC_E,
+                    Barcode.FORMAT_CODE_128,
+                ).build()
+        )
+    }
+
     val scanned = remember { AtomicBoolean(false) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
@@ -93,41 +99,62 @@ fun BarcodeScannerCamera(
     fun attemptBind() {
         val provider = cameraProvider ?: return
         val previewView = previewViewRef ?: return
+
         try {
-            val preview =
-                Preview.Builder().build().also {
+            // 1. Pengaturan Resolusi 720p (720x1280 Portrait)
+            val resolutionStrategy = ResolutionStrategy(
+                Size(720, 1280),
+                ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+            )
+            val resolutionSelector = ResolutionSelector.Builder()
+                .setResolutionStrategy(resolutionStrategy)
+                .build()
+
+            // 2. Konfigurasi Preview Kamera
+            val preview = Preview.Builder()
+                .setResolutionSelector(resolutionSelector)
+                .build()
+                .also {
                     it.setSurfaceProvider(previewView.surfaceProvider)
                 }
-            val analysis =
-                ImageAnalysis
-                    .Builder()
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
+
+            // 3. Konfigurasi Analisis Gambar / Frame Processing
+            val analysis = ImageAnalysis.Builder()
+                .setResolutionSelector(resolutionSelector)
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+
+            // 4. Proses Frame Gambar via ImageProxy
             analysis.setAnalyzer(executor) { proxy ->
                 val mediaImage = proxy.image
                 if (mediaImage == null || scanned.get()) {
-                    proxy.close()
+                    proxy.close() // Selalu tutup proxy jika tidak diproses
                     return@setAnalyzer
                 }
-                try {
-                    val input = InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
-                    scanner
-                        .process(input)
-                        .addOnSuccessListener { barcodes ->
-                            val imgW = proxy.width.toFloat()
-                            val imgH = proxy.height.toFloat()
 
-                            // Filter ROI: Hanya ambil barcode yang titik pusatnya ada di zona tengah layar (X: 20-80%, Y: 25-75%)
+                try {
+                    val rotationDegrees = proxy.imageInfo.rotationDegrees
+                    val input = InputImage.fromMediaImage(mediaImage, rotationDegrees)
+
+                    scanner.process(input)
+                        .addOnSuccessListener { barcodes ->
+                            // Penyesuaian dimensi berdasarkan posisi rotasi HP
+                            val isRotated = rotationDegrees == 90 || rotationDegrees == 270
+                            val imgW = if (isRotated) proxy.height.toFloat() else proxy.width.toFloat()
+                            val imgH = if (isRotated) proxy.width.toFloat() else proxy.height.toFloat()
+
+                            // Menyaring barcode agar HANYA yang di dalam bingkai visual yang diproses
                             val targetBarcode = barcodes.firstOrNull { barcode ->
                                 val raw = barcode.rawValue
                                 if (raw.isNullOrBlank()) return@firstOrNull false
 
-                                val rect = barcode.boundingBox ?: return@firstOrNull true
+                                val rect = barcode.boundingBox ?: return@firstOrNull false
+
                                 val normX = rect.centerX() / imgW
                                 val normY = rect.centerY() / imgH
 
-                                // Abaikan barcode di pinggir layar
-                                normX in 0.20f..0.80f && normY in 0.25f..0.75f
+                                // Batas area tengah layar (Sesuai dengan ukuran ScannerViewfinder)
+                                normX in 0.125f..0.875f && normY in 0.325f..0.675f
                             }
 
                             targetBarcode?.rawValue?.let { code ->
@@ -135,14 +162,19 @@ fun BarcodeScannerCamera(
                                     mainHandler.post { onBarcodeScanned(code) }
                                 }
                             }
-                        }.addOnCompleteListener { proxy.close() }
+                        }
+                        .addOnCompleteListener {
+                            // WAJIB: Membebaskan buffer ImageProxy
+                            proxy.close()
+                        }
                 } catch (e: Exception) {
-                    android.util.Log.e("BarcodeScannerCamera", "Error membungkus frame gambar", e)
+                    android.util.Log.e("BarcodeScannerCamera", "Error memproses frame gambar", e)
                     proxy.close()
                 }
             }
 
             provider.unbindAll()
+            // Mengikat lifecycle ke kamera belakang (Otomatis mengaktifkan Continuous Auto-Focus)
             provider.bindToLifecycle(
                 lifecycleOwner,
                 CameraSelector.DEFAULT_BACK_CAMERA,
@@ -152,7 +184,7 @@ fun BarcodeScannerCamera(
             cameraError = null
         } catch (e: Exception) {
             android.util.Log.e("BarcodeScannerCamera", "Gagal membuka kamera", e)
-            cameraError = "Gagal membuka kamera. Pastikan kamera tidak sedang dipakai aplikasi lain, lalu coba lagi."
+            cameraError = "Gagal membuka kamera. Pastikan kamera tidak sedang dipakai aplikasi lain."
         }
     }
 
@@ -168,7 +200,10 @@ fun BarcodeScannerCamera(
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { c ->
-                val previewView = PreviewView(c)
+                val previewView = PreviewView(c).apply {
+                    // Mode performa untuk respon preview dan fokus otomatis yang halus
+                    implementationMode = PreviewView.ImplementationMode.PERFORMANCE
+                }
                 previewViewRef = previewView
                 val providerFuture = ProcessCameraProvider.getInstance(c)
                 providerFuture.addListener({
@@ -177,7 +212,7 @@ fun BarcodeScannerCamera(
                         attemptBind()
                     } catch (e: Exception) {
                         android.util.Log.e("BarcodeScannerCamera", "Gagal mendapatkan CameraProvider", e)
-                        cameraError = "Gagal membuka kamera. Pastikan kamera tidak sedang dipakai aplikasi lain, lalu coba lagi."
+                        cameraError = "Gagal membuka kamera. Pastikan kamera tidak sedang dipakai aplikasi lain."
                     }
                 }, ContextCompat.getMainExecutor(c))
                 previewView
@@ -189,10 +224,9 @@ fun BarcodeScannerCamera(
 
         cameraError?.let { message ->
             Box(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.85f)),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.85f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -238,15 +272,11 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
                     showScanner = true
                     pendingOpen = false
                 }
-
                 CameraPermissionState.PERMANENTLY_DENIED -> {
                     showDeniedDialog = true
                     pendingOpen = false
                 }
-
-                else -> {
-                    Unit
-                }
+                else -> Unit
             }
         }
     }
@@ -272,7 +302,7 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
                     showDeniedDialog = false
                     pendingOpen = true
                     if (permanentlyDenied) {
-                        openAppSettings(context) // FIX: reuse fungsi yang sudah ada, tidak ditulis ulang
+                        openAppSettings(context)
                     } else {
                         requestPermission()
                     }
@@ -289,10 +319,7 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
     if (showScanner) {
         Dialog(
             onDismissRequest = { showScanner = false },
-            properties =
-                DialogProperties(
-                    usePlatformDefaultWidth = false,
-                ),
+            properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             Box(Modifier.fillMaxSize()) {
                 BarcodeScannerCamera(
@@ -304,9 +331,11 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
                 )
                 IconButton(
                     onClick = { showScanner = false },
-                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp),
                 ) {
-                    Icon(Icons.Rounded.Close, contentDescription = "Tutup")
+                    Icon(Icons.Rounded.Close, contentDescription = "Tutup", tint = Color.White)
                 }
             }
         }
@@ -314,14 +343,8 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
 
     return {
         when (permState) {
-            CameraPermissionState.GRANTED -> {
-                showScanner = true
-            }
-
-            CameraPermissionState.SHOW_RATIONALE, CameraPermissionState.PERMANENTLY_DENIED -> {
-                showDeniedDialog = true
-            }
-
+            CameraPermissionState.GRANTED -> showScanner = true
+            CameraPermissionState.SHOW_RATIONALE, CameraPermissionState.PERMANENTLY_DENIED -> showDeniedDialog = true
             else -> {
                 pendingOpen = true
                 requestPermission()
@@ -359,15 +382,12 @@ private fun ScannerViewfinder(modifier: Modifier = Modifier) {
             )
 
             val boxOffset = Offset(left, top)
-            val boxSize = Size(boxWidth, boxHeight)
+            val boxSize = GeometrySize(boxWidth, boxHeight)
             val strokeStyle = Stroke(width = strokeWidthPx)
 
             onDrawWithContent {
                 drawContent()
-                // Gambar overlay redup di luar bingkai
                 drawPath(dimmedPath, Color.Black.copy(alpha = 0.55f))
-
-                // Gambar garis bingkai putih di tengah
                 drawRoundRect(
                     color = Color.White,
                     topLeft = boxOffset,
