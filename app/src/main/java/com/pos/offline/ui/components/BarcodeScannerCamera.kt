@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
@@ -408,23 +410,60 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                     modifier = Modifier.fillMaxSize(),
                 )
 
+                // TOP BAR: Floating Info Counter untuk Kasir (Jelas & Terlihat dari Kejauhan)
+                AnimatedVisibility(
+                    visible = scannedCountBatch > 0,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .statusBarsPadding()
+                        .padding(start = 16.dp, top = 12.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        tonalElevation = 6.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "$scannedCountBatch Item Masuk Keranjang",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
                 IconButton(
                     onClick = { showScanner = false },
                     modifier = Modifier
                         .align(Alignment.TopEnd)
+                        .statusBarsPadding() // FIXED: Bebas dari Overlap Status Bar Atas
                         .padding(16.dp),
                 ) {
                     Icon(Icons.Rounded.Close, contentDescription = "Tutup", tint = Color.White)
                 }
 
+                // BOTTOM CARD: Bebas Overlap Tombol Navigasi Sistem
                 Card(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .navigationBarsPadding() // FIXED: Mengangkat Card ke ATAS tombol navigasi sistem
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color.Black.copy(alpha = 0.75f)
+                        containerColor = Color.Black.copy(alpha = 0.85f)
                     )
                 ) {
                     Column(
@@ -444,12 +483,19 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = "Mode Multi-Scan (Beruntun)",
-                                    color = Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
+                                Column {
+                                    Text(
+                                        text = "Mode Multi-Scan (Beruntun)",
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = if (isMultiScanMode) "Kamera tetap terbuka setelah scan" else "Kamera otomatis tutup 1x scan",
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        fontSize = 10.sp
+                                    )
+                                }
                             }
                             Switch(
                                 checked = isMultiScanMode,
@@ -461,13 +507,13 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                             )
                         }
 
-                        AnimatedVisibility(visible = scannedCountBatch > 0) {
+                        AnimatedVisibility(visible = lastScannedCodeText.isNotEmpty()) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(Color.White.copy(alpha = 0.15f))
-                                    .padding(10.dp),
+                                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
@@ -478,9 +524,10 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    text = "Barcode: $lastScannedCodeText",
+                                    text = "Terakhir: $lastScannedCodeText",
                                     color = Color.White,
                                     fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -496,7 +543,8 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 text = if (scannedCountBatch > 0) "Selesai ($scannedCountBatch Item Dipindai)" else "Selesai",
-                                fontSize = 13.sp
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }

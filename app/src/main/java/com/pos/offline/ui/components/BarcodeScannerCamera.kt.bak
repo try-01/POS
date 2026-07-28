@@ -143,6 +143,8 @@ fun BarcodeScannerCamera(
                     it.setSurfaceProvider(previewView.surfaceProvider)
                 }
 
+            if (executor.isShutdown) return // FIXED: Guard dari Race Condition unbind/dispose
+
             val analysis = ImageAnalysis.Builder()
                 .setResolutionSelector(resolutionSelector)
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
