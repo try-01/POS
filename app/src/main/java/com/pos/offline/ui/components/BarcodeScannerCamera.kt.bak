@@ -33,7 +33,6 @@ import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -51,6 +50,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -86,6 +86,7 @@ import com.pos.offline.util.ScanFeedbackManager
 import com.pos.offline.util.ScanPreferencesRepository
 import com.pos.offline.util.openAppSettings
 import com.pos.offline.util.rememberCameraPermissionState
+import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 
 /**
@@ -93,11 +94,12 @@ import java.util.concurrent.Executors
  */
 @Composable
 fun BarcodeScannerCamera(
-    onBarcodeScanned: (String) -> Unit,
-    isMultiScanMode: Boolean, // Menerima instruksi mode dari UI
+    onBarcodeScanned: suspend (String) -> Boolean, // Diubah menjadi suspend function yang mengembalikan Boolean
+    isMultiScanMode: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
     val executor = remember { Executors.newSingleThreadExecutor() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
@@ -114,7 +116,6 @@ fun BarcodeScannerCamera(
         )
     }
 
-    // Variabel logika pencegah pemindaian ganda (Anti-Duplicate / Debounce)
     var lastScannedCode by remember { mutableStateOf<String?>(null) }
     var lastScannedTime by remember { mutableLongStateOf(0L) }
 
@@ -182,20 +183,22 @@ fun BarcodeScannerCamera(
                             targetBarcode?.rawValue?.let { code ->
                                 val currentTime = System.currentTimeMillis()
 
-                                // Logika Debounce: Cegah barang yang sama terscan berulang dalam 1,2 detik
                                 val isSameCode = (code == lastScannedCode)
                                 val isTimeElapsed = (currentTime - lastScannedTime) > 1200L
 
-                                // Jika barcode berbeda DARI yang sebelumnya ATAU waktu (1,2s) sudah lewat
                                 if (!isSameCode || isTimeElapsed) {
                                     lastScannedCode = code
                                     lastScannedTime = currentTime
-                                    mainHandler.post { onBarcodeScanned(code) }
+                                    
+                                    // Menjalankan validasi secara asynchronous agar tidak memblokir frame analyzer kamera
+                                    coroutineScope.launch {
+                                        onBarcodeScanned(code)
+                                    }
                                 }
                             }
                         }
                         .addOnCompleteListener {
-                            proxy.close() // Penting: mencegah memory leak frame
+                            proxy.close()
                         }
                 } catch (e: Exception) {
                     proxy.close()
@@ -271,11 +274,10 @@ fun BarcodeScannerCamera(
  * KOMPONEN 2: Logika UI, Izin, Overlay, Sesi Sementara, & Umpan Balik
  */
 @Composable
-fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
+fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
     val context = LocalContext.current
     val onScannedState = rememberUpdatedState(onScanned)
 
-    // Inisialisasi Umpan Balik (Feedback) & Preferensi Pengguna
     val feedbackManager = remember { ScanFeedbackManager(context) }
     val prefsRepository = remember { ScanPreferencesRepository(context) }
 
@@ -292,12 +294,10 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
     var pendingOpen by remember { mutableStateOf(false) }
     var showDeniedDialog by remember { mutableStateOf(false) }
 
-    // State Sesi Multi-Scan
     var isMultiScanMode by remember { mutableStateOf(false) }
     var scannedCountBatch by remember { mutableIntStateOf(0) }
     var lastScannedCodeText by remember { mutableStateOf("") }
 
-    // Logika Sesi Sementara: Selalu kembalikan ke kondisi awal (Sekali Scan) setiap kali kamera muncul
     LaunchedEffect(showScanner) {
         if (showScanner) {
             isMultiScanMode = false 
@@ -328,7 +328,6 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
         }
     }
 
-    // Dialog Izin Versi Superior (Mengakomodir Tolak Permanen & Tolak Sementara)
     if (showDeniedDialog) {
         val permanentlyDenied = permState == CameraPermissionState.PERMANENTLY_DENIED
         AlertDialog(
@@ -373,32 +372,40 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
                 BarcodeScannerCamera(
                     isMultiScanMode = isMultiScanMode,
                     onBarcodeScanned = { code ->
-                        // Pemicu Suara & Getaran Aktif saat berhasil
-                        feedbackManager.triggerSuccessFeedback(
-                            soundEnabled = isSoundEnabled,
-                            soundVolume = soundVolume,
-                            soundDurationMs = soundDurationMs,
-                            vibrationEnabled = isVibrationEnabled,
-                            vibrationIntensity = vibrationIntensity,
-                            vibrationDurationMs = vibrationDurationMs
-                        )
+                        // Menunggu hasil validasi dari ViewModel (True jika sukses, False jika gagal/tidak ditemukan)
+                        val isSuccess = onScannedState.value(code)
 
-                        // Update tampilan Mini-Cart
-                        scannedCountBatch++
-                        lastScannedCodeText = code
-                        
-                        // Eksekusi fungsi onScanned (memasukkan ke keranjang utama)
-                        onScannedState.value(code)
+                        if (isSuccess) {
+                            // Pemicu Suara & Getaran Sukses
+                            feedbackManager.triggerSuccessFeedback(
+                                soundEnabled = isSoundEnabled,
+                                soundVolume = soundVolume,
+                                soundDurationMs = soundDurationMs,
+                                vibrationEnabled = isVibrationEnabled,
+                                vibrationIntensity = vibrationIntensity,
+                                vibrationDurationMs = vibrationDurationMs
+                            )
 
-                        // Jika TIDAK dalam mode Multi-Scan, langsung tutup
-                        if (!isMultiScanMode) {
-                            showScanner = false
+                            // Update tampilan Mini-Cart hanya jika berhasil
+                            scannedCountBatch++
+                            lastScannedCodeText = code
+                            
+                            // Jika TIDAK dalam mode Multi-Scan, langsung tutup kamera
+                            if (!isMultiScanMode) {
+                                showScanner = false
+                            }
+                        } else {
+                            // Opsional: Jika produk gagal/tidak ditemukan, berikan getar atau suara peringatan singkat
+                            if (isVibrationEnabled) {
+                                feedbackManager.playVibration(intensity = 80, durationMs = 100)
+                            }
                         }
+                        
+                        isSuccess
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                // Tombol "X" di pojok kanan atas
                 IconButton(
                     onClick = { showScanner = false },
                     modifier = Modifier
@@ -408,7 +415,6 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
                     Icon(Icons.Rounded.Close, contentDescription = "Tutup", tint = Color.White)
                 }
 
-                // Overlay Panel Bawah (Mini-Cart & Sakelar Mode)
                 Card(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -423,7 +429,6 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // Baris Sakelar Mode Beruntun
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -454,7 +459,6 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
                             )
                         }
 
-                        // Baris Informasi Produk (Hanya tampil jika sudah ada minimal 1 barang di-scan)
                         AnimatedVisibility(visible = scannedCountBatch > 0) {
                             Row(
                                 modifier = Modifier
@@ -481,7 +485,6 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
                             }
                         }
 
-                        // Tombol Konfirmasi Selesai
                         Button(
                             onClick = { showScanner = false },
                             modifier = Modifier.fillMaxWidth(),

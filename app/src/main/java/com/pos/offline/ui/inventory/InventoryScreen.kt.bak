@@ -866,8 +866,10 @@ private fun ProductFormDialog(
                 val sanitized = sanitizeScannedCode(code)
                 if (sanitized != null) {
                     barcode = sanitized
+                    true // Mengembalikan Boolean true (pemicu sinyal sukses ke scanner)
                 } else {
                     onScanError("Gagal memindai kode. Coba pindai ulang.")
+                    false // Mengembalikan Boolean false (pemicu sinyal gagal)
                 }
             },
         )

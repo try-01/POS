@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.lifecycleScope
 import com.pos.offline.data.di.ServiceLocator
 import com.pos.offline.ui.inventory.InventoryScreen
 import com.pos.offline.ui.inventory.InventoryViewModel

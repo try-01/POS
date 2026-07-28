@@ -224,29 +224,16 @@ class InventoryViewModel(
         }
     }
 
-    private suspend fun validateImportedRows(rows: List<ImportedProductRow>): List<ImportReviewItem> {
-        val barcodeCounts = rows.mapNotNull { it.barcode }.groupingBy { it }.eachCount()
-        val skuCounts = rows.groupingBy { it.sku }.eachCount()
-        // Batas konkurensi disengaja KECIL (4) dan pakai Semaphore (bukan
-        // chunk statis) supaya:
-        // 1. AMAN untuk file impor sangat besar (ribuan baris) — async
-        //    dibuat untuk SEMUA baris sekaligus, tapi hanya 4 yang benar2
-        //    berjalan bersamaan; sisanya antre otomatis lewat Semaphore.
-        //    Coroutine itu ringan (bukan thread), jadi tidak akan membebani
-        //    memori meski jumlah baris sangat banyak.
-        // 2. Tidak ada batch-stall: baris lambat di satu grup tidak lagi
-        //    menahan grup berikutnya (beda dari pendekatan chunked+awaitAll
-        //    sebelumnya).
-        // 3. Aman terlepas dari konfigurasi WAL PosDatabase: kalau WAL aktif
-        //    -> dapat speedup nyata dari query paralel; kalau tidak -> Room
-        //    tetap menyerialisasi akses secara internal, hasilnya seperti
-        //    sekuensial tapi TIDAK crash/corrupt.
-        val concurrencyLimit = Semaphore(4)
-        return coroutineScope {
-            rows
-                .map { row ->
-                    async(Dispatchers.IO) {
-                        concurrencyLimit.withPermit {
+    private suspend fun validateImportedRows(rows: List<ImportedProductRow>): List<ImportReviewItem> =
+        withContext(Dispatchers.IO) {
+            val barcodeCounts = rows.mapNotNull { it.barcode }.groupingBy { it }.eachCount()
+            val skuCounts = rows.groupingBy { it.sku }.eachCount()
+            val concurrencyLimit = Semaphore(4)
+
+            kotlinx.coroutines.flow.asFlow(rows)
+                .flatMapMerge(concurrency = 4) { row ->
+                    kotlinx.coroutines.flow.flow {
+                        val item = concurrencyLimit.withPermit {
                             val duplicateInFile =
                                 (row.barcode != null && (barcodeCounts[row.barcode] ?: 0) > 1) || (skuCounts[row.sku] ?: 0) > 1
                             val dbConflict =
@@ -259,10 +246,11 @@ class InventoryViewModel(
                             }
                             ImportReviewItem(row, status, dbConflict)
                         }
+                        emit(item)
                     }
-                }.awaitAll()
+                }
+                .kotlinx.coroutines.flow.toList()
         }
-    }
 
     fun commitImport() {
         if (_excelState.value.isCommitting) return
@@ -284,31 +272,6 @@ class InventoryViewModel(
         }
     }
 
-    /**
-     * Opsi C: intersepsi status barcode SEJAK SCAN, bukan saat "Simpan".
-     * - Barcode tidak ditemukan sama sekali -> alur lama (tawarkan tambah produk baru).
-     * - Barcode ditemukan & aktif -> buka form edit seperti biasa.
-     * - Barcode ditemukan tapi produk sudah soft-deleted -> tawarkan pemulihan,
-     *   supaya user tidak capek isi form baru lalu ditolak saat Simpan.
-     */
-//    fun onBarcodeScanned(raw: String?) {
-//        val sanitized = sanitizeScannedCode(raw)
-//        if (sanitized == null) { notify("Gagal memindai kode. Coba pindai ulang."); return }
-//        viewModelScope.launch {
-//            val product =
-//                try {
-//                    productRepository.getProductByBarcodeAny(sanitized)
-//                } catch (e: Exception) {
-//                    notify("Gagal memindai: ${e.message ?: "kesalahan tak dikenal"}.")
-//                    return@launch
-//                }
-//            when {
-//                product == null -> _scanNotFound.value = ScanNotFoundState(sanitized)
-//                product.active -> startEdit(product)
-//                else -> _deletedProductFound.value = DeletedProductFoundState(product)
-//            }
-//        }
-//    }
 suspend fun onBarcodeScanned(raw: String?): Boolean {
     val sanitized = sanitizeScannedCode(raw)
     if (sanitized == null) { 

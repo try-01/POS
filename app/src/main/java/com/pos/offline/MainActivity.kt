@@ -176,7 +176,8 @@ private fun AppRoot() {
     // Prioritas tertinggi: selama restore berlangsung, tombol back TIDAK BOLEH
     // melakukan apa pun — window kritis, aplikasi akan segera direstart otomatis.
     BackHandler(enabled = isRestoringDatabase) { /* sengaja tidak melakukan apa pun */ }
-    BackHandler(enabled = currentDest != Dest.POS && !isRestoringDatabase) { goTo(Dest.POS) }
+    BackHandler(enabled = showExitDialog) { showExitDialog = false } // FIXED: Tutup dialog exit saat Back ditekan
+    BackHandler(enabled = currentDest != Dest.POS && !isRestoringDatabase && !showExitDialog) { goTo(Dest.POS) }
     BackHandler(enabled = currentDest == Dest.POS && !showExitDialog && !isRestoringDatabase) { showExitDialog = true }
 
     if (showExitDialog) {

@@ -843,7 +843,7 @@ private fun ProductFormDialog(
         mutableStateOf(if (state.price > 0) state.price.toString() else "")
     }
     var stock by remember(state.id) {
-        mutableStateOf(if (state.stock > 0.0) state.stock.formatQuantity() else "")
+        mutableStateOf(if (state.isNew && state.stock == 0.0) "" else state.stock.formatQuantity())
     }
     var cost by remember(state.id) {
         mutableStateOf(if (state.cost > 0) state.cost.toString() else "")
@@ -866,10 +866,10 @@ private fun ProductFormDialog(
                 val sanitized = sanitizeScannedCode(code)
                 if (sanitized != null) {
                     barcode = sanitized
-                    true // Mengembalikan Boolean true (pemicu sinyal sukses ke scanner)
+                    true // FIXED: Return Boolean true pemicu sinyal sukses
                 } else {
                     onScanError("Gagal memindai kode. Coba pindai ulang.")
-                    false // Mengembalikan Boolean false (pemicu sinyal gagal)
+                    false // FIXED: Return Boolean false pemicu sinyal gagal
                 }
             },
         )
@@ -1072,25 +1072,6 @@ private fun ProductFormDialog(
                 }
             }
         },
-    )
-}
-
-@Composable
-private fun NumberField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: String,
-    modifier: Modifier = Modifier,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { input -> onValueChange(input.filter { it.isDigit() }.take(9)) },
-        label = { Text(label, style = MaterialTheme.typography.bodySmall) },
-        singleLine = true,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        shape = RoundedCornerShape(10.dp),
-        modifier = modifier,
     )
 }
 
