@@ -17,6 +17,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.withContext // FIXED: Tambahkan import withContext
+import kotlinx.coroutines.flow.asFlow // FIXED: Tambahkan import asFlow
+import kotlinx.coroutines.flow.flatMapMerge // FIXED: Tambahkan import flatMapMerge
+import kotlinx.coroutines.flow.flow // FIXED: Tambahkan import flow
+import kotlinx.coroutines.flow.toList // FIXED: Tambahkan import Flow.toList()
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -230,9 +235,9 @@ class InventoryViewModel(
             val skuCounts = rows.groupingBy { it.sku }.eachCount()
             val concurrencyLimit = Semaphore(4)
 
-            kotlinx.coroutines.flow.asFlow(rows)
+            rows.asFlow()
                 .flatMapMerge(concurrency = 4) { row ->
-                    kotlinx.coroutines.flow.flow {
+                    flow {
                         val item = concurrencyLimit.withPermit {
                             val duplicateInFile =
                                 (row.barcode != null && (barcodeCounts[row.barcode] ?: 0) > 1) || (skuCounts[row.sku] ?: 0) > 1
@@ -249,7 +254,7 @@ class InventoryViewModel(
                         emit(item)
                     }
                 }
-                .kotlinx.coroutines.flow.toList()
+                .toList()
         }
 
     fun commitImport() {
