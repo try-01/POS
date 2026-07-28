@@ -236,7 +236,8 @@ fun BarcodeScannerCamera(
             modifier = Modifier.fillMaxSize(),
             factory = { c: Context ->
                 val previewView = PreviewView(c).apply {
-                    implementationMode = PreviewView.ImplementationMode.PERFORMANCE
+                    // FIXED: Mode COMPATIBLE (TextureView) menghilangkan lag / kedipan saat Dialog kamera terbuka
+                    implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                 }
                 previewViewRef = previewView
                 val providerFuture = ProcessCameraProvider.getInstance(c)
@@ -371,7 +372,10 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
     if (showScanner) {
         Dialog(
             onDismissRequest = { showScanner = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false),
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false // FIXED: Mengaktifkan pengukuran System Window Insets di dalam Dialog
+            ),
         ) {
             Box(Modifier.fillMaxSize()) {
                 BarcodeScannerCamera(
@@ -455,13 +459,14 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                     Icon(Icons.Rounded.Close, contentDescription = "Tutup", tint = Color.White)
                 }
 
-                // BOTTOM CARD: Bebas Overlap Tombol Navigasi Sistem
+                // BOTTOM CARD: Dipastikan Terangkat Mulus di Atas Navigasi Sistem
                 Card(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .navigationBarsPadding() // FIXED: Mengangkat Card ke ATAS tombol navigasi sistem
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(horizontal = 16.dp)
+                        .navigationBarsPadding() // FIXED: Bekerja akurat setelah decorFitsSystemWindows = false
+                        .padding(bottom = 12.dp, top = 4.dp),
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = Color.Black.copy(alpha = 0.85f)
