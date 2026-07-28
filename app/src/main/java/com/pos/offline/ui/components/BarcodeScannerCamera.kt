@@ -1,5 +1,6 @@
 package com.pos.offline.ui.components
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Size
@@ -50,6 +51,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView // FIX: Import AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
@@ -65,8 +67,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Komponen Scanner Kamera dengan batas ROI presisi, resolusi optimal 720p,
- * dan dukungan Auto-Focus bawaan CameraX.
+ * Komponen Scanner Kamera dengan resolusi 720p, Auto-Focus, dan perbaikan AndroidView.
  */
 @Composable
 fun BarcodeScannerCamera(
@@ -77,7 +78,6 @@ fun BarcodeScannerCamera(
     val executor = remember { Executors.newSingleThreadExecutor() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
-    // Konfigurasi format barcode
     val scanner = remember {
         BarcodeScanning.getClient(
             BarcodeScannerOptions.Builder()
@@ -101,7 +101,7 @@ fun BarcodeScannerCamera(
         val previewView = previewViewRef ?: return
 
         try {
-            // 1. Pengaturan Resolusi 720p (720x1280 Portrait)
+            // Target resolusi 720p
             val resolutionStrategy = ResolutionStrategy(
                 Size(720, 1280),
                 ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
@@ -110,7 +110,6 @@ fun BarcodeScannerCamera(
                 .setResolutionStrategy(resolutionStrategy)
                 .build()
 
-            // 2. Konfigurasi Preview Kamera
             val preview = Preview.Builder()
                 .setResolutionSelector(resolutionSelector)
                 .build()
@@ -118,17 +117,15 @@ fun BarcodeScannerCamera(
                     it.setSurfaceProvider(previewView.surfaceProvider)
                 }
 
-            // 3. Konfigurasi Analisis Gambar / Frame Processing
             val analysis = ImageAnalysis.Builder()
                 .setResolutionSelector(resolutionSelector)
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
 
-            // 4. Proses Frame Gambar via ImageProxy
             analysis.setAnalyzer(executor) { proxy ->
                 val mediaImage = proxy.image
                 if (mediaImage == null || scanned.get()) {
-                    proxy.close() // Selalu tutup proxy jika tidak diproses
+                    proxy.close()
                     return@setAnalyzer
                 }
 
@@ -138,12 +135,10 @@ fun BarcodeScannerCamera(
 
                     scanner.process(input)
                         .addOnSuccessListener { barcodes ->
-                            // Penyesuaian dimensi berdasarkan posisi rotasi HP
                             val isRotated = rotationDegrees == 90 || rotationDegrees == 270
                             val imgW = if (isRotated) proxy.height.toFloat() else proxy.width.toFloat()
                             val imgH = if (isRotated) proxy.width.toFloat() else proxy.height.toFloat()
 
-                            // Menyaring barcode agar HANYA yang di dalam bingkai visual yang diproses
                             val targetBarcode = barcodes.firstOrNull { barcode ->
                                 val raw = barcode.rawValue
                                 if (raw.isNullOrBlank()) return@firstOrNull false
@@ -164,7 +159,6 @@ fun BarcodeScannerCamera(
                             }
                         }
                         .addOnCompleteListener {
-                            // WAJIB: Membebaskan buffer ImageProxy
                             proxy.close()
                         }
                 } catch (e: Exception) {
@@ -174,7 +168,6 @@ fun BarcodeScannerCamera(
             }
 
             provider.unbindAll()
-            // Mengikat lifecycle ke kamera belakang (Otomatis mengaktifkan Continuous Auto-Focus)
             provider.bindToLifecycle(
                 lifecycleOwner,
                 CameraSelector.DEFAULT_BACK_CAMERA,
@@ -199,9 +192,8 @@ fun BarcodeScannerCamera(
     Box(modifier = modifier) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
-            factory = { c ->
+            factory = { c: Context -> // FIX: Menambahkan penegasan tipe parameter Context
                 val previewView = PreviewView(c).apply {
-                    // Mode performa untuk respon preview dan fokus otomatis yang halus
                     implementationMode = PreviewView.ImplementationMode.PERFORMANCE
                 }
                 previewViewRef = previewView
