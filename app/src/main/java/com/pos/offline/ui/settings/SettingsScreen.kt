@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Logout
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.Info
@@ -40,7 +41,6 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.material.icons.rounded.Vibration
-import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -74,7 +74,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle // FIX: Menggunakan import Lifecycle-aware
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.backup.BackupManager
 import com.pos.offline.data.local.entity.CashierEntity
 import com.pos.offline.ui.components.GlassCard
@@ -88,15 +88,19 @@ fun SettingsScreen(
     onExitClick: () -> Unit,
 ) {
     val context = LocalContext.current
-    
-    // FIX: Mengubah semua .collectAsState() menjadi .collectAsStateWithLifecycle()
+
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val cashiers by viewModel.cashiers.collectAsStateWithLifecycle()
     val printers by printerViewModel.printers.collectAsStateWithLifecycle()
     val storeProfile by storeProfileViewModel.profile.collectAsStateWithLifecycle()
 
     val isSoundEnabled by viewModel.isSoundEnabled.collectAsStateWithLifecycle()
+    val soundVolume by viewModel.soundVolume.collectAsStateWithLifecycle()
+    val soundDurationMs by viewModel.soundDurationMs.collectAsStateWithLifecycle()
+
     val isVibrationEnabled by viewModel.isVibrationEnabled.collectAsStateWithLifecycle()
+    val vibrationIntensity by viewModel.vibrationIntensity.collectAsStateWithLifecycle()
+    val vibrationDurationMs by viewModel.vibrationDurationMs.collectAsStateWithLifecycle()
 
     var showPrinterDialog by remember { mutableStateOf(false) }
     var showStoreProfileDialog by remember { mutableStateOf(false) }
@@ -217,17 +221,25 @@ fun SettingsScreen(
         ) {
             Spacer(Modifier.height(4.dp))
 
-            // ================= UMPAN BALIK PEMINDAI (SUARA & GETARAN) =================
             SectionLabel("Umpan Balik Pemindai (Scanner Feedback)")
 
             FuturisticFeedbackControls(
                 isSoundEnabled = isSoundEnabled,
+                soundVolume = soundVolume,
+                soundDurationMs = soundDurationMs,
                 isVibrationEnabled = isVibrationEnabled,
+                vibrationIntensity = vibrationIntensity,
+                vibrationDurationMs = vibrationDurationMs,
                 onSoundToggle = { viewModel.setSoundEnabled(it) },
+                onSoundVolumeChange = { viewModel.setSoundVolume(it) },
+                onSoundDurationChange = { viewModel.setSoundDurationMs(it) },
+                onTestSound = { viewModel.testSoundPreview() },
                 onVibrationToggle = { viewModel.setVibrationEnabled(it) },
+                onVibrationIntensityChange = { viewModel.setVibrationIntensity(it) },
+                onVibrationDurationChange = { viewModel.setVibrationDurationMs(it) },
+                onTestVibration = { viewModel.testVibrationPreview() },
             )
 
-            // ================= CADANGKAN & PULIHKAN =================
             SectionLabel("Cadangkan & Pulihkan")
 
             GlassCard(
@@ -307,7 +319,6 @@ fun SettingsScreen(
                 }
             }
 
-            // ================= KELOLA KASIR =================
             SectionLabel("Kelola Kasir")
 
             GlassCard(
@@ -344,7 +355,6 @@ fun SettingsScreen(
                 }
             }
 
-            // ================= PROFIL TOKO & STRUK =================
             SectionLabel("Profil Toko & Struk")
 
             GlassCard(
@@ -395,7 +405,6 @@ fun SettingsScreen(
                 }
             }
 
-            // ================= PRINTER STRUK =================
             SectionLabel("Printer Struk")
 
             GlassCard(
@@ -435,7 +444,6 @@ fun SettingsScreen(
                 }
             }
 
-            // ================= SESI APLIKASI =================
             SectionLabel("Sesi Aplikasi")
 
             GlassCard(
@@ -474,9 +482,19 @@ fun SettingsScreen(
 @Composable
 private fun FuturisticFeedbackControls(
     isSoundEnabled: Boolean,
+    soundVolume: Int,
+    soundDurationMs: Int,
     isVibrationEnabled: Boolean,
+    vibrationIntensity: Int,
+    vibrationDurationMs: Int,
     onSoundToggle: (Boolean) -> Unit,
+    onSoundVolumeChange: (Int) -> Unit,
+    onSoundDurationChange: (Int) -> Unit,
+    onTestSound: () -> Unit,
     onVibrationToggle: (Boolean) -> Unit,
+    onVibrationIntensityChange: (Int) -> Unit,
+    onVibrationDurationChange: (Int) -> Unit,
+    onTestVibration: () -> Unit,
 ) {
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
@@ -498,40 +516,97 @@ private fun FuturisticFeedbackControls(
                 )
             }
 
-            FuturisticSliderItem(
+            // KONTROL SUARA
+            FeedbackSectionCard(
                 icon = Icons.AutoMirrored.Rounded.VolumeUp,
-                title = "Suara Beep Halus",
-                subtitle = if (isSoundEnabled) "Aktif (Nada Beep POS 65%)" else "Muted (Senyap)",
+                title = "Suara Beep",
+                subtitle = if (isSoundEnabled) "Aktif ($soundVolume% - $soundDurationMs ms)" else "Nonaktif (OFF)",
                 isEnabled = isSoundEnabled,
-                onToggle = onSoundToggle
-            )
+                onToggle = onSoundToggle,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Slider Volume Suara
+                    Text(
+                        text = "Volume Suara: $soundVolume%",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                        fontWeight = FontWeight.Medium
+                    )
+                    Slider(
+                        value = soundVolume.toFloat(),
+                        onValueChange = { onSoundVolumeChange(it.toInt()) },
+                        onValueChangeFinished = onTestSound,
+                        valueRange = 0f..100f,
+                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
+                    )
 
-            FuturisticSliderItem(
+                    // Slider Durasi Suara
+                    Text(
+                        text = "Durasi Beep: $soundDurationMs ms (Aman 50-300 ms)",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                        fontWeight = FontWeight.Medium
+                    )
+                    Slider(
+                        value = soundDurationMs.toFloat(),
+                        onValueChange = { onSoundDurationChange(it.toInt()) },
+                        onValueChangeFinished = onTestSound,
+                        valueRange = 50f..300f,
+                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
+                    )
+                }
+            }
+
+            // KONTROL GETARAN
+            FeedbackSectionCard(
                 icon = Icons.Rounded.Vibration,
-                title = "Getaran Haptic Smooth",
-                subtitle = if (isVibrationEnabled) "Aktif (Sentuhan Haptic Soft)" else "Nonaktif",
+                title = "Getaran Haptic",
+                subtitle = if (isVibrationEnabled) "Aktif ($vibrationIntensity% - $vibrationDurationMs ms)" else "Nonaktif (OFF)",
                 isEnabled = isVibrationEnabled,
-                onToggle = onVibrationToggle
-            )
+                onToggle = onVibrationToggle,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Slider Intensitas Getar
+                    Text(
+                        text = "Kekuatan Getar: $vibrationIntensity%",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                        fontWeight = FontWeight.Medium
+                    )
+                    Slider(
+                        value = vibrationIntensity.toFloat(),
+                        onValueChange = { onVibrationIntensityChange(it.toInt()) },
+                        onValueChangeFinished = onTestVibration,
+                        valueRange = 0f..100f,
+                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
+                    )
+
+                    // Slider Durasi Getar
+                    Text(
+                        text = "Durasi Getar: $vibrationDurationMs ms (Aman 20-200 ms)",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                        fontWeight = FontWeight.Medium
+                    )
+                    Slider(
+                        value = vibrationDurationMs.toFloat(),
+                        onValueChange = { onVibrationDurationChange(it.toInt()) },
+                        onValueChangeFinished = onTestVibration,
+                        valueRange = 20f..200f,
+                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun FuturisticSliderItem(
+private fun FeedbackSectionCard(
     icon: ImageVector,
     title: String,
     subtitle: String,
     isEnabled: Boolean,
     onToggle: (Boolean) -> Unit,
+    content: @Composable () -> Unit
 ) {
     val activeColor = MaterialTheme.colorScheme.primary
-    val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-
-    val targetValue = if (isEnabled) 1.0f else 0.0f
-    var sliderPosition by remember(isEnabled) { mutableFloatStateOf(targetValue) }
-    val animatedPosition by animateFloatAsState(targetValue = sliderPosition, label = "sliderPos")
-
     val accentColor by animateColorAsState(
         targetValue = if (isEnabled) activeColor else MaterialTheme.colorScheme.onSurfaceVariant,
         label = "accentColor"
@@ -542,7 +617,7 @@ private fun FuturisticSliderItem(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-            .padding(10.dp)
+            .padding(12.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -567,7 +642,7 @@ private fun FuturisticSliderItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
@@ -577,17 +652,9 @@ private fun FuturisticSliderItem(
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(if (isEnabled) activeColor else Color.Gray.copy(alpha = 0.5f))
-            )
-            Spacer(Modifier.width(8.dp))
-
             Switch(
                 checked = isEnabled,
-                onCheckedChange = { onToggle(it) },
+                onCheckedChange = onToggle,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                     checkedTrackColor = activeColor
@@ -595,24 +662,10 @@ private fun FuturisticSliderItem(
             )
         }
 
-        Spacer(Modifier.height(4.dp))
-        Slider(
-            value = animatedPosition,
-            onValueChange = { newValue ->
-                sliderPosition = newValue
-                if (newValue > 0.5f && !isEnabled) {
-                    onToggle(true)
-                } else if (newValue <= 0.5f && isEnabled) {
-                    onToggle(false)
-                }
-            },
-            colors = SliderDefaults.colors(
-                thumbColor = accentColor,
-                activeTrackColor = accentColor,
-                inactiveTrackColor = inactiveColor
-            ),
-            modifier = Modifier.height(20.dp)
-        )
+        if (isEnabled) {
+            Spacer(Modifier.height(10.dp))
+            content()
+        }
     }
 }
 

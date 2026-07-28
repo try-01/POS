@@ -9,24 +9,18 @@ import android.os.Vibrator
 import android.os.VibratorManager
 
 /**
- * Manager khusus untuk menangani respons audio (Beep) dan haptic (Getaran)
- * saat pemindaian barcode berhasil.
- *
- * Menggunakan applicationContext untuk mencegah memory leak, serta mendukung
- * kustomisasi suara halus dan getaran haptic modern ala enterprise app.
+ * Manager umpan balik suara & getaran dengan dukungan pengaturan volume,
+ * intensitas getar dinamis (1-255 amplitude), dan kontrol durasi.
  */
 class ScanFeedbackManager(context: Context) {
     private val appContext = context.applicationContext
 
-    // Menggunakan ToneGenerator standar Android (suara pip/beep halus)
     private var toneGenerator: ToneGenerator? = try {
-        // Volume diatur 65% agar nyaman di telinga
-        ToneGenerator(AudioManager.STREAM_MUSIC, 65)
+        ToneGenerator(AudioManager.STREAM_MUSIC, 100)
     } catch (e: Exception) {
         null
     }
 
-    // Mengambil service Vibrator sesuai versi API Android
     private val vibrator: Vibrator? = try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager =
@@ -40,52 +34,53 @@ class ScanFeedbackManager(context: Context) {
         null
     }
 
-    /**
-     * Memicu umpan balik suara & getaran jika diizinkan oleh preferensi kasir.
-     */
-    fun triggerSuccessFeedback(soundEnabled: Boolean, vibrationEnabled: Boolean) {
-        if (soundEnabled) {
-            playPleasantBeep()
+    fun triggerSuccessFeedback(
+        soundEnabled: Boolean,
+        soundVolume: Int,
+        soundDurationMs: Int,
+        vibrationEnabled: Boolean,
+        vibrationIntensity: Int,
+        vibrationDurationMs: Int,
+    ) {
+        if (soundEnabled && soundVolume > 0) {
+            playBeep(soundVolume, soundDurationMs)
         }
-        if (vibrationEnabled) {
-            playSmoothVibration()
+        if (vibrationEnabled && vibrationIntensity > 0) {
+            playVibration(vibrationIntensity, vibrationDurationMs)
         }
     }
 
-    private fun playPleasantBeep() {
+    fun playBeep(volume: Int, durationMs: Int) {
         try {
-            // TONE_PROP_BEEP memberikan suara "pip" singkat (~80ms)
-            // yang halus, modern, dan enak didengar
-            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 80)
+            // Re-instantiate tone generator sesuai skala volume 0-100%
+            toneGenerator?.release()
+            toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, volume.coerceIn(0, 100))
+            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, durationMs.coerceIn(50, 300))
         } catch (e: Exception) {
-            // Mengabaikan error audio secara aman tanpa membuat app crash
+            // Ignore safely
         }
     }
 
-    private fun playSmoothVibration() {
+    fun playVibration(intensity: Int, durationMs: Int) {
         val v = vibrator ?: return
         if (!v.hasVibrator()) return
 
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // Android 10+: Menggunakan haptic effect 'CLICK' bawaan sistem (seperti ketukan keyboard)
-                v.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // Android 8-9: Getaran singkat 30 milidetik dengan amplitudo rendah (gentle tap)
-                v.vibrate(VibrationEffect.createOneShot(30, 70))
+            val duration = durationMs.coerceIn(20, 200).toLong()
+            // Konversi 1-100% ke skala amplitudo Android (1 - 255)
+            val amplitude = ((intensity.coerceIn(1, 100) / 100f) * 255).toInt().coerceIn(1, 255)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                v.vibrate(VibrationEffect.createOneShot(duration, amplitude))
             } else {
-                // Android lama: Getaran singkat 30 milidetik
                 @Suppress("DEPRECATION")
-                v.vibrate(30)
+                v.vibrate(duration)
             }
         } catch (e: Exception) {
-            // Mengabaikan error haptic
+            // Ignore safely
         }
     }
 
-    /**
-     * Membebaskan resource audio saat tidak lagi dibutuhkan.
-     */
     fun release() {
         try {
             toneGenerator?.release()

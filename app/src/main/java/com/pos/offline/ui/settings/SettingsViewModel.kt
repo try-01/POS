@@ -12,6 +12,7 @@ import com.pos.offline.data.backup.ShareOutcome
 import com.pos.offline.data.local.entity.CashierEntity
 import com.pos.offline.data.repository.CashierRepository
 import com.pos.offline.data.repository.ShiftRepository
+import com.pos.offline.util.ScanFeedbackManager
 import com.pos.offline.util.ScanPreferencesRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +41,8 @@ class SettingsViewModel(
     private val shiftRepository: ShiftRepository,
     private val scanPreferencesRepository: ScanPreferencesRepository = ScanPreferencesRepository(appContext),
 ) : ViewModel() {
+    private val feedbackManager = ScanFeedbackManager(appContext)
+
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
@@ -53,16 +56,53 @@ class SettingsViewModel(
         cashierRepository.allCashiers
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    // State preferensi umpan balik pemindai (Suara & Getaran)
+    // Preferensi Suara
     val isSoundEnabled: StateFlow<Boolean> = scanPreferencesRepository.isSoundEnabled
+    val soundVolume: StateFlow<Int> = scanPreferencesRepository.soundVolume
+    val soundDurationMs: StateFlow<Int> = scanPreferencesRepository.soundDurationMs
+
+    // Preferensi Getaran
     val isVibrationEnabled: StateFlow<Boolean> = scanPreferencesRepository.isVibrationEnabled
+    val vibrationIntensity: StateFlow<Int> = scanPreferencesRepository.vibrationIntensity
+    val vibrationDurationMs: StateFlow<Int> = scanPreferencesRepository.vibrationDurationMs
 
     fun setSoundEnabled(enabled: Boolean) {
         scanPreferencesRepository.setSoundEnabled(enabled)
+        if (enabled) testSoundPreview()
+    }
+
+    fun setSoundVolume(volume: Int) {
+        scanPreferencesRepository.setSoundVolume(volume)
+    }
+
+    fun setSoundDurationMs(duration: Int) {
+        scanPreferencesRepository.setSoundDurationMs(duration)
+    }
+
+    fun testSoundPreview() {
+        feedbackManager.playBeep(soundVolume.value, soundDurationMs.value)
     }
 
     fun setVibrationEnabled(enabled: Boolean) {
         scanPreferencesRepository.setVibrationEnabled(enabled)
+        if (enabled) testVibrationPreview()
+    }
+
+    fun setVibrationIntensity(intensity: Int) {
+        scanPreferencesRepository.setVibrationIntensity(intensity)
+    }
+
+    fun setVibrationDurationMs(duration: Int) {
+        scanPreferencesRepository.setVibrationDurationMs(duration)
+    }
+
+    fun testVibrationPreview() {
+        feedbackManager.playVibration(vibrationIntensity.value, vibrationDurationMs.value)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        feedbackManager.release()
     }
 
     fun exportDatabase(destinationUri: Uri) {
