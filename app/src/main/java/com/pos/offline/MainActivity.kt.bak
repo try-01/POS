@@ -105,7 +105,9 @@ class MainActivity : ComponentActivity() {
     }
     private val scannerInterceptor =
         HardwareScannerInterceptor { barcode ->
-            posViewModel.onBarcodeScanned(barcode)
+            lifecycleScope.launch {
+                posViewModel.onBarcodeScanned(barcode)
+            }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
