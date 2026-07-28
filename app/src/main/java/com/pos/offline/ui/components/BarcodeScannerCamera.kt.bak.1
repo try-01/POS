@@ -28,7 +28,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -62,13 +61,15 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.pos.offline.util.CameraPermissionState
-import com.pos.offline.util.ScanFeedbackManager
-import com.pos.offline.util.ScanPreferencesRepository
 import com.pos.offline.util.openAppSettings
 import com.pos.offline.util.rememberCameraPermissionState
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
+/**
+ * Komponen Scanner Kamera dengan penyaringan ROI ketat 4 sisi.
+ * Barcode yang setengah di luar bingkai akan ditolak secara otomatis.
+ */
 @Composable
 fun BarcodeScannerCamera(
     onBarcodeScanned: (String) -> Unit,
@@ -101,6 +102,7 @@ fun BarcodeScannerCamera(
         val previewView = previewViewRef ?: return
 
         try {
+            // Target resolusi optimal 720p
             val resolutionStrategy = ResolutionStrategy(
                 Size(720, 1280),
                 ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
@@ -144,11 +146,17 @@ fun BarcodeScannerCamera(
 
                                 val rect = barcode.boundingBox ?: return@firstOrNull false
 
+                                // Normalisasi koordinat 4 sisi terluar barcode terhadap ukuran gambar
                                 val normLeft = rect.left / imgW
                                 val normRight = rect.right / imgW
                                 val normTop = rect.top / imgH
                                 val normBottom = rect.bottom / imgH
 
+                                // PERBAIKAN KETAT:
+                                // Ke-4 sisi terluar barcode HARUS berada sepenuhnya di dalam bingkai visual!
+                                // Batas bingkai visual:
+                                // Horizontal: 12.5% (0.125f) sampai 87.5% (0.875f)
+                                // Vertikal: 32.5% (0.325f) sampai 67.5% (0.675f)
                                 normLeft >= 0.125f && normRight <= 0.875f &&
                                         normTop >= 0.325f && normBottom <= 0.675f
                             }
@@ -212,6 +220,7 @@ fun BarcodeScannerCamera(
             },
         )
 
+        // Bingkai visual target di tengah layar
         ScannerViewfinder(modifier = Modifier.fillMaxSize())
 
         cameraError?.let { message ->
@@ -252,24 +261,10 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
     val context = LocalContext.current
     val onScannedState = rememberUpdatedState(onScanned)
 
-    // Inisialisasi Manager Feedback dan Preferensi Kasir
-    val feedbackManager = remember { ScanFeedbackManager(context) }
-    val prefsRepository = remember { ScanPreferencesRepository(context) }
-
-    val isSoundEnabled by prefsRepository.isSoundEnabled.collectAsStateWithLifecycle()
-    val isVibrationEnabled by prefsRepository.isVibrationEnabled.collectAsStateWithLifecycle()
-
     val (permState, requestPermission) = rememberCameraPermissionState()
     var showScanner by remember { mutableStateOf(false) }
     var pendingOpen by remember { mutableStateOf(false) }
     var showDeniedDialog by remember { mutableStateOf(false) }
-
-    // Membebaskan resource feedback saat Composable ditutup
-    DisposableEffect(Unit) {
-        onDispose {
-            feedbackManager.release()
-        }
-    }
 
     LaunchedEffect(permState) {
         if (pendingOpen) {
@@ -330,11 +325,6 @@ fun rememberBarcodeScanner(onScanned: (String) -> Unit): () -> Unit {
             Box(Modifier.fillMaxSize()) {
                 BarcodeScannerCamera(
                     onBarcodeScanned = { code ->
-                        // Pemicu Suara (Beep) & Getaran (Haptic)
-                        feedbackManager.triggerSuccessFeedback(
-                            soundEnabled = isSoundEnabled,
-                            vibrationEnabled = isVibrationEnabled
-                        )
                         showScanner = false
                         onScannedState.value(code)
                     },
