@@ -587,18 +587,13 @@ suspend fun onBarcodeScanned(raw: String): Boolean {
                     _changeGivenOverride.value = null
                     _changeGivenInCash.value = true
                     _paymentMethod.value = PaymentMethod.CASH
-                    CheckoutState.Success(result)
+                    _checkoutState.value = CheckoutState.Success(result) // FIXED: Assign ke _checkoutState.value
                 } catch (e: InsufficientStockException) {
-                    // Sejak kebijakan stok soft-block, exception ini HANYA terpicu
-                    // saat produk sudah tidak ada di database (dihapus permanen
-                    // secara konkuren tepat saat checkout berlangsung) — bukan lagi
-                    // "stok kurang", karena decrementStock kini selalu berhasil
-                    // untuk id yang masih ada, walau hasilnya stok jadi negatif.
-                    CheckoutState.Error(
+                    _checkoutState.value = CheckoutState.Error(
                         "Produk '${e.productName}' tidak ditemukan (kemungkinan baru saja dihapus). Transaksi dibatalkan, silakan cek ulang keranjang.",
-                    )
+                    ) // FIXED: Assign ke _checkoutState.value
                 } catch (e: Exception) {
-                    CheckoutState.Error("Gagal memproses: ${e.message ?: "kesalahan tak dikenal"}")
+                    _checkoutState.value = CheckoutState.Error("Gagal memproses: ${e.message ?: "kesalahan tak dikenal"}") // FIXED: Assign ke _checkoutState.value
                 }
 
             (_checkoutState.value as? CheckoutState.Success)?.let { success ->

@@ -239,10 +239,6 @@ class PosViewModel(
     private val _isEndingShift = MutableStateFlow(false)
     val isEndingShift: StateFlow<Boolean> = _isEndingShift.asStateFlow()
 
-    //private var lastScannedBarcode: String = ""
-    //private var lastScannedTimestamp: Long = 0L
-    //private val scanCooldownMs = 600L // saring burst kamera, gak block scan sengaja
-
     private fun sanitizeScannedCode(raw: String): String? {
         val cleaned = raw.trim().filter { c -> c.isLetterOrDigit() || c in "-_./: #" }.take(128)
         return cleaned.ifBlank { null }
@@ -285,34 +281,6 @@ class PosViewModel(
         }
     }
 
-//    fun onBarcodeScanned(raw: String) {
-//        val barcode = sanitizeScannedCode(raw)
-//        if (barcode == null) {
-//            viewModelScope.launch {
-//                _uiEvents.emit(PosUiEvent.ShowMessage("Gagal memindai kode. Coba pindai ulang."))
-//            }
-//            return
-//        }
-
-//        val now = System.currentTimeMillis()
-//        if (barcode == lastScannedBarcode && (now - lastScannedTimestamp) < scanCooldownMs) {
-//            return
-//        }
-//        lastScannedBarcode = barcode
-//        lastScannedTimestamp = now
-//        viewModelScope.launch {
-//            val product = productRepository.getProductByBarcode(barcode)
-//            if (product == null) {
-//                _uiEvents.emit(PosUiEvent.ShowMessage("Produk tidak ditemukan!"))
-//                return@launch
-//            }
-//            val success = tryAddToCart(product)
-//            if (success) {
-//                _uiEvents.emit(PosUiEvent.ShowMessage("${product.name} ditambahkan ke keranjang"))
-//            }
-//        }
-//    }
-    // Pastikan menghapus blok viewModelScope.launch di dalam fungsi ini
 suspend fun onBarcodeScanned(raw: String): Boolean {
     val barcode = sanitizeScannedCode(raw)
     if (barcode == null) {
