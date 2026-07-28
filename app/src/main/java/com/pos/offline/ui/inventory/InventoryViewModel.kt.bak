@@ -291,53 +291,24 @@ class InventoryViewModel(
      * - Barcode ditemukan tapi produk sudah soft-deleted -> tawarkan pemulihan,
      *   supaya user tidak capek isi form baru lalu ditolak saat Simpan.
      */
-//    fun onBarcodeScanned(raw: String?) {
-//        val sanitized = sanitizeScannedCode(raw)
-//        if (sanitized == null) { notify("Gagal memindai kode. Coba pindai ulang."); return }
-//        viewModelScope.launch {
-//            val product =
-//                try {
-//                    productRepository.getProductByBarcodeAny(sanitized)
-//                } catch (e: Exception) {
-//                    notify("Gagal memindai: ${e.message ?: "kesalahan tak dikenal"}.")
-//                    return@launch
-//                }
-//            when {
-//                product == null -> _scanNotFound.value = ScanNotFoundState(sanitized)
-//                product.active -> startEdit(product)
-//                else -> _deletedProductFound.value = DeletedProductFoundState(product)
-//            }
-//        }
-//    }
-suspend fun onBarcodeScanned(raw: String?): Boolean {
-    val sanitized = sanitizeScannedCode(raw)
-    if (sanitized == null) { 
-        notify("Gagal memindai kode. Coba pindai ulang.")
-        return false 
-    }
-    
-    return try {
-        val product = productRepository.getProductByBarcodeAny(sanitized)
-        when {
-            product == null -> {
-                _scanNotFound.value = ScanNotFoundState(sanitized)
-                true // Sukses: Buka dialog "Tambah Produk Baru"
-            }
-            product.active -> {
-                startEdit(product)
-                true // Sukses: Buka form edit
-            }
-            else -> {
-                _deletedProductFound.value = DeletedProductFoundState(product)
-                true // Sukses: Buka opsi "Pulihkan Produk"
+    fun onBarcodeScanned(raw: String?) {
+        val sanitized = sanitizeScannedCode(raw)
+        if (sanitized == null) { notify("Gagal memindai kode. Coba pindai ulang."); return }
+        viewModelScope.launch {
+            val product =
+                try {
+                    productRepository.getProductByBarcodeAny(sanitized)
+                } catch (e: Exception) {
+                    notify("Gagal memindai: ${e.message ?: "kesalahan tak dikenal"}.")
+                    return@launch
+                }
+            when {
+                product == null -> _scanNotFound.value = ScanNotFoundState(sanitized)
+                product.active -> startEdit(product)
+                else -> _deletedProductFound.value = DeletedProductFoundState(product)
             }
         }
-    } catch (e: Exception) {
-        notify("Gagal memindai: ${e.message ?: "kesalahan tak dikenal"}.")
-        false
     }
-}
-
 
     fun dismissScanNotFound() { _scanNotFound.value = null }
     fun startAddFromScanned() {
