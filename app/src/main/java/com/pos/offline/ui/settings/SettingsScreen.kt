@@ -40,7 +40,7 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.material.icons.rounded.Vibration
-import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -499,7 +499,7 @@ private fun FuturisticFeedbackControls(
             }
 
             FuturisticSliderItem(
-                icon = Icons.Rounded.VolumeUp,
+                icon = Icons.AutoMirrored.Rounded.VolumeUp,
                 title = "Suara Beep Halus",
                 subtitle = if (isSoundEnabled) "Aktif (Nada Beep POS 65%)" else "Muted (Senyap)",
                 isEnabled = isSoundEnabled,
