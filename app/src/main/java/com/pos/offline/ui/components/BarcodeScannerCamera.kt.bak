@@ -1,5 +1,4 @@
 package com.pos.offline.ui.components
-
 import android.content.Context
 import android.util.Size
 import androidx.activity.compose.BackHandler
@@ -88,13 +87,11 @@ import com.google.mlkit.vision.common.InputImage
 import com.pos.offline.util.CameraPermissionState
 import com.pos.offline.util.ScanFeedbackManager
 import com.pos.offline.util.ScanPreferencesRepository
-import com.pos.offline.util.VibrationLevel // IMPOR BARU: Enum tingkat getaran
 import com.pos.offline.util.openAppSettings
 import com.pos.offline.util.rememberCameraPermissionState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
-
 @Composable
 fun BarcodeScannerCamera(
     onBarcodeScanned: suspend (String) -> Boolean,
@@ -121,7 +118,6 @@ fun BarcodeScannerCamera(
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
     var cameraError by remember { mutableStateOf<String?>(null) }
-
     fun attemptBind() {
         val provider = cameraProvider ?: return
         val previewView = previewViewRef ?: return
@@ -201,7 +197,6 @@ fun BarcodeScannerCamera(
             cameraError = "Gagal membuka kamera."
         }
     }
-
     DisposableEffect(Unit) {
         lastScannedCode = null
         lastScannedTime = 0L
@@ -213,7 +208,6 @@ fun BarcodeScannerCamera(
             scanner.close()
         }
     }
-
     Box(modifier = modifier) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -255,7 +249,6 @@ fun BarcodeScannerCamera(
         }
     }
 }
-
 @Composable
 fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
     val context = LocalContext.current
@@ -268,16 +261,6 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
     val isVibrationEnabled by prefsRepository.isVibrationEnabled.collectAsStateWithLifecycle()
     val vibrationIntensity by prefsRepository.vibrationIntensity.collectAsStateWithLifecycle()
     val vibrationDurationMs by prefsRepository.vibrationDurationMs.collectAsStateWithLifecycle()
-
-    // KONVERSI: Mengonversi intensitas getaran menjadi Enum VibrationLevel
-    val vibrationLevel = remember(vibrationIntensity) {
-        when {
-            vibrationIntensity <= 35 -> VibrationLevel.HALUS
-            vibrationIntensity <= 70 -> VibrationLevel.SEDANG
-            else -> VibrationLevel.KUAT
-        }
-    }
-
     val (permState, requestPermission) = rememberCameraPermissionState()
     var showScanner by remember { mutableStateOf(false) }
     var pendingOpen by remember { mutableStateOf(false) }
@@ -286,14 +269,12 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
     var scannedCountBatch by remember { mutableIntStateOf(0) }
     var lastScannedCodeText by remember { mutableStateOf("") }
     var scanErrorMessage by remember { mutableStateOf<String?>(null) }
-
     LaunchedEffect(scanErrorMessage) {
         if (scanErrorMessage != null) {
             delay(2500L)
             scanErrorMessage = null
         }
     }
-
     LaunchedEffect(showScanner) {
         if (showScanner) {
             isMultiScanMode = false
@@ -302,13 +283,11 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
             scanErrorMessage = null
         }
     }
-
     DisposableEffect(Unit) {
         onDispose {
             feedbackManager.release()
         }
     }
-
     LaunchedEffect(permState) {
         if (pendingOpen) {
             when (permState) {
@@ -324,7 +303,6 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
             }
         }
     }
-
     if (showDeniedDialog) {
         val permanentlyDenied = permState == CameraPermissionState.PERMANENTLY_DENIED
         AlertDialog(
@@ -359,7 +337,6 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
             },
         )
     }
-
     if (showScanner) {
         BackHandler { showScanner = false }
         Box(
@@ -373,13 +350,12 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                     val isSuccess = onScannedState.value(code)
                     if (isSuccess) {
                         scanErrorMessage = null
-                        // PEMBAHARUAN: Mengirim vibrationLevel Enum
                         feedbackManager.triggerSuccessFeedback(
                             soundEnabled = isSoundEnabled,
                             soundVolume = soundVolume,
                             soundDurationMs = soundDurationMs,
                             vibrationEnabled = isVibrationEnabled,
-                            vibrationLevel = vibrationLevel,
+                            vibrationIntensity = vibrationIntensity,
                             vibrationDurationMs = vibrationDurationMs
                         )
                         scannedCountBatch++
@@ -389,12 +365,11 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                         }
                     } else {
                         scanErrorMessage = "Produk tidak ditemukan ($code)"
-                        // PEMBAHARUAN: Mengirim vibrationLevel Enum
                         feedbackManager.triggerFailureFeedback(
                             soundEnabled = isSoundEnabled,
                             soundVolume = soundVolume,
                             vibrationEnabled = isVibrationEnabled,
-                            vibrationLevel = vibrationLevel
+                            vibrationIntensity = vibrationIntensity
                         )
                     }
                     isSuccess
@@ -585,7 +560,6 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
         }
     }
 }
-
 @Composable
 private fun ScannerViewfinder(modifier: Modifier = Modifier) {
     Box(
