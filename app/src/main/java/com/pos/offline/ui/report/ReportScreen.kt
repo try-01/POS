@@ -55,6 +55,11 @@ import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Today
+import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import com.pos.offline.ui.components.rememberBarcodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -163,17 +168,12 @@ fun ReportScreen(
     val productHistoryHierarchy by viewModel.productHistoryHierarchy.collectAsStateWithLifecycle()
     var showDatePicker by remember { mutableStateOf(false) }
     var showDirectWarrantyDialog by remember { mutableStateOf(false) }
-    // 1. Inisialisasi fungsi pembuka scanner
-    val openScanner = rememberBarcodeScanner { scannedCode ->
-    // Logika ketika barcode berhasil terbaca oleh kamera:
-    // Kirim kode barcode ke ViewModel untuk dicari
-        val isFound = viewModel.searchByBarcode(scannedCode)
-    
-    // Kembalikan nilai Boolean:
-    // - true: Hasil ditemukan (sistem akan mentrigger feedback SUKSES)
-    // - false: Hasil tidak ditemukan (sistem akan mentrigger feedback GAGAL)
-        isFound 
-    }
+// PERBAIKAN: Panggil kedua fungsi pencarian saat barcode discan
+val openScanner = rememberBarcodeScanner { scannedCode ->
+    viewModel.searchProductHistory(scannedCode)
+    viewModel.searchInvoice(scannedCode)
+    true // Mengembalikan true agar scanner memicu umpan balik (beep & getar) sukses
+}
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg ->
@@ -287,38 +287,49 @@ fun ReportScreen(
             contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // === ITEM 1: BAR PENCARIAN NOMOR STRUK BAWAAN KODE-MU ===
-            item(key = "invoice_search_bar") {
-OutlinedTextField(
-    value = productHistoryQuery,
-    onValueChange = { viewModel.searchProductHistory(it) },
-    placeholder = { Text("Ketik nama produk, barcode, atau SKU...", fontSize = 12.sp) },
-    leadingIcon = {
-        Icon(Icons.Rounded.Search, contentDescription = null)
-    },
-    trailingIcon = {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Tombol Hapus Teks (jika ada teks)
-            if (productHistoryQuery.isNotEmpty()) {
-                IconButton(onClick = { viewModel.searchProductHistory("") }) {
-                    Icon(Icons.Rounded.Close, contentDescription = "Hapus", modifier = Modifier.size(16.dp))
+// === ITEM 1: BAR PENCARIAN UNIFIKASI (STRUK & PRODUK 1 TAHUN) ===
+item(key = "invoice_search_bar") {
+    OutlinedTextField(
+        value = productHistoryQuery,
+        onValueChange = { query ->
+            // Jalankan pencarian produk 1 tahun dan nomor struk sekaligus
+            viewModel.searchProductHistory(query)
+            viewModel.searchInvoice(query)
+        },
+        placeholder = { Text("Cari produk, barcode, SKU, atau No. Struk (INV-)...", fontSize = 12.sp) },
+        leadingIcon = {
+            Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+        },
+        trailingIcon = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Tombol Hapus Teks
+                if (productHistoryQuery.isNotEmpty() || searchQuery.isNotEmpty()) {
+                    IconButton(
+                        onClick = {
+                            viewModel.searchProductHistory("")
+                            viewModel.searchInvoice("")
+                        }
+                    ) {
+                        Icon(Icons.Rounded.Close, contentDescription = "Hapus", modifier = Modifier.size(16.dp))
+                    }
+                }
+                
+                // TOMBOL SCAN BARCODE KAMERA
+                IconButton(onClick = { openScanner() }) {
+                    Icon(
+                        Icons.Rounded.QrCodeScanner, 
+                        contentDescription = "Scan Barcode",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
-            
-            // TOMBOL SCAN BARCODE (Memanggil kamera)
-            IconButton(onClick = { openScanner() }) {
-                Icon(
-                    Icons.Rounded.QrCodeScanner, 
-                    contentDescription = "Scan Barcode",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-    },
-    singleLine = true,
-    modifier = Modifier.fillMaxWidth()
-)
-            }
+        },
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    )
+}
 
             // === ITEM 2 (BARU): TOMBOL KLAIM GARANSI DIRECT ===
             item(key = "direct_warranty_button") {
