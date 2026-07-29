@@ -1,5 +1,4 @@
 package com.pos.offline.ui.settings
-
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
@@ -14,7 +13,6 @@ import com.pos.offline.data.repository.CashierRepository
 import com.pos.offline.data.repository.ShiftRepository
 import com.pos.offline.util.ScanFeedbackManager
 import com.pos.offline.util.ScanPreferencesRepository
-import com.pos.offline.util.VibrationLevel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -22,10 +20,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-
 data class SettingsUiState(
     val isExporting: Boolean = false,
     val isImporting: Boolean = false,
@@ -36,7 +32,6 @@ data class SettingsUiState(
 ) {
     val isBusy: Boolean get() = isExporting || isImporting || isSharing
 }
-
 class SettingsViewModel(
     private val appContext: Context,
     private val cashierRepository: CashierRepository,
@@ -50,76 +45,45 @@ class SettingsViewModel(
     val messages: SharedFlow<String> = _messages.asSharedFlow()
     private val _shareIntent = MutableSharedFlow<android.content.Intent>(extraBufferCapacity = 1)
     val shareIntent: SharedFlow<android.content.Intent> = _shareIntent.asSharedFlow()
-
     val cashiers: StateFlow<List<CashierEntity>> =
         cashierRepository.allCashiers
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
     val isSoundEnabled: StateFlow<Boolean> = scanPreferencesRepository.isSoundEnabled
     val soundVolume: StateFlow<Int> = scanPreferencesRepository.soundVolume
     val soundDurationMs: StateFlow<Int> = scanPreferencesRepository.soundDurationMs
-
     val isVibrationEnabled: StateFlow<Boolean> = scanPreferencesRepository.isVibrationEnabled
-    
-    // PERBAIKAN: Mengonversi nilai int/string intensity menjadi VibrationLevel Enum
-    val vibrationLevel: StateFlow<VibrationLevel> = scanPreferencesRepository.vibrationIntensity
-        .map { intensity ->
-            when {
-                intensity <= 35 -> VibrationLevel.HALUS
-                intensity <= 70 -> VibrationLevel.SEDANG
-                else -> VibrationLevel.KUAT
-            }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), VibrationLevel.SEDANG)
-
+    val vibrationIntensity: StateFlow<Int> = scanPreferencesRepository.vibrationIntensity
     val vibrationDurationMs: StateFlow<Int> = scanPreferencesRepository.vibrationDurationMs
-
     fun setSoundEnabled(enabled: Boolean) {
         scanPreferencesRepository.setSoundEnabled(enabled)
         if (enabled) testSoundPreview()
     }
-
     fun setSoundVolume(volume: Int) {
         scanPreferencesRepository.setSoundVolume(volume)
     }
-
     fun setSoundDurationMs(duration: Int) {
         scanPreferencesRepository.setSoundDurationMs(duration)
     }
-
     fun testSoundPreview() {
         feedbackManager.playBeep(soundVolume.value, soundDurationMs.value)
     }
-
     fun setVibrationEnabled(enabled: Boolean) {
         scanPreferencesRepository.setVibrationEnabled(enabled)
         if (enabled) testVibrationPreview()
     }
-
-    // PERBAIKAN: Fungsi penentuan level getaran menerima Enum VibrationLevel
-    fun setVibrationLevel(level: VibrationLevel) {
-        val intensityValue = when (level) {
-            VibrationLevel.HALUS -> 30
-            VibrationLevel.SEDANG -> 65
-            VibrationLevel.KUAT -> 100
-        }
-        scanPreferencesRepository.setVibrationIntensity(intensityValue)
+    fun setVibrationIntensity(intensity: Int) {
+        scanPreferencesRepository.setVibrationIntensity(intensity)
     }
-
     fun setVibrationDurationMs(duration: Int) {
         scanPreferencesRepository.setVibrationDurationMs(duration)
     }
-
-    // PERBAIKAN: Mengirimkan Enum VibrationLevel ke ScanFeedbackManager
     fun testVibrationPreview() {
-        feedbackManager.playVibration(vibrationLevel.value, vibrationDurationMs.value)
+        feedbackManager.playVibration(vibrationIntensity.value, vibrationDurationMs.value)
     }
-
     override fun onCleared() {
         super.onCleared()
         feedbackManager.release()
     }
-
     fun exportDatabase(destinationUri: Uri) {
         if (_uiState.value.isBusy) return
         viewModelScope.launch {
@@ -134,7 +98,6 @@ class SettingsViewModel(
             }
         }
     }
-
     fun shareDatabase() {
         if (_uiState.value.isBusy) return
         viewModelScope.launch {
@@ -153,15 +116,12 @@ class SettingsViewModel(
             }
         }
     }
-
     fun requestRestore(uri: Uri) {
         _uiState.value = _uiState.value.copy(pendingRestoreUri = uri)
     }
-
     fun cancelRestore() {
         _uiState.value = _uiState.value.copy(pendingRestoreUri = null)
     }
-
     fun confirmRestore(onRestartRequired: () -> Unit) {
         val uri = _uiState.value.pendingRestoreUri ?: return
         viewModelScope.launch {
@@ -193,15 +153,12 @@ class SettingsViewModel(
             }
         }
     }
-
     fun openAddCashierDialog() {
         _uiState.value = _uiState.value.copy(showAddCashierDialog = true)
     }
-
     fun closeAddCashierDialog() {
         _uiState.value = _uiState.value.copy(showAddCashierDialog = false)
     }
-
     fun addCashier(name: String) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) {
@@ -222,7 +179,6 @@ class SettingsViewModel(
             }
         }
     }
-
     fun setCashierActive(
         id: Long,
         active: Boolean,
