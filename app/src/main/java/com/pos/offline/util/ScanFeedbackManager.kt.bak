@@ -1,19 +1,18 @@
 package com.pos.offline.util
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 
-/**
- * Manager umpan balik suara & getaran dengan dukungan pengaturan volume,
- * intensitas getar dinamis (1-255 amplitude), dan kontrol durasi.
- */
 class ScanFeedbackManager(context: Context) {
     private val appContext = context.applicationContext
+    private val TAG = "ScanFeedbackManager"
 
     private var toneGenerator: ToneGenerator? = try {
         ToneGenerator(AudioManager.STREAM_MUSIC, 100)
@@ -45,19 +44,18 @@ class ScanFeedbackManager(context: Context) {
         if (soundEnabled && soundVolume > 0) {
             playBeep(soundVolume, soundDurationMs)
         }
-        if (vibrationEnabled && vibrationIntensity > 0) {
+        if (vibrationEnabled) {
             playVibration(vibrationIntensity, vibrationDurationMs)
         }
     }
 
     fun playBeep(volume: Int, durationMs: Int) {
         try {
-            // Re-instantiate tone generator sesuai skala volume 0-100%
             toneGenerator?.release()
             toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, volume.coerceIn(0, 100))
             toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, durationMs.coerceIn(50, 300))
         } catch (e: Exception) {
-            // Ignore safely
+            Log.e(TAG, "Error playBeep: ${e.message}")
         }
     }
 
@@ -66,32 +64,30 @@ class ScanFeedbackManager(context: Context) {
         if (!v.hasVibrator()) return
 
         try {
-            val mappedIntensity = intensity.coerceIn(1, 100)
+            val duration = durationMs.coerceIn(30, 300).toLong()
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && mappedIntensity >= 30) {
-                // FIXED: Android 10+ menggunakan Driver Haptic Hardware OS (Tegas, Teguh & Sangat Terasa)
-                val effectType = if (mappedIntensity >= 70) {
-                    VibrationEffect.EFFECT_HEAVY_CLICK
-                } else {
-                    VibrationEffect.EFFECT_CLICK
-                }
-                v.vibrate(VibrationEffect.createPredefined(effectType))
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // FIXED: Boost amplitudo minimum agar motor fisik HP sempat berputar
-                val duration = durationMs.coerceIn(50, 300).toLong()
-                val amplitude = if (mappedIntensity >= 80) {
-                    VibrationEffect.DEFAULT_AMPLITUDE
-                } else {
-                    // Map 1..100% ke 120..255 (min 120 agar getaran tidak 'mlempem')
-                    (120 + (mappedIntensity / 100f) * 135).toInt().coerceIn(120, 255)
-                }
-                v.vibrate(VibrationEffect.createOneShot(duration, amplitude))
+            // 3 Level Preset Amplitudo Fisik Motor HP
+            val amplitude = when {
+                intensity <= 35 -> 110 // HALUS (Cukup terasa tanpa mengagetkan)
+                intensity <= 70 -> 180 // SEDANG (Tegas & seimbang)
+                else -> VibrationEffect.DEFAULT_AMPLITUDE // KUAT (Power penuh hardware HP)
+            }
+
+            // TRIK BYPASS: Menggunakan USAGE_ALARM agar tetap bergetar di OS Android 8-16
+            val audioAttributes = AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .build()
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val effect = VibrationEffect.createOneShot(duration, amplitude)
+                v.vibrate(effect, audioAttributes)
             } else {
                 @Suppress("DEPRECATION")
-                v.vibrate(durationMs.coerceIn(50, 300).toLong())
+                v.vibrate(duration)
             }
         } catch (e: Exception) {
-            // Ignore safely
+            Log.e(TAG, "Gagal memicu getaran: ${e.message}")
         }
     }
 

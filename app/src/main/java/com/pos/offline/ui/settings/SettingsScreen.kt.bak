@@ -555,90 +555,44 @@ private fun FuturisticFeedbackControls(
                 }
             }
 
-// KONTROL GETARAN
-FeedbackSectionCard(
-    icon = Icons.Rounded.Vibration,
-    title = "Getaran Haptic",
-    subtitle = if (isVibrationEnabled) {
-        val label = when {
-            vibrationIntensity <= 35 -> "Halus"
-            vibrationIntensity <= 70 -> "Sedang"
-            else -> "Kuat"
-        }
-        "Aktif ($label - $vibrationDurationMs ms)"
-    } else "Nonaktif (OFF)",
-    isEnabled = isVibrationEnabled,
-    onToggle = onVibrationToggle,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        
-        // PILIHAN PRESET KEKUATAN GETAR (HALUS, SEDANG, KUAT)
-        Text(
-            text = "Kekuatan Getar",
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-            fontWeight = FontWeight.Medium
-        )
+            // KONTROL GETARAN
+            FeedbackSectionCard(
+                icon = Icons.Rounded.Vibration,
+                title = "Getaran Haptic",
+                subtitle = if (isVibrationEnabled) "Aktif ($vibrationIntensity% - $vibrationDurationMs ms)" else "Nonaktif (OFF)",
+                isEnabled = isVibrationEnabled,
+                onToggle = onVibrationToggle,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Slider Intensitas Getar
+                    Text(
+                        text = "Kekuatan Getar: $vibrationIntensity%",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                        fontWeight = FontWeight.Medium
+                    )
+                    Slider(
+                        value = vibrationIntensity.toFloat(),
+                        onValueChange = { onVibrationIntensityChange(it.toInt()) },
+                        onValueChangeFinished = onTestVibration,
+                        valueRange = 0f..100f,
+                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
+                    )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            val presets = listOf(
-                "Halus" to 30,
-                "Sedang" to 65,
-                "Kuat" to 100
-            )
-
-            presets.forEach { (label, value) ->
-                val isSelected = when (value) {
-                    30 -> vibrationIntensity <= 35
-                    65 -> vibrationIntensity in 36..70
-                    else -> vibrationIntensity > 70
-                }
-
-                if (isSelected) {
-                    Button(
-                        onClick = {
-                            onVibrationIntensityChange(value)
-                            onTestVibration()
-                        },
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(vertical = 8.dp)
-                    ) {
-                        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = {
-                            onVibrationIntensityChange(value)
-                            onTestVibration()
-                        },
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(vertical = 8.dp)
-                    ) {
-                        Text(label, fontSize = 12.sp)
-                    }
+                    // Slider Durasi Getar
+                    Text(
+                        text = "Durasi Getar: $vibrationDurationMs ms (Aman 20-200 ms)",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                        fontWeight = FontWeight.Medium
+                    )
+                    Slider(
+                        value = vibrationDurationMs.toFloat(),
+                        onValueChange = { onVibrationDurationChange(it.toInt()) },
+                        onValueChangeFinished = onTestVibration,
+                        valueRange = 20f..200f,
+                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
+                    )
                 }
             }
-        }
-
-        Spacer(Modifier.height(4.dp))
-
-        // Slider Durasi Getar (Tetap dipertahankan untuk mengontrol durasi milidetik)
-        Text(
-            text = "Durasi Getar: $vibrationDurationMs ms",
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-            fontWeight = FontWeight.Medium
-        )
-        Slider(
-            value = vibrationDurationMs.toFloat(),
-            onValueChange = { onVibrationDurationChange(it.toInt()) },
-            onValueChangeFinished = onTestVibration,
-            valueRange = 20f..200f,
-            colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
-        )
-    }
-}
         }
     }
 }

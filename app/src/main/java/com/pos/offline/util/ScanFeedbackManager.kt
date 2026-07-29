@@ -10,19 +10,14 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 
-/**
- * Manager umpan balik suara & getaran dengan dukungan pengaturan volume,
- * intensitas getar dinamis (1-255 amplitude), dan kontrol durasi.
- * Kompatibel dari Android 8 (API 26) hingga Android 16 (API 36+).
- */
 class ScanFeedbackManager(context: Context) {
     private val appContext = context.applicationContext
     private val TAG = "ScanFeedbackManager"
 
+    // Menggunakan STREAM_ALARM agar gain suara dari speaker HP keluar secara maksimal
     private var toneGenerator: ToneGenerator? = try {
-        ToneGenerator(AudioManager.STREAM_MUSIC, 100)
+        ToneGenerator(AudioManager.STREAM_ALARM, 100)
     } catch (e: Exception) {
-        Log.e(TAG, "Gagal inisialisasi ToneGenerator: ${e.message}")
         null
     }
 
@@ -36,7 +31,6 @@ class ScanFeedbackManager(context: Context) {
             appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         }
     } catch (e: Exception) {
-        Log.e(TAG, "Gagal mendapatkan Vibrator Service: ${e.message}")
         null
     }
 
@@ -51,7 +45,7 @@ class ScanFeedbackManager(context: Context) {
         if (soundEnabled && soundVolume > 0) {
             playBeep(soundVolume, soundDurationMs)
         }
-        if (vibrationEnabled && vibrationIntensity > 0) {
+        if (vibrationEnabled) {
             playVibration(vibrationIntensity, vibrationDurationMs)
         }
     }
@@ -59,54 +53,44 @@ class ScanFeedbackManager(context: Context) {
     fun playBeep(volume: Int, durationMs: Int) {
         try {
             toneGenerator?.release()
-            toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, volume.coerceIn(0, 100))
-            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, durationMs.coerceIn(50, 300))
+            // Gunakan STREAM_ALARM agar suara tetap keras meskipun volume media HP pelan
+            toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, volume.coerceIn(0, 100))
+            
+            // TONE_PROP_BEEP2 adalah nada high-frequency (tajam & nyaring)
+            // yang dirancang khusus untuk menembus kebisingan latar belakang (road noise)
+            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, durationMs.coerceIn(50, 300))
         } catch (e: Exception) {
             Log.e(TAG, "Error playBeep: ${e.message}")
         }
     }
 
     fun playVibration(intensity: Int, durationMs: Int) {
-        val v = vibrator ?: run {
-            Log.w(TAG, "Vibrator bernilai null")
-            return
-        }
-
-        if (!v.hasVibrator()) {
-            Log.w(TAG, "Perangkat tidak memiliki hardware getar")
-            return
-        }
+        val v = vibrator ?: return
+        if (!v.hasVibrator()) return
 
         try {
-            val mappedIntensity = intensity.coerceIn(1, 100)
-            // Pastikan durasi minimal 30ms agar motor getar HP sempat berputar
             val duration = durationMs.coerceIn(30, 300).toLong()
 
-            // DENGAN AudioAttributes: Memaksa OS Android 8-16 mengeksekusi getaran 
-            // sebagai feedback pemindaian/bantuan aplikasi (sonification)
+            val amplitude = when {
+                intensity <= 35 -> 110
+                intensity <= 70 -> 180
+                else -> VibrationEffect.DEFAULT_AMPLITUDE
+            }
+
             val audioAttributes = AudioAttributes.Builder()
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_ALARM)
                 .build()
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // Hitung amplitudo (1..255)
-                val amplitude = if (mappedIntensity >= 90) {
-                    VibrationEffect.DEFAULT_AMPLITUDE
-                } else {
-                    // Petakan 1..100% ke amplitudo fisik 100..255
-                    (100 + (mappedIntensity / 100f) * 155).toInt().coerceIn(1, 255)
-                }
-
                 val effect = VibrationEffect.createOneShot(duration, amplitude)
                 v.vibrate(effect, audioAttributes)
             } else {
                 @Suppress("DEPRECATION")
                 v.vibrate(duration)
             }
-            Log.d(TAG, "Getaran berhasil dipicu ($duration ms, intensity: $mappedIntensity%)")
         } catch (e: Exception) {
-            Log.e(TAG, "Gagal memicu getaran: ${e.message}", e)
+            Log.e(TAG, "Gagal memicu getaran: ${e.message}")
         }
     }
 
