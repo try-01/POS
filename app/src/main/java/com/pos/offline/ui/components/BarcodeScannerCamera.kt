@@ -388,39 +388,47 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                 .fillMaxSize()
                 .background(Color.Black)
         ) {
-            BarcodeScannerCamera(
-                isMultiScanMode = isMultiScanMode,
-                onBarcodeScanned = { code ->
-                    val isSuccess = onScannedState.value(code)
+BarcodeScannerCamera(
+    isMultiScanMode = isMultiScanMode,
+    onBarcodeScanned = { code ->
+        val isSuccess = onScannedState.value(code)
 
-                    if (isSuccess) {
-                        // Feedback Suara & Getaran Tegas saat Berhasil
-                        feedbackManager.triggerSuccessFeedback(
-                            soundEnabled = isSoundEnabled,
-                            soundVolume = soundVolume,
-                            soundDurationMs = soundDurationMs,
-                            vibrationEnabled = isVibrationEnabled,
-                            vibrationIntensity = vibrationIntensity,
-                            vibrationDurationMs = vibrationDurationMs
-                        )
+        if (isSuccess) {
+            scanErrorMessage = null
 
-                        scannedCountBatch++
-                        lastScannedCodeText = code
-                        
-                        if (!isMultiScanMode) {
-                            showScanner = false
-                        }
-                    } else {
-                        // Feedback Getar Peringatan Singkat saat Gagal / Produk Tidak Ada
-                        if (isVibrationEnabled) {
-                            feedbackManager.playVibration(intensity = 80, durationMs = 100)
-                        }
-                    }
-                    
-                    isSuccess
-                },
-                modifier = Modifier.fillMaxSize(),
+            // Feedback BERHASIL (Suara Bip Tinggi + Getar Terpilih)
+            feedbackManager.triggerSuccessFeedback(
+                soundEnabled = isSoundEnabled,
+                soundVolume = soundVolume,
+                soundDurationMs = soundDurationMs,
+                vibrationEnabled = isVibrationEnabled,
+                vibrationIntensity = vibrationIntensity,
+                vibrationDurationMs = vibrationDurationMs
             )
+
+            scannedCountBatch++
+            lastScannedCodeText = code
+
+            if (!isMultiScanMode) {
+                showScanner = false
+            }
+        } else {
+            // Tampilkan Banner Merah Error di Kamera
+            scanErrorMessage = "Produk tidak ditemukan ($code)"
+
+            // Feedback GAGAL (Suara Tet-Tet Error + Getar Peringatan)
+            feedbackManager.triggerFailureFeedback(
+                soundEnabled = isSoundEnabled,
+                soundVolume = soundVolume,
+                vibrationEnabled = isVibrationEnabled,
+                vibrationIntensity = vibrationIntensity
+            )
+        }
+
+        isSuccess
+    },
+    modifier = Modifier.fillMaxSize(),
+)
 
             // TOP FLOATING BANNER: Indikator Jumlah Item Masuk Keranjang (Jelas Terlihat Kasir)
             AnimatedVisibility(

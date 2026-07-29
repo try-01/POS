@@ -14,8 +14,9 @@ class ScanFeedbackManager(context: Context) {
     private val appContext = context.applicationContext
     private val TAG = "ScanFeedbackManager"
 
+    // Menggunakan STREAM_ALARM agar gain suara dari speaker HP keluar secara maksimal
     private var toneGenerator: ToneGenerator? = try {
-        ToneGenerator(AudioManager.STREAM_MUSIC, 100)
+        ToneGenerator(AudioManager.STREAM_ALARM, 100)
     } catch (e: Exception) {
         null
     }
@@ -52,44 +53,52 @@ class ScanFeedbackManager(context: Context) {
     fun playBeep(volume: Int, durationMs: Int) {
         try {
             toneGenerator?.release()
-            toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, volume.coerceIn(0, 100))
-            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, durationMs.coerceIn(50, 300))
+            // Gunakan STREAM_ALARM agar suara tetap keras meskipun volume media HP pelan
+            toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, volume.coerceIn(0, 100))
+            
+            // TONE_PROP_BEEP2 adalah nada high-frequency (tajam & nyaring)
+            // yang dirancang khusus untuk menembus kebisingan latar belakang (road noise)
+            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, durationMs.coerceIn(50, 300))
         } catch (e: Exception) {
             Log.e(TAG, "Error playBeep: ${e.message}")
         }
     }
 
-    fun playVibration(intensity: Int, durationMs: Int) {
-        val v = vibrator ?: return
-        if (!v.hasVibrator()) return
+fun playVibration(intensity: Int, durationMs: Int) {
+    val v = vibrator ?: return
+    if (!v.hasVibrator()) return
 
-        try {
-            val duration = durationMs.coerceIn(30, 300).toLong()
+    try {
+        // Trik Kombinasi Amplitudo & Durasi Pulsa Efektif
+        // Menjamin beda rasa di SEMUA HP (termasuk HP yang tidak punya hardware pengatur amplitudo)
+        val (amplitude, effectiveDuration) = when {
+            // HALUS: Pulsa sangat singkat (20ms) -> Terasa seperti haptic tap ringan
+            intensity <= 35 -> Pair(80, 20L)
 
-            // 3 Level Preset Amplitudo Fisik Motor HP
-            val amplitude = when {
-                intensity <= 35 -> 110 // HALUS (Cukup terasa tanpa mengagetkan)
-                intensity <= 70 -> 180 // SEDANG (Tegas & seimbang)
-                else -> VibrationEffect.DEFAULT_AMPLITUDE // KUAT (Power penuh hardware HP)
-            }
+            // SEDANG: Pulsa sedang (50ms) -> Terasa seperti getaran notifikasi biasa
+            intensity <= 70 -> Pair(170, durationMs.coerceIn(40, 70).toLong())
 
-            // TRIK BYPASS: Menggunakan USAGE_ALARM agar tetap bergetar di OS Android 8-16
-            val audioAttributes = AudioAttributes.Builder()
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .setUsage(AudioAttributes.USAGE_ALARM)
-                .build()
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val effect = VibrationEffect.createOneShot(duration, amplitude)
-                v.vibrate(effect, audioAttributes)
-            } else {
-                @Suppress("DEPRECATION")
-                v.vibrate(duration)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Gagal memicu getaran: ${e.message}")
+            // KUAT: Pulsa panjang & maksimal (100ms+) -> Terasa bergetar mantap
+            else -> Pair(VibrationEffect.DEFAULT_AMPLITUDE, durationMs.coerceIn(90, 200).toLong())
         }
+
+        // TRIK BYPASS: Menggunakan USAGE_ALARM agar tetap bergetar di OS Android 8-16
+        val audioAttributes = AudioAttributes.Builder()
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val effect = VibrationEffect.createOneShot(effectiveDuration, amplitude)
+            v.vibrate(effect, audioAttributes)
+        } else {
+            @Suppress("DEPRECATION")
+            v.vibrate(effectiveDuration)
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Gagal memicu getaran: ${e.message}")
     }
+}
 
     fun release() {
         try {

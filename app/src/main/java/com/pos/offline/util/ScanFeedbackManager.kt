@@ -14,7 +14,6 @@ class ScanFeedbackManager(context: Context) {
     private val appContext = context.applicationContext
     private val TAG = "ScanFeedbackManager"
 
-    // Menggunakan STREAM_ALARM agar gain suara dari speaker HP keluar secara maksimal
     private var toneGenerator: ToneGenerator? = try {
         ToneGenerator(AudioManager.STREAM_ALARM, 100)
     } catch (e: Exception) {
@@ -34,6 +33,9 @@ class ScanFeedbackManager(context: Context) {
         null
     }
 
+    /**
+     * Umpan balik saat SCAN BERHASIL (Produk Ditemukan)
+     */
     fun triggerSuccessFeedback(
         soundEnabled: Boolean,
         soundVolume: Int,
@@ -50,17 +52,46 @@ class ScanFeedbackManager(context: Context) {
         }
     }
 
+    /**
+     * Umpan balik saat SCAN GAGAL / PRODUK TIDAK DITEMUKAN
+     */
+    fun triggerFailureFeedback(
+        soundEnabled: Boolean,
+        soundVolume: Int,
+        vibrationEnabled: Boolean,
+        vibrationIntensity: Int,
+    ) {
+        if (soundEnabled && soundVolume > 0) {
+            playErrorBeep(soundVolume)
+        }
+        if (vibrationEnabled) {
+            // Getaran Peringatan Beruntun Singkat
+            playVibration(vibrationIntensity, durationMs = 120)
+        }
+    }
+
     fun playBeep(volume: Int, durationMs: Int) {
         try {
             toneGenerator?.release()
-            // Gunakan STREAM_ALARM agar suara tetap keras meskipun volume media HP pelan
             toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, volume.coerceIn(0, 100))
-            
-            // TONE_PROP_BEEP2 adalah nada high-frequency (tajam & nyaring)
-            // yang dirancang khusus untuk menembus kebisingan latar belakang (road noise)
+            // TONE_PROP_BEEP2 = Nada Sukses Tinggi & Nyaring
             toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, durationMs.coerceIn(50, 300))
         } catch (e: Exception) {
             Log.e(TAG, "Error playBeep: ${e.message}")
+        }
+    }
+
+    /**
+     * NADA ERROR (Negative Acknowledgment)
+     * Mengeluarkan suara khas scanner gagal ("Tet-Tet" / Bip ganda nada rendah)
+     */
+    fun playErrorBeep(volume: Int) {
+        try {
+            toneGenerator?.release()
+            toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, volume.coerceIn(0, 100))
+            toneGenerator?.startTone(ToneGenerator.TONE_PROP_NACK, 200)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error playErrorBeep: ${e.message}")
         }
     }
 
@@ -69,12 +100,10 @@ class ScanFeedbackManager(context: Context) {
         if (!v.hasVibrator()) return
 
         try {
-            val duration = durationMs.coerceIn(30, 300).toLong()
-
-            val amplitude = when {
-                intensity <= 35 -> 110
-                intensity <= 70 -> 180
-                else -> VibrationEffect.DEFAULT_AMPLITUDE
+            val (amplitude, effectiveDuration) = when {
+                intensity <= 35 -> Pair(80, 20L)
+                intensity <= 70 -> Pair(170, durationMs.coerceIn(40, 70).toLong())
+                else -> Pair(VibrationEffect.DEFAULT_AMPLITUDE, durationMs.coerceIn(90, 200).toLong())
             }
 
             val audioAttributes = AudioAttributes.Builder()
@@ -83,11 +112,11 @@ class ScanFeedbackManager(context: Context) {
                 .build()
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val effect = VibrationEffect.createOneShot(duration, amplitude)
+                val effect = VibrationEffect.createOneShot(effectiveDuration, amplitude)
                 v.vibrate(effect, audioAttributes)
             } else {
                 @Suppress("DEPRECATION")
-                v.vibrate(duration)
+                v.vibrate(effectiveDuration)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Gagal memicu getaran: ${e.message}")

@@ -225,7 +225,14 @@ fun BarcodeScannerCamera(
     }
 
     DisposableEffect(Unit) {
+        // DEFENSIVE FIX: Reset total state cooldown saat sesi kamera baru dibuka
+        lastScannedCode = null
+        lastScannedTime = 0L
+
         onDispose {
+            // Reset kembali saat kamera ditutup
+            lastScannedCode = null
+            lastScannedTime = 0L
             cameraProvider?.unbindAll()
             executor.shutdown()
             scanner.close()
