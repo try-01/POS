@@ -1,5 +1,4 @@
 package com.pos.offline.ui.inventory
-
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -95,7 +94,6 @@ import com.pos.offline.util.ExcelManager
 import com.pos.offline.util.toRupiah
 import com.pos.offline.util.formatQuantity
 import com.pos.offline.ui.inventory.sanitizeScannedCode
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InventoryScreen(viewModel: InventoryViewModel) {
@@ -108,19 +106,16 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
     val deletedProductFound by viewModel.deletedProductFound.collectAsStateWithLifecycle()
     val excelState by viewModel.excelState.collectAsStateWithLifecycle()
     val isSaving by viewModel.isSaving.collectAsStateWithLifecycle()
-
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val sortOption by viewModel.sortOption.collectAsStateWithLifecycle()
     val topSalesRange by viewModel.topSalesRange.collectAsStateWithLifecycle()
-
     val context = LocalContext.current
     val hasCamera =
         remember {
             context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
         }
     val launchMainScanner = rememberBarcodeScanner(onScanned = viewModel::onBarcodeScanned)
-
     val excelExportLauncher =
         rememberLauncherForActivityResult(
             contract =
@@ -128,16 +123,13 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 ),
         ) { uri -> if (uri != null) viewModel.exportToExcel(uri) }
-
     val excelImportLauncher =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.OpenDocument(),
         ) { uri -> if (uri != null) viewModel.importFromExcel(uri) }
-
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg -> snackbarHostState.showSnackbar(msg) }
     }
-
     Box(Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
@@ -259,7 +251,6 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                 }
             }
         }
-
         SmallFloatingActionButton(
             onClick = viewModel::startAdd,
             modifier =
@@ -272,7 +263,6 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             Icon(Icons.Rounded.Add, contentDescription = "Tambah Produk", modifier = Modifier.size(20.dp))
         }
     }
-
     form?.let { state ->
         ProductFormDialog(
             state = state,
@@ -286,7 +276,6 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             onScanError = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
         )
     }
-
     pendingDelete?.let { target ->
         AlertDialog(
             onDismissRequest = viewModel::cancelDelete,
@@ -302,7 +291,6 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             text = { Text("\"${target.name}\" akan dihapus dari katalog.") },
         )
     }
-
     scanNotFound?.let { state ->
         AlertDialog(
             onDismissRequest = viewModel::dismissScanNotFound,
@@ -322,10 +310,6 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             },
         )
     }
-
-    // Opsi C: intersepsi sejak fase scan — barcode ditemukan tapi produknya
-    // sudah soft-deleted. Tawarkan pemulihan alih-alih membiarkan user mengisi
-    // form baru yang pasti ditolak saat Simpan karena barcode "sudah dipakai".
     deletedProductFound?.let { state ->
         AlertDialog(
             onDismissRequest = viewModel::dismissDeletedProductFound,
@@ -344,7 +328,6 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             },
         )
     }
-
     if (excelState.showReviewDialog) {
         ImportReviewDialog(
             reviewItems = excelState.reviewItems,
@@ -355,7 +338,6 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
         )
     }
 }
-
 @Composable
 private fun ExcelIconButton(
     icon: ImageVector,
@@ -384,7 +366,6 @@ private fun ExcelIconButton(
         }
     }
 }
-
 @Composable
 private fun ImportReviewDialog(
     reviewItems: List<InventoryViewModel.ImportReviewItem>,
@@ -396,7 +377,6 @@ private fun ImportReviewDialog(
     val newCount = reviewItems.count { it.status == InventoryViewModel.ImportStatus.NEW }
     val conflictCount = reviewItems.count { it.status == InventoryViewModel.ImportStatus.CONFLICT }
     val dupCount = reviewItems.count { it.status == InventoryViewModel.ImportStatus.DUPLICATE_IN_FILE }
-
     AlertDialog(
         onDismissRequest = { if (!isCommitting) onDismiss() },
         title = { Text("Tinjau Impor Produk", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
@@ -421,7 +401,6 @@ private fun ImportReviewDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
-
                 if (parseErrors.isNotEmpty()) {
                     Text(
                         "⚠ ${parseErrors.size} baris gagal dibaca:",
@@ -438,7 +417,6 @@ private fun ImportReviewDialog(
                     }
                     HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 }
-
                 reviewItems.forEach { item ->
                     ImportReviewRow(item)
                 }
@@ -467,7 +445,6 @@ private fun ImportReviewDialog(
         },
     )
 }
-
 @Composable
 private fun ImportStatBadge(
     text: String,
@@ -483,7 +460,6 @@ private fun ImportStatBadge(
         )
     }
 }
-
 @Composable
 private fun ImportReviewRow(item: InventoryViewModel.ImportReviewItem) {
     val (label, color) =
@@ -530,7 +506,6 @@ private fun ImportReviewRow(item: InventoryViewModel.ImportReviewItem) {
         }
     }
 }
-
 @Composable
 private fun ProductRow(
     product: ProductEntity,
@@ -577,7 +552,6 @@ private fun ProductRow(
                         )
                     }
                 }
-
                 if (product.category.isNotBlank()) {
                     Spacer(Modifier.height(2.dp))
                     CategoryBadge(category = product.category)
@@ -594,7 +568,6 @@ private fun ProductRow(
         }
     }
 }
-
 @Composable
 private fun CategoryBadge(category: String) {
     Surface(color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
@@ -609,7 +582,6 @@ private fun CategoryBadge(category: String) {
         )
     }
 }
-
 @Composable
 private fun CompactIconAction(
     icon: ImageVector,
@@ -630,7 +602,6 @@ private fun CompactIconAction(
         Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(16.dp))
     }
 }
-
 @Composable
 private fun StockBadge(stock: Double) {
     val color =
@@ -649,7 +620,6 @@ private fun StockBadge(stock: Double) {
         )
     }
 }
-
 @Composable
 private fun EmptyInventory(
     hasQuery: Boolean,
@@ -691,7 +661,6 @@ private fun EmptyInventory(
         }
     }
 }
-
 @Composable
 private fun CompactInventorySearchBar(
     query: String,
@@ -756,7 +725,6 @@ private fun CompactInventorySearchBar(
         },
     )
 }
-
 @Composable
 private fun SortMenuButton(
     current: ProductSortOption,
@@ -802,7 +770,6 @@ private fun SortMenuButton(
         }
     }
 }
-
 @Composable
 private fun ScanIconButton(onClick: () -> Unit) {
     Box(
@@ -822,7 +789,6 @@ private fun ScanIconButton(onClick: () -> Unit) {
         )
     }
 }
-
 @Composable
 private fun ProductFormDialog(
     state: ProductFormState,
@@ -848,36 +814,31 @@ private fun ProductFormDialog(
     var cost by remember(state.id) {
         mutableStateOf(if (state.cost > 0) state.cost.toString() else "")
     }
-
     var barcodeConflict by remember(state.id) { mutableStateOf<String?>(null) }
     var skuConflict by remember(state.id) { mutableStateOf<String?>(null) }
     var isCheckingBarcode by remember(state.id) { mutableStateOf(false) }
     var isCheckingSku by remember(state.id) { mutableStateOf(false) }
-
     val context = LocalContext.current
     val hasCamera =
         remember {
             context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
         }
-
     val launchScanner =
         rememberBarcodeScanner(
             onScanned = { code ->
                 val sanitized = sanitizeScannedCode(code)
                 if (sanitized != null) {
                     barcode = sanitized
-                    true // FIXED: Return Boolean true pemicu sinyal sukses
+                    true 
                 } else {
                     onScanError("Gagal memindai kode. Coba pindai ulang.")
-                    false // FIXED: Return Boolean false pemicu sinyal gagal
+                    false 
                 }
             },
         )
-
     val configuration = LocalConfiguration.current
-    val maxContentHeight = (configuration.screenHeightDp * 0.42f).dp
+    val maxContentHeight = (configuration.screenHeightDp * 0.75f).dp
     val scrollState = rememberScrollState()
-
     LaunchedEffect(barcode) {
         val trimmed = barcode.trim()
         if (trimmed.isBlank()) {
@@ -886,11 +847,10 @@ private fun ProductFormDialog(
             return@LaunchedEffect
         }
         isCheckingBarcode = true
-        kotlinx.coroutines.delay(300) // debounce, hindari query tiap keystroke
+        kotlinx.coroutines.delay(300) 
         barcodeConflict = checkBarcodeConflict(trimmed, state.id)
         isCheckingBarcode = false
     }
-
     LaunchedEffect(sku) {
         val trimmed = sku.trim()
         if (trimmed.isBlank()) {
@@ -903,7 +863,6 @@ private fun ProductFormDialog(
         skuConflict = checkSkuConflict(trimmed, state.id)
         isCheckingSku = false
     }
-
     AlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text(if (state.isNew) "Tambah Produk" else "Edit Produk", style = MaterialTheme.typography.titleMedium) },
@@ -926,7 +885,6 @@ private fun ProductFormDialog(
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
-
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = sku,
@@ -950,7 +908,6 @@ private fun ProductFormDialog(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f),
                     )
-
                     OutlinedTextField(
                         value = barcode,
                         onValueChange = { barcode = it },
@@ -993,13 +950,11 @@ private fun ProductFormDialog(
                         },
                     )
                 }
-
                 CategoryField(
                     value = category,
                     suggestions = categories,
                     onValueChange = { category = it },
                 )
-
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MoneyNumberField(price, { price = it }, "Harga Jual", Modifier.weight(1f))
                     MoneyNumberField(cost, { cost = it }, "Modal", Modifier.weight(1f))
@@ -1074,7 +1029,6 @@ private fun ProductFormDialog(
         },
     )
 }
-
 @Composable
 private fun DecimalNumberField(
     value: String,
@@ -1107,7 +1061,6 @@ private fun DecimalNumberField(
         modifier = modifier,
     )
 }
-
 @Composable
 private fun CategoryField(
     value: String,
@@ -1166,7 +1119,6 @@ private fun CategoryField(
         }
     }
 }
-
 @Composable
 private fun MoneyNumberField(
     value: String,
@@ -1187,7 +1139,6 @@ private fun MoneyNumberField(
         modifier = modifier,
     )
 }
-
 @Composable
 private fun TopSalesRangePicker(
     selected: TopSalesRange,
@@ -1211,7 +1162,6 @@ private fun TopSalesRangePicker(
         }
     }
 }
-
 @Composable
 private fun TopSalesChip(
     label: String,

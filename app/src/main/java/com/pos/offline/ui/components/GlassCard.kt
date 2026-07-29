@@ -1,5 +1,4 @@
 package com.pos.offline.ui.components
-
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,7 +16,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
@@ -30,7 +28,6 @@ fun GlassCard(
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val tint = if (isDark) Color.White else Color.Black
     val shape: Shape = RoundedCornerShape(cornerRadius)
-
     var cardModifier =
         modifier
             .clip(shape)
@@ -46,16 +43,13 @@ fun GlassCard(
                 BorderStroke(1.dp, tint.copy(alpha = 0.22f)),
                 shape = shape,
             )
-
     if (onClick != null) {
         cardModifier = cardModifier.clickable(enabled = enabled, onClick = onClick)
     }
-
     Box(
         modifier = cardModifier.padding(contentPadding),
     ) {
         content()
     }
 }
-
 private fun Color.luminance(): Float = 0.299f * red + 0.587f * green + 0.114f * blue

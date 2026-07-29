@@ -46,26 +46,12 @@ interface ShiftDao {
     @Query("SELECT EXISTS(SELECT 1 FROM shifts WHERE cashierId = :cashierId AND endedAt IS NULL)")
     suspend fun hasOpenShiftForCashier(cashierId: Long): Boolean
 
-    /**
-     * Cegah race condition "double-open shift" untuk kasir yang sama.
-     * Check + insert dijalankan dalam SATU transaksi Room (pola sama dengan
-     * TransactionDao.checkout) sehingga aman dari TOCTOU walau dipanggil
-     * bersamaan dari 2 coroutine/tap cepat.
-     * @return id shift baru, atau -1L jika kasir tsb sudah punya shift terbuka.
-     */
     @Transaction
     suspend fun insertIfNoOpenShift(shift: ShiftEntity): Long {
         if (hasOpenShiftForCashier(shift.cashierId)) return -1L
         return insert(shift)
     }
 
-    /**
-     * Cegah race condition "double-close shift". Re-check endedAt dilakukan
-     * DI DALAM transaksi yang sama dengan update, sehingga dua panggilan
-     * bersamaan terhadap shift yang sama tidak akan sama-sama lolos.
-     * @return ShiftEntity hasil update, atau null jika shift tidak ditemukan
-     * atau sudah ditutup sebelumnya.
-     */
     @Transaction
     suspend fun endIfOpen(
         id: Long,
@@ -87,43 +73,25 @@ interface ShiftDao {
         return updated
     }
 
-    // Uang tunai FISIK yang benar-benar masuk laci, bukan nilai nominal
-    // transaksi (total). Rumus: paidAmount - MAX(change, 0).
-    //   - change >= 0 (kembalian diberikan)      -> hasil = total (sama seperti dulu)
-    //   - change <  0 (kurang bayar, "Tetap Lanjutkan") -> hasil = paidAmount (uang fisik aktual)
-    // Wajib pakai ini utk expectedCashInDrawer, BUKAN sum(total), agar
-    // rekonsiliasi kas saat tutup shift akurat terhadap kasus nego/pembulatan.
+    // PERBAIKAN: Menggunakan paidAmount - changeGiven untuk menghitung bersih kas tunai yang masuk ke laci
     @Query(
         """
-        SELECT COALESCE(SUM(paidAmount - MAX(change, 0)), 0) FROM transactions
+        SELECT COALESCE(SUM(paidAmount - changeGiven), 0) FROM transactions
         WHERE shiftId = :shiftId AND paymentMethod = 'CASH' AND status = 'COMPLETED'
         """,
     )
     suspend fun cashRevenueForShift(shiftId: Long): Long
 
-    // Disamakan dengan cashRevenueForShift: uang QRIS yang benar-benar
-    // diterima, bukan nilai nominal transaksi (total). Menangani kasus
-    // nego harga di lapangan (paid < total via QRIS). Keterbatasan yang
-    // diketahui: untuk kasus "tip" (paid > total, kelebihan sengaja TIDAK
-    // dikembalikan), formula ini tetap meng-clamp ke `total` karena sistem
-    // belum punya field untuk membedakan "kembalian diberikan" vs "kembalian
-    // jadi tip" — sama seperti keterbatasan pada cashRevenueForShift.
+    // Untuk QRIS, pendapatan bernilai sebesar total transaksi yang dibayar via QRIS
     @Query(
         """
-        SELECT COALESCE(SUM(paidAmount - MAX(change, 0)), 0) FROM transactions
+        SELECT COALESCE(SUM(total), 0) FROM transactions
         WHERE shiftId = :shiftId AND paymentMethod = 'QRIS' AND status = 'COMPLETED'
         """,
     )
     suspend fun qrisRevenueForShift(shiftId: Long): Long
 
-    // Uang TUNAI FISIK yang KELUAR dari laci sebagai kembalian untuk
-    // transaksi NON-TUNAI (QRIS) — skenario nyata di lapangan: pembeli
-    // bayar lebih via QRIS (mis. tidak bawa cash) lalu meminta kembaliannya
-    // dalam bentuk uang tunai. Transaksi QRIS TIDAK PERNAH menambah kas laci
-    // (uangnya digital), tapi BISA menguranginya jika kembaliannya fisik.
-    // WAJIB dikurangkan dari expectedCashInDrawer, TERPISAH dari
-    // qrisRevenueForShift (yang murni soal pendapatan/P&L, bukan pergerakan
-    // kas fisik) — dua konsep ini sengaja tidak digabung.
+    // Pengeluaran tunai dari laci jika transaksi QRIS memberikan kembalian tunai
     @Query(
         """
         SELECT COALESCE(SUM(changeGiven), 0) FROM transactions

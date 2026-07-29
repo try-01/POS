@@ -1,29 +1,23 @@
 package com.pos.offline.data.local.entity
-
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-
 enum class PrinterConnectionType { BLUETOOTH, WIFI, USB }
-
 enum class PaperWidth {
     MM_58,
     MM_80,
     ;
-
     fun defaultCharPerLine(): Int =
         when (this) {
             MM_58 -> 32
             MM_80 -> 48
         }
-
     fun printableWidthMM(): Float =
         when (this) {
             MM_58 -> 48f
             MM_80 -> 72f
         }
 }
-
 @Entity(tableName = "printers")
 data class PrinterEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

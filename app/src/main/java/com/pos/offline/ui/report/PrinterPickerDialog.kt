@@ -1,5 +1,4 @@
 package com.pos.offline.ui.report
-
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.pos.offline.data.local.entity.PrinterConnectionType
 import com.pos.offline.data.local.entity.PrinterEntity
-
 @Composable
 fun PrinterPickerDialog(
     printers: List<PrinterEntity>,
@@ -60,7 +58,6 @@ fun PrinterPickerDialog(
         },
     )
 }
-
 private fun connectionSummary(printer: PrinterEntity): String =
     when (printer.connectionType) {
         PrinterConnectionType.WIFI -> "WiFi \u2022 ${printer.wifiIpAddress}:${printer.wifiPort}"

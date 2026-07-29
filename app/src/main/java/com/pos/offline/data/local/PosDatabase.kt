@@ -1,5 +1,4 @@
 package com.pos.offline.data.local
-
 import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
@@ -24,14 +23,12 @@ import com.pos.offline.data.local.entity.StoreProfileEntity
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.TransactionItemEntity
 import com.pos.offline.data.local.dao.ReportDao
-
 private data class SeedProduct(
     val name: String,
     val sku: String,
     val price: Long,
     val cost: Long,
 )
-
 @Database(
     entities = [
         ProductEntity::class,
@@ -50,27 +47,17 @@ private data class SeedProduct(
 )
 abstract class PosDatabase : RoomDatabase() {
     abstract fun productDao(): ProductDao
-
     abstract fun cartDao(): CartDao
-
     abstract fun transactionDao(): TransactionDao
-
     abstract fun cashierDao(): CashierDao
-
     abstract fun shiftDao(): ShiftDao
-
     abstract fun returnDao(): ReturnDao
-
     abstract fun printerDao(): PrinterDao
-
     abstract fun reportDao(): ReportDao
-
     abstract fun storeProfileDao(): StoreProfileDao
-
     companion object {
         @Volatile
         private var INSTANCE: PosDatabase? = null
-
         fun getInstance(context: Context): PosDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room
@@ -83,14 +70,12 @@ abstract class PosDatabase : RoomDatabase() {
                     .build()
                     .also { INSTANCE = it }
             }
-
         fun closeActiveInstance() {
             synchronized(this) {
                 INSTANCE?.close()
                 INSTANCE = null
             }
         }
-
         private val SEED_CALLBACK =
             object : RoomDatabase.Callback() {
                 override fun onCreate(db: SupportSQLiteDatabase) {
@@ -115,7 +100,6 @@ abstract class PosDatabase : RoomDatabase() {
                             arrayOf<Any>(s.name, s.sku, s.price, s.cost, 25.0, now, now),
                         )
                     }
-
                     db.execSQL(
                         "INSERT OR IGNORE INTO store_profile " +
                             "(id, storeName, address, footerNote, logoBytes, autoPrintEnabled) " +

@@ -1,5 +1,4 @@
 package com.pos.offline.ui.settings
-
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,27 +27,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pos.offline.util.UsbDeviceInfo
-
 @Composable
 fun UsbPickerDialog(
     viewModel: PrinterViewModel,
     onDismiss: () -> Unit,
 ) {
     val state by viewModel.usbUiState.collectAsState()
-
     LaunchedEffect(Unit) {
         viewModel.refreshUsbDevices()
     }
-
     DisposableEffect(Unit) {
         viewModel.startObservingUsbAttachment()
         onDispose { viewModel.resetUsbPicker() }
     }
-
     LaunchedEffect(Unit) {
         viewModel.usbSelectionSuccess.collect { onDismiss() }
     }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Pilih Printer USB", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
@@ -65,7 +59,6 @@ fun UsbPickerDialog(
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-
                 if (state.isRequestingPermission) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
@@ -73,7 +66,6 @@ fun UsbPickerDialog(
                         Text("Menunggu izin akses USB…", fontSize = 11.sp)
                     }
                 }
-
                 if (state.devices.isEmpty()) {
                     Text(
                         "Tidak ada perangkat USB terdeteksi.",
@@ -89,7 +81,6 @@ fun UsbPickerDialog(
                         )
                     }
                 }
-
                 TextButton(
                     onClick = { viewModel.refreshUsbDevices() },
                     enabled = !state.isRequestingPermission,
@@ -103,7 +94,6 @@ fun UsbPickerDialog(
         },
     )
 }
-
 @Composable
 private fun UsbDeviceRow(
     device: UsbDeviceInfo,

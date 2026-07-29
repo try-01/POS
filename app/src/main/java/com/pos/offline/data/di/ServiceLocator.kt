@@ -1,5 +1,4 @@
 package com.pos.offline.data.di
-
 import android.app.Application
 import android.content.Context
 import androidx.lifecycle.ViewModel
@@ -27,29 +26,12 @@ import com.pos.offline.util.LogoImageProcessor
 import com.pos.offline.util.PrintCoordinator
 import com.pos.offline.util.PrinterConnectionFactory
 import com.pos.offline.util.UsbPrinterHelper
-
 class PosApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         ServiceLocator.initialize(this)
         installRestoreCrashGuard()
     }
-
-    /**
-     * Jaring pengaman untuk window kritis restore database (lihat RestoreGuard).
-     * Overlay di AppRoot mencegah user MEMICU aksi baru selama restore, tapi
-     * tidak bisa menghentikan Flow latar belakang yang SUDAH aktif (mis.
-     * `openShift` yang dikoleksi permanen di AppRoot tanpa syarat tab aktif).
-     * Kalau salah satu Flow tsb menembak query tepat setelah
-     * PosDatabase.closeActiveInstance() dipanggil, hasilnya crash yang tidak
-     * tertangkap di viewModelScope manapun.
-     *
-     * Karena hasil akhir yang kita inginkan pada window ini SUDAH PASTI
-     * restart proses penuh (sukses maupun gagal), crash semacam ini TIDAK
-     * membahayakan integritas data (file sudah aman di-swap/rollback oleh
-     * BackupManager sebelum titik ini) — hanya mengganggu UX (dialog crash
-     * sistem). Handler ini mencegat & mengubahnya jadi restart terkendali.
-     */
     private fun installRestoreCrashGuard() {
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
@@ -70,12 +52,9 @@ class PosApplication : Application() {
         }
     }
 }
-
 object ServiceLocator {
     private lateinit var appContext: Context
-
     private val db: PosDatabase by lazy { PosDatabase.getInstance(appContext) }
-
     private val productRepository: ProductRepository by lazy {
         ProductRepository(db.productDao())
     }
@@ -118,15 +97,10 @@ object ServiceLocator {
     private val printCoordinator: PrintCoordinator by lazy {
         PrintCoordinator(appContext, printerRepository, storeProfileRepository, printerConnectionFactory)
     }
-
     fun initialize(context: Context) {
         appContext = context.applicationContext
-        // WAJIB sinkron & terjadi SEBELUM `db` (lazy, di bawah) diakses pertama
-        // kali oleh factory ViewModel manapun. Lihat dokumentasi
-        // BackupManager.recoverFromInterruptedRestore().
         BackupManager.recoverFromInterruptedRestore(appContext)
     }
-
     fun posViewModelFactory(): ViewModelProvider.Factory =
         PosViewModelFactory(
             productRepository,
@@ -139,36 +113,22 @@ object ServiceLocator {
             printerRepository,
             printerConnectionFactory,
         )
-
     fun inventoryViewModelFactory(): ViewModelProvider.Factory = InventoryViewModelFactory(appContext, productRepository, reportRepository)
-
     fun reportViewModelFactory(): ViewModelProvider.Factory =
         ReportViewModelFactory(transactionRepository, shiftRepository, returnRepository, printCoordinator, printerRepository, reportRepository, storeProfileRepository)
-
     fun settingsViewModelFactory(): ViewModelProvider.Factory = SettingsViewModelFactory(appContext, cashierRepository, shiftRepository)
-
     fun printerViewModelFactory(): ViewModelProvider.Factory =
         PrinterViewModelFactory(printerRepository, bluetoothPrinterHelper, usbPrinterHelper, printerConnectionFactory)
-
     fun storeProfileViewModelFactory(): ViewModelProvider.Factory = StoreProfileViewModelFactory(storeProfileRepository, logoImageProcessor)
-
     fun transactionRepository(): TransactionRepository = transactionRepository
-
     fun productRepository(): ProductRepository = productRepository
-
     fun cashierRepository(): CashierRepository = cashierRepository
-
     fun shiftRepository(): ShiftRepository = shiftRepository
-
     fun returnRepository(): ReturnRepository = returnRepository
-
     fun printerRepository(): PrinterRepository = printerRepository
-
     fun storeProfileRepository(): StoreProfileRepository = storeProfileRepository
-
     fun printCoordinator(): PrintCoordinator = printCoordinator
 }
-
 class PosViewModelFactory(
     private val productRepository: ProductRepository,
     private val cartRepository: CartRepository,
@@ -194,7 +154,6 @@ class PosViewModelFactory(
             printerConnectionFactory,
         ) as T
 }
-
 class InventoryViewModelFactory(
     private val appContext: Context,
     private val productRepository: ProductRepository,
@@ -203,7 +162,6 @@ class InventoryViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T = InventoryViewModel(appContext, productRepository, reportRepository) as T
 }
-
 class ReportViewModelFactory(
     private val transactionRepository: TransactionRepository,
     private val shiftRepository: ShiftRepository,
@@ -217,7 +175,6 @@ class ReportViewModelFactory(
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
         ReportViewModel(transactionRepository, shiftRepository, returnRepository, printCoordinator, printerRepository, reportRepository, storeProfileRepository) as T
 }
-
 class SettingsViewModelFactory(
     private val appContext: Context,
     private val cashierRepository: CashierRepository,
@@ -226,7 +183,6 @@ class SettingsViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T = SettingsViewModel(appContext, cashierRepository, shiftRepository) as T
 }
-
 class PrinterViewModelFactory(
     private val printerRepository: PrinterRepository,
     private val bluetoothPrinterHelper: BluetoothPrinterHelper,
@@ -237,7 +193,6 @@ class PrinterViewModelFactory(
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
         PrinterViewModel(printerRepository, bluetoothPrinterHelper, usbPrinterHelper, printerConnectionFactory) as T
 }
-
 class StoreProfileViewModelFactory(
     private val storeProfileRepository: StoreProfileRepository,
     private val logoImageProcessor: LogoImageProcessor,

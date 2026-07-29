@@ -1,5 +1,4 @@
 package com.pos.offline.util
-
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -11,7 +10,6 @@ import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
-
 class LogoImageProcessor(
     private val appContext: Context,
 ) {
@@ -30,30 +28,24 @@ class LogoImageProcessor(
                 val output = ByteArrayOutputStream()
                 grayscale.compress(Bitmap.CompressFormat.PNG, 100, output)
                 grayscale.recycle()
-
                 output.toByteArray()
             } catch (e: Exception) {
                 null
             }
         }
-
     private fun decodeBitmapSafely(uri: Uri): Bitmap? {
         val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-
         val boundsStream = appContext.contentResolver.openInputStream(uri) ?: return null
         boundsStream.use { stream ->
             BitmapFactory.decodeStream(stream, null, boundsOptions)
-        } // Tidak perlu ?: return null di sini, karena decodeStream memang pasti null
-
+        } 
         val sampleSize = calculateInSampleSize(boundsOptions, MAX_DIMENSION * 2, MAX_DIMENSION * 2)
         val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
-
         val decodeStream = appContext.contentResolver.openInputStream(uri) ?: return null
         return decodeStream.use { stream ->
             BitmapFactory.decodeStream(stream, null, decodeOptions)
         }
     }
-
     private fun calculateInSampleSize(
         options: BitmapFactory.Options,
         reqWidth: Int,
@@ -71,7 +63,6 @@ class LogoImageProcessor(
         }
         return inSampleSize
     }
-
     private fun resizeToFit(
         bitmap: Bitmap,
         maxDimension: Int,
@@ -84,7 +75,6 @@ class LogoImageProcessor(
         val newHeight = (height * ratio).toInt().coerceAtLeast(1)
         return Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
     }
-
     private fun toGrayscale(bitmap: Bitmap): Bitmap {
         val grayscaleBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(grayscaleBitmap)
@@ -95,7 +85,6 @@ class LogoImageProcessor(
         canvas.drawBitmap(bitmap, 0f, 0f, paint)
         return grayscaleBitmap
     }
-
     companion object {
         private const val MAX_DIMENSION = 300
     }

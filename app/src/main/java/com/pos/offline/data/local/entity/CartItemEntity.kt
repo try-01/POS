@@ -1,10 +1,8 @@
 package com.pos.offline.data.local.entity
-
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
-
 @Entity(
     tableName = "cart_items",
     foreignKeys = [
@@ -12,17 +10,17 @@ import androidx.room.PrimaryKey
             entity = ProductEntity::class,
             parentColumns = ["id"],
             childColumns = ["productId"],
-            onDelete = ForeignKey.CASCADE, // produk dihapus → item keranjang ikut terhapus
+            onDelete = ForeignKey.CASCADE, 
         ),
     ],
-    indices = [Index(value = ["productId"], unique = true)], // 1 produk = 1 baris di keranjang
+    indices = [Index(value = ["productId"], unique = true)], 
 )
 data class CartItemEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val productId: Long,
-    val name: String, // snapshot nama produk
-    val unitPrice: Long, // snapshot harga saat ditambahkan (Rupiah)
+    val name: String, 
+    val unitPrice: Long, 
     val quantity: Double = 1.0,
 ) {
     val lineTotal: Long get() = kotlin.math.round(unitPrice * quantity).toLong()

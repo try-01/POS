@@ -1,5 +1,4 @@
 package com.pos.offline.ui.settings
-
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
@@ -23,7 +22,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-
 data class SettingsUiState(
     val isExporting: Boolean = false,
     val isImporting: Boolean = false,
@@ -34,7 +32,6 @@ data class SettingsUiState(
 ) {
     val isBusy: Boolean get() = isExporting || isImporting || isSharing
 }
-
 class SettingsViewModel(
     private val appContext: Context,
     private val cashierRepository: CashierRepository,
@@ -42,69 +39,51 @@ class SettingsViewModel(
     private val scanPreferencesRepository: ScanPreferencesRepository = ScanPreferencesRepository(appContext),
 ) : ViewModel() {
     private val feedbackManager = ScanFeedbackManager(appContext)
-
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
-
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
-
     private val _shareIntent = MutableSharedFlow<android.content.Intent>(extraBufferCapacity = 1)
     val shareIntent: SharedFlow<android.content.Intent> = _shareIntent.asSharedFlow()
-
     val cashiers: StateFlow<List<CashierEntity>> =
         cashierRepository.allCashiers
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    // Preferensi Suara
     val isSoundEnabled: StateFlow<Boolean> = scanPreferencesRepository.isSoundEnabled
     val soundVolume: StateFlow<Int> = scanPreferencesRepository.soundVolume
     val soundDurationMs: StateFlow<Int> = scanPreferencesRepository.soundDurationMs
-
-    // Preferensi Getaran
     val isVibrationEnabled: StateFlow<Boolean> = scanPreferencesRepository.isVibrationEnabled
     val vibrationIntensity: StateFlow<Int> = scanPreferencesRepository.vibrationIntensity
     val vibrationDurationMs: StateFlow<Int> = scanPreferencesRepository.vibrationDurationMs
-
     fun setSoundEnabled(enabled: Boolean) {
         scanPreferencesRepository.setSoundEnabled(enabled)
         if (enabled) testSoundPreview()
     }
-
     fun setSoundVolume(volume: Int) {
         scanPreferencesRepository.setSoundVolume(volume)
     }
-
     fun setSoundDurationMs(duration: Int) {
         scanPreferencesRepository.setSoundDurationMs(duration)
     }
-
     fun testSoundPreview() {
         feedbackManager.playBeep(soundVolume.value, soundDurationMs.value)
     }
-
     fun setVibrationEnabled(enabled: Boolean) {
         scanPreferencesRepository.setVibrationEnabled(enabled)
         if (enabled) testVibrationPreview()
     }
-
     fun setVibrationIntensity(intensity: Int) {
         scanPreferencesRepository.setVibrationIntensity(intensity)
     }
-
     fun setVibrationDurationMs(duration: Int) {
         scanPreferencesRepository.setVibrationDurationMs(duration)
     }
-
     fun testVibrationPreview() {
         feedbackManager.playVibration(vibrationIntensity.value, vibrationDurationMs.value)
     }
-
     override fun onCleared() {
         super.onCleared()
         feedbackManager.release()
     }
-
     fun exportDatabase(destinationUri: Uri) {
         if (_uiState.value.isBusy) return
         viewModelScope.launch {
@@ -119,7 +98,6 @@ class SettingsViewModel(
             }
         }
     }
-
     fun shareDatabase() {
         if (_uiState.value.isBusy) return
         viewModelScope.launch {
@@ -129,7 +107,6 @@ class SettingsViewModel(
                     is ShareOutcome.Success -> {
                         _shareIntent.emit(BackupManager.buildShareIntent(appContext, result.file))
                     }
-
                     is ShareOutcome.Error -> {
                         _messages.emit("Gagal menyiapkan cadangan untuk dibagikan: ${result.throwable.message}")
                     }
@@ -139,15 +116,12 @@ class SettingsViewModel(
             }
         }
     }
-
     fun requestRestore(uri: Uri) {
         _uiState.value = _uiState.value.copy(pendingRestoreUri = uri)
     }
-
     fun cancelRestore() {
         _uiState.value = _uiState.value.copy(pendingRestoreUri = null)
     }
-
     fun confirmRestore(onRestartRequired: () -> Unit) {
         val uri = _uiState.value.pendingRestoreUri ?: return
         viewModelScope.launch {
@@ -158,13 +132,11 @@ class SettingsViewModel(
                     is RestoreOutcome.Success -> {
                         onRestartRequired()
                     }
-
                     is RestoreOutcome.InvalidFile -> {
                         RestoreGuard.end()
                         _messages.emit("File tidak valid: ${result.reason}")
                         _uiState.value = _uiState.value.copy(isImporting = false)
                     }
-
                     is RestoreOutcome.Error -> {
                         _messages.emit("Gagal memulihkan: ${result.throwable.message}")
                         if (result.requiresRestart) {
@@ -181,15 +153,12 @@ class SettingsViewModel(
             }
         }
     }
-
     fun openAddCashierDialog() {
         _uiState.value = _uiState.value.copy(showAddCashierDialog = true)
     }
-
     fun closeAddCashierDialog() {
         _uiState.value = _uiState.value.copy(showAddCashierDialog = false)
     }
-
     fun addCashier(name: String) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) {
@@ -197,7 +166,6 @@ class SettingsViewModel(
             return
         }
         if (_uiState.value.isAddingCashier) return
-
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isAddingCashier = true)
             try {
@@ -211,7 +179,6 @@ class SettingsViewModel(
             }
         }
     }
-
     fun setCashierActive(
         id: Long,
         active: Boolean,

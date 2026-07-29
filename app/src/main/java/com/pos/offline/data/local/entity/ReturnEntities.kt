@@ -1,15 +1,13 @@
 package com.pos.offline.data.local.entity
-
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
-
 @Entity(
     tableName = "returns",
     indices = [
-        Index(value = ["transactionId"], unique = true), // 1 transaksi = maks 1 retur (final)
-        Index(value = ["returnedAt"]), // dasar filter "Retur Hari Ini"
-        Index(value = ["shiftId"]), // dasar hitung cashRefunds per shift
+        Index(value = ["transactionId"], unique = true), 
+        Index(value = ["returnedAt"]), 
+        Index(value = ["shiftId"]), 
     ],
 )
 data class ReturnEntity(
@@ -24,7 +22,6 @@ data class ReturnEntity(
     val refundMethod: String,
     val note: String = "",
 )
-
 @Entity(
     tableName = "return_items",
     indices = [Index(value = ["returnId"])],

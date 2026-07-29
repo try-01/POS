@@ -10,38 +10,53 @@ data class SalesSummary(
     val subtotalSum: Long,
     val taxSum: Long,
     val totalSum: Long,
-    // Uang RIIL yang diterima (paidAmount - kembalian yg benar2 diberikan),
-    // BUKAN nilai nominal transaksi (totalSum). Menangani kasus nego harga
-    // di lapangan (paid < total). Field ditaruh di AKHIR agar tidak merusak
-    // positional destructuring lama jika ada.
     val actualReceivedSum: Long,
 )
+
 data class ProfitAndItemsSummary(val itemsSoldSum: Double, val revenueSum: Long, val costSum: Long)
+
 data class PaymentMethodSummary(
     val paymentMethod: String,
-    val total: Long, // nominal transaksi (on-paper) — dipertahankan utk breakdown
+    val total: Long, 
     val count: Int,
-    val actualReceived: Long, // uang riil diterima per metode pembayaran
+    val actualReceived: Long, 
 )
-data class ProductSalesRow(val productId: Long, val productName: String, val sku: String, val price: Long, val stock: Double, val qtySold: Double, val revenue: Long)
+
+data class ProductSalesRow(
+    val productId: Long,
+    val productName: String,
+    val sku: String,
+    val price: Long,
+    val stock: Double,
+    val qtySold: Double,
+    val revenue: Long
+)
 
 @Dao
 interface ReportDao {
-    // NOTE: MAX(change, 0) di sini adalah fungsi SCALAR (2 argumen), dievaluasi
-    // per-baris SEBELUM di-SUM — bukan fungsi aggregate. Pola sama dengan
-    // ShiftDao.cashRevenueForShift/qrisRevenueForShift.
+    // PERBAIKAN: Perhitungan actualReceivedSum menggunakan CASE
+    // CASH = paidAmount - changeGiven (penerimaan kas bersih)
+    // QRIS/Lainnya = total (penerimaan sesuai total belanja)
     @Query("""
-        SELECT COUNT(*) as transactionCount, COALESCE(SUM(subtotal),0) as subtotalSum,
-               COALESCE(SUM(tax),0) as taxSum, COALESCE(SUM(total),0) as totalSum,
-               COALESCE(SUM(paidAmount - MAX(change,0)),0) as actualReceivedSum
+        SELECT COUNT(*) as transactionCount, 
+               COALESCE(SUM(subtotal), 0) as subtotalSum,
+               COALESCE(SUM(tax), 0) as taxSum, 
+               COALESCE(SUM(total), 0) as totalSum,
+               COALESCE(SUM(
+                   CASE 
+                       WHEN paymentMethod = 'CASH' THEN paidAmount - changeGiven
+                       ELSE total
+                   END
+               ), 0) as actualReceivedSum
         FROM transactions WHERE createdAt BETWEEN :start AND :end AND status = 'COMPLETED'
     """)
     suspend fun getSalesSummary(start: Long, end: Long): SalesSummary
 
+    // PERBAIKAN Temuan 9: revenueSum menggunakan lineTotal yang sudah memperhitungkan diskon
     @Query("""
-        SELECT COALESCE(SUM(ti.quantity),0) as itemsSoldSum,
-               COALESCE(SUM(ti.quantity * ti.unitPrice),0) as revenueSum,
-               COALESCE(SUM(ti.quantity * ti.unitCost),0) as costSum
+        SELECT COALESCE(SUM(ti.quantity), 0) as itemsSoldSum,
+               COALESCE(SUM(ti.lineTotal), 0) as revenueSum,
+               COALESCE(SUM(ti.quantity * ti.unitCost), 0) as costSum
         FROM transaction_items ti INNER JOIN transactions t ON t.id = ti.transactionId
         WHERE t.createdAt BETWEEN :start AND :end AND t.status = 'COMPLETED'
     """)
@@ -56,15 +71,23 @@ interface ReportDao {
     """)
     suspend fun getRestockedReturnsCost(start: Long, end: Long): Long
 
+    // PERBAIKAN: Perhitungan actualReceived per metode pembayaran
     @Query("""
-        SELECT paymentMethod, COALESCE(SUM(total),0) as total, COUNT(*) as count,
-               COALESCE(SUM(paidAmount - MAX(change,0)),0) as actualReceived
+        SELECT paymentMethod, 
+               COALESCE(SUM(total), 0) as total, 
+               COUNT(*) as count,
+               COALESCE(SUM(
+                   CASE 
+                       WHEN paymentMethod = 'CASH' THEN paidAmount - changeGiven
+                       ELSE total
+                   END
+               ), 0) as actualReceived
         FROM transactions WHERE createdAt BETWEEN :start AND :end AND status = 'COMPLETED'
         GROUP BY paymentMethod
     """)
     suspend fun getPaymentMethodSummary(start: Long, end: Long): List<PaymentMethodSummary>
 
-    @Query("SELECT COALESCE(SUM(refundAmount),0) FROM returns WHERE returnedAt BETWEEN :start AND :end")
+    @Query("SELECT COALESCE(SUM(refundAmount), 0) FROM returns WHERE returnedAt BETWEEN :start AND :end")
     suspend fun getReturnsTotal(start: Long, end: Long): Long
 
     @Query("""
@@ -95,4 +118,40 @@ interface ReportDao {
         ORDER BY COALESCE(SUM(ti.quantity), 0) DESC, p.name ASC
     """)
     fun observeProductsByTopSales(start: Long, end: Long): Flow<List<ProductEntity>>
+
+    // Tambahkan query ini di ReportDao.kt
+@Query("""
+    SELECT DISTINCT t.* 
+    FROM transactions t
+    INNER JOIN transaction_items ti ON t.id = ti.transactionId
+    WHERE (ti.productName LIKE '%' || :query || '%' 
+       OR ti.productId = :productId 
+       OR t.id LIKE '%' || :query || '%')
+      AND t.status = 'COMPLETED'
+    ORDER BY t.createdAt DESC
+    LIMIT 50
+""")
+suspend fun searchTransactionsByProduct(query: String, productId: Long? = null): List<TransactionEntity>
+
+// Tambahkan di ReportDao.kt
+@Query("""
+    SELECT DISTINCT t.*
+    FROM transactions t
+    INNER JOIN transaction_items ti ON t.id = ti.transactionId
+    LEFT JOIN products p ON ti.productId = p.id
+    WHERE t.createdAt >= :oneYearAgoMillis
+      AND t.status = 'COMPLETED'
+      AND (
+          ti.productName LIKE '%' || :query || '%'
+          OR p.name LIKE '%' || :query || '%'
+          OR p.sku LIKE '%' || :query || '%'
+          OR p.category LIKE '%' || :query || '%'
+          OR p.barcode = :query
+      )
+    ORDER BY t.createdAt DESC
+""")
+suspend fun searchProductSalesHistory1Year(
+    query: String,
+    oneYearAgoMillis: Long
+): List<TransactionEntity>
 }

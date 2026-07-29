@@ -1,12 +1,5 @@
 package com.pos.offline.util
-
 import java.util.Calendar
-
-/**
- * Menghasilkan rentang waktu absolut [startOfDay, endOfDay) untuk kueri database.
- * @param timestamp Waktu referensi (misal: waktu saat ini, atau tanggal yang dipilih di UI)
- * @return Pair(StartOfDayMillis, EndOfNextDayMillis)
- */
 fun getAbsoluteDayRange(timestamp: Long): Pair<Long, Long> {
     val calendar = Calendar.getInstance().apply {
         timeInMillis = timestamp
@@ -16,9 +9,7 @@ fun getAbsoluteDayRange(timestamp: Long): Pair<Long, Long> {
         set(Calendar.MILLISECOND, 0)
     }
     val startOfDay = calendar.timeInMillis
-    
     calendar.add(Calendar.DAY_OF_MONTH, 1)
     val endOfDay = calendar.timeInMillis
-    
     return Pair(startOfDay, endOfDay)
 }

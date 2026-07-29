@@ -1,5 +1,4 @@
 package com.pos.offline.ui.settings
-
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -59,7 +58,6 @@ import com.pos.offline.data.local.entity.PaperWidth
 import com.pos.offline.data.local.entity.PrinterConnectionType
 import com.pos.offline.data.local.entity.PrinterEntity
 import com.pos.offline.ui.components.GlassCard
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrinterManagementDialog(
@@ -68,7 +66,6 @@ fun PrinterManagementDialog(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val printers by viewModel.printers.collectAsState()
-
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -92,7 +89,6 @@ fun PrinterManagementDialog(
                         Icon(Icons.Rounded.Close, contentDescription = "Tutup")
                     }
                 }
-
                 Column(
                     modifier =
                         Modifier
@@ -111,9 +107,6 @@ fun PrinterManagementDialog(
                         )
                     } else {
                         printers.forEachIndexed { index, printer ->
-                            // Gabungkan flag testing & reordering: nonaktifkan seluruh
-                            // aksi baris saat salah satu operasi async sedang berjalan,
-                            // mencegah tap ganda memicu reorder/print bertumpuk.
                             val isTesting = uiState.testingPrinterIds.contains(printer.id) || uiState.isReordering
                             PrinterRow(
                                 printer = printer,
@@ -129,7 +122,6 @@ fun PrinterManagementDialog(
                             )
                         }
                     }
-
                     OutlinedButton(
                         onClick = { viewModel.openAddDialog() },
                         modifier = Modifier.fillMaxWidth(),
@@ -138,17 +130,14 @@ fun PrinterManagementDialog(
                         Spacer(Modifier.width(8.dp))
                         Text("Tambah Printer", fontSize = 13.sp)
                     }
-
                     Spacer(Modifier.height(12.dp))
                 }
             }
         }
     }
-
     if (uiState.showFormDialog) {
         PrinterFormDialog(viewModel = viewModel)
     }
-
     if (uiState.pendingDeleteId != null) {
         val target = printers.find { it.id == uiState.pendingDeleteId }
         DeletePrinterConfirmDialog(
@@ -158,7 +147,6 @@ fun PrinterManagementDialog(
         )
     }
 }
-
 @Composable
 private fun PrinterRow(
     printer: PrinterEntity,
@@ -213,13 +201,11 @@ private fun PrinterRow(
                     }
                 }
             }
-
             Text(
                 text = printerSubtitle(printer),
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (!printer.isDefault) {
                     TextButton(onClick = onSetDefault, enabled = !isTesting) {
@@ -254,7 +240,6 @@ private fun PrinterRow(
         }
     }
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PrinterFormDialog(viewModel: PrinterViewModel) {
@@ -263,9 +248,6 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
     val isEdit = form.id != null
     var showBluetoothPicker by remember { mutableStateOf(false) }
     var showUsbPicker by remember { mutableStateOf(false) }
-
-    // Sembunyikan form sementara saat picker BT/USB terbuka (mutually exclusive),
-    // konsisten dengan solusi nested-dialog di layar Laporan.
     if (showBluetoothPicker || showUsbPicker) {
         if (showBluetoothPicker) {
             BluetoothPickerDialog(viewModel = viewModel, onDismiss = { showBluetoothPicker = false })
@@ -275,7 +257,6 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
         }
         return
     }
-
     AlertDialog(
         onDismissRequest = { if (!uiState.isSaving) viewModel.closeFormDialog() },
         title = {
@@ -293,7 +274,6 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-
                 Text("Jenis Koneksi", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
@@ -312,7 +292,6 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
                         label = { Text("USB", fontSize = 11.sp) },
                     )
                 }
-
                 if (form.connectionType == PrinterConnectionType.WIFI) {
                     OutlinedTextField(
                         value = form.wifiIpAddress,
@@ -331,7 +310,6 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-
                 if (form.connectionType == PrinterConnectionType.BLUETOOTH) {
                     OutlinedButton(
                         onClick = { showBluetoothPicker = true },
@@ -349,7 +327,6 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
                         )
                     }
                 }
-
                 if (form.connectionType == PrinterConnectionType.USB) {
                     OutlinedButton(
                         onClick = { showUsbPicker = true },
@@ -369,7 +346,6 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
                         )
                     }
                 }
-
                 Text("Lebar Kertas", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
@@ -383,7 +359,6 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
                         label = { Text("80mm", fontSize = 11.sp) },
                     )
                 }
-
                 OutlinedTextField(
                     value = form.charPerLine,
                     onValueChange = viewModel::updateFormCharPerLine,
@@ -399,7 +374,6 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                 )
-
                 Text("Deteksi Status Kertas", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -451,7 +425,6 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
         },
     )
 }
-
 @Composable
 private fun DeletePrinterConfirmDialog(
     printerLabel: String,
@@ -483,17 +456,14 @@ private fun DeletePrinterConfirmDialog(
         },
     )
 }
-
 private fun printerSubtitle(printer: PrinterEntity): String =
     when (printer.connectionType) {
         PrinterConnectionType.WIFI -> {
             "${printer.wifiIpAddress}:${printer.wifiPort} • ${printer.charPerLine} kar/baris (${printer.paperWidth.label()})"
         }
-
         PrinterConnectionType.BLUETOOTH -> {
             "${printer.bluetoothMacAddress ?: "-"} • ${printer.charPerLine} kar/baris"
         }
-
         PrinterConnectionType.USB -> {
             val vid = printer.usbVendorId
             val pid = printer.usbProductId
@@ -501,13 +471,11 @@ private fun printerSubtitle(printer: PrinterEntity): String =
             "USB $idLabel • ${printer.charPerLine} kar/baris"
         }
     }
-
 private fun PaperWidth.label(): String =
     when (this) {
         PaperWidth.MM_58 -> "58mm"
         PaperWidth.MM_80 -> "80mm"
     }
-
 private fun PrinterConnectionType.icon() =
     when (this) {
         PrinterConnectionType.WIFI -> Icons.Rounded.Wifi

@@ -1,5 +1,4 @@
 package com.pos.offline.ui.settings
-
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -78,7 +77,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.backup.BackupManager
 import com.pos.offline.data.local.entity.CashierEntity
 import com.pos.offline.ui.components.GlassCard
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -88,51 +86,41 @@ fun SettingsScreen(
     onExitClick: () -> Unit,
 ) {
     val context = LocalContext.current
-
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val cashiers by viewModel.cashiers.collectAsStateWithLifecycle()
     val printers by printerViewModel.printers.collectAsStateWithLifecycle()
     val storeProfile by storeProfileViewModel.profile.collectAsStateWithLifecycle()
-
     val isSoundEnabled by viewModel.isSoundEnabled.collectAsStateWithLifecycle()
     val soundVolume by viewModel.soundVolume.collectAsStateWithLifecycle()
     val soundDurationMs by viewModel.soundDurationMs.collectAsStateWithLifecycle()
-
     val isVibrationEnabled by viewModel.isVibrationEnabled.collectAsStateWithLifecycle()
     val vibrationIntensity by viewModel.vibrationIntensity.collectAsStateWithLifecycle()
     val vibrationDurationMs by viewModel.vibrationDurationMs.collectAsStateWithLifecycle()
-
     var showPrinterDialog by remember { mutableStateOf(false) }
     var showStoreProfileDialog by remember { mutableStateOf(false) }
-
     val exportLauncher =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.CreateDocument("application/octet-stream"),
         ) { uri -> if (uri != null) viewModel.exportDatabase(uri) }
-
     val importLauncher =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.OpenDocument(),
         ) { uri -> if (uri != null) viewModel.requestRestore(uri) }
-
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg ->
             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
         }
     }
-
     LaunchedEffect(Unit) {
         printerViewModel.messages.collect { msg ->
             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
         }
     }
-
     LaunchedEffect(Unit) {
         storeProfileViewModel.messages.collect { msg ->
             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
         }
     }
-
     LaunchedEffect(Unit) {
         viewModel.shareIntent.collect { intent ->
             try {
@@ -142,7 +130,6 @@ fun SettingsScreen(
             }
         }
     }
-
     if (uiState.pendingRestoreUri != null) {
         RestoreConfirmDialog(
             onDismiss = { viewModel.cancelRestore() },
@@ -153,28 +140,24 @@ fun SettingsScreen(
             },
         )
     }
-
     if (uiState.showAddCashierDialog) {
         AddCashierDialog(
             onDismiss = { viewModel.closeAddCashierDialog() },
             onConfirm = { name -> viewModel.addCashier(name) },
         )
     }
-
     if (showPrinterDialog) {
         PrinterManagementDialog(
             viewModel = printerViewModel,
             onDismiss = { showPrinterDialog = false },
         )
     }
-
     if (showStoreProfileDialog) {
         StoreProfileDialog(
             viewModel = storeProfileViewModel,
             onDismiss = { showStoreProfileDialog = false },
         )
     }
-
     Scaffold(
         topBar = {
             Column(
@@ -220,9 +203,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Spacer(Modifier.height(4.dp))
-
             SectionLabel("Umpan Balik Pemindai (Scanner Feedback)")
-
             FuturisticFeedbackControls(
                 isSoundEnabled = isSoundEnabled,
                 soundVolume = soundVolume,
@@ -239,9 +220,7 @@ fun SettingsScreen(
                 onVibrationDurationChange = { viewModel.setVibrationDurationMs(it) },
                 onTestVibration = { viewModel.testVibrationPreview() },
             )
-
             SectionLabel("Cadangkan & Pulihkan")
-
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(14.dp),
@@ -285,7 +264,6 @@ fun SettingsScreen(
                                 Text("Simpan", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
-
                         OutlinedButton(
                             onClick = { viewModel.shareDatabase() },
                             enabled = !uiState.isBusy,
@@ -300,7 +278,6 @@ fun SettingsScreen(
                             }
                         }
                     }
-
                     OutlinedButton(
                         onClick = { importLauncher.launch(arrayOf("*/*")) },
                         enabled = !uiState.isBusy,
@@ -318,9 +295,7 @@ fun SettingsScreen(
                     }
                 }
             }
-
             SectionLabel("Kelola Kasir")
-
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(14.dp),
@@ -343,7 +318,6 @@ fun SettingsScreen(
                             )
                         }
                     }
-
                     OutlinedButton(
                         onClick = { viewModel.openAddCashierDialog() },
                         modifier = Modifier.fillMaxWidth(),
@@ -354,9 +328,7 @@ fun SettingsScreen(
                     }
                 }
             }
-
             SectionLabel("Profil Toko & Struk")
-
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(14.dp),
@@ -393,7 +365,6 @@ fun SettingsScreen(
                             }
                         }
                     }
-
                     OutlinedButton(
                         onClick = { showStoreProfileDialog = true },
                         modifier = Modifier.fillMaxWidth(),
@@ -404,9 +375,7 @@ fun SettingsScreen(
                     }
                 }
             }
-
             SectionLabel("Printer Struk")
-
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(14.dp),
@@ -432,7 +401,6 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-
                     OutlinedButton(
                         onClick = { showPrinterDialog = true },
                         modifier = Modifier.fillMaxWidth(),
@@ -443,9 +411,7 @@ fun SettingsScreen(
                     }
                 }
             }
-
             SectionLabel("Sesi Aplikasi")
-
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(14.dp),
@@ -478,7 +444,6 @@ fun SettingsScreen(
         }
     }
 }
-
 @Composable
 private fun FuturisticFeedbackControls(
     isSoundEnabled: Boolean,
@@ -515,8 +480,6 @@ private fun FuturisticFeedbackControls(
                     fontWeight = FontWeight.Bold
                 )
             }
-
-            // KONTROL SUARA
             FeedbackSectionCard(
                 icon = Icons.AutoMirrored.Rounded.VolumeUp,
                 title = "Suara Beep",
@@ -525,7 +488,6 @@ private fun FuturisticFeedbackControls(
                 onToggle = onSoundToggle,
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Slider Volume Suara
                     Text(
                         text = "Volume Suara: $soundVolume%",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
@@ -538,8 +500,6 @@ private fun FuturisticFeedbackControls(
                         valueRange = 0f..100f,
                         colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
                     )
-
-                    // Slider Durasi Suara
                     Text(
                         text = "Durasi Beep: $soundDurationMs ms (Aman 50-300 ms)",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
@@ -554,8 +514,6 @@ private fun FuturisticFeedbackControls(
                     )
                 }
             }
-
-// KONTROL GETARAN
 FeedbackSectionCard(
     icon = Icons.Rounded.Vibration,
     title = "Getaran Haptic",
@@ -571,14 +529,11 @@ FeedbackSectionCard(
     onToggle = onVibrationToggle,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        
-        // PILIHAN PRESET KEKUATAN GETAR (HALUS, SEDANG, KUAT)
         Text(
             text = "Kekuatan Getar",
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
             fontWeight = FontWeight.Medium
         )
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -588,14 +543,12 @@ FeedbackSectionCard(
                 "Sedang" to 65,
                 "Kuat" to 100
             )
-
             presets.forEach { (label, value) ->
                 val isSelected = when (value) {
                     30 -> vibrationIntensity <= 35
                     65 -> vibrationIntensity in 36..70
                     else -> vibrationIntensity > 70
                 }
-
                 if (isSelected) {
                     Button(
                         onClick = {
@@ -621,10 +574,7 @@ FeedbackSectionCard(
                 }
             }
         }
-
         Spacer(Modifier.height(4.dp))
-
-        // Slider Durasi Getar (Tetap dipertahankan untuk mengontrol durasi milidetik)
         Text(
             text = "Durasi Getar: $vibrationDurationMs ms",
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
@@ -642,7 +592,6 @@ FeedbackSectionCard(
         }
     }
 }
-
 @Composable
 private fun FeedbackSectionCard(
     icon: ImageVector,
@@ -657,7 +606,6 @@ private fun FeedbackSectionCard(
         targetValue = if (isEnabled) activeColor else MaterialTheme.colorScheme.onSurfaceVariant,
         label = "accentColor"
     )
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -684,7 +632,6 @@ private fun FeedbackSectionCard(
                 )
             }
             Spacer(Modifier.width(10.dp))
-
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
@@ -697,7 +644,6 @@ private fun FeedbackSectionCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
             Switch(
                 checked = isEnabled,
                 onCheckedChange = onToggle,
@@ -707,14 +653,12 @@ private fun FeedbackSectionCard(
                 )
             )
         }
-
         if (isEnabled) {
             Spacer(Modifier.height(10.dp))
             content()
         }
     }
 }
-
 @Composable
 private fun CashierRow(
     cashier: CashierEntity,
@@ -726,7 +670,6 @@ private fun CashierRow(
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         }
-
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -757,14 +700,12 @@ private fun CashierRow(
         )
     }
 }
-
 @Composable
 private fun AddCashierDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Tambah Kasir", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
@@ -789,7 +730,6 @@ private fun AddCashierDialog(
         },
     )
 }
-
 @Composable
 private fun SectionLabel(text: String) {
     Text(
@@ -800,7 +740,6 @@ private fun SectionLabel(text: String) {
         modifier = Modifier.padding(start = 2.dp),
     )
 }
-
 @Composable
 private fun RestoreConfirmDialog(
     onDismiss: () -> Unit,

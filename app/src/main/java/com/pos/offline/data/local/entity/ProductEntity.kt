@@ -1,17 +1,15 @@
 package com.pos.offline.data.local.entity
-
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
-
 @Entity(
     tableName = "products",
     indices = [
         Index(value = ["sku"], unique = true),
         Index(value = ["name"]),
         Index(value = ["barcode"], unique = true),
-        Index(value = ["category"]), // BARU: mempercepat query DISTINCT kategori & filter
+        Index(value = ["category"]), 
     ],
 )
 data class ProductEntity(

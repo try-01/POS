@@ -1,5 +1,4 @@
 package com.pos.offline.ui.settings
-
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.net.Uri
@@ -48,7 +47,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.pos.offline.util.BluetoothDeviceInfo
 import com.pos.offline.util.PermissionUtils
-
 @Composable
 fun BluetoothPickerDialog(
     viewModel: PrinterViewModel,
@@ -57,12 +55,10 @@ fun BluetoothPickerDialog(
     val state by viewModel.bluetoothUiState.collectAsState()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-
     var permissionState by remember {
         mutableStateOf(PermissionUtils.currentBluetoothPermissionState(context))
     }
     var btEnabled by remember { mutableStateOf(viewModel.isBluetoothEnabled()) }
-
     val permissionLauncher =
         rememberLauncherForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions(),
@@ -73,7 +69,6 @@ fun BluetoothPickerDialog(
                 viewModel.refreshBondedDevices()
             }
         }
-
     val enableBtLauncher =
         rememberLauncherForActivityResult(
             ActivityResultContracts.StartActivityForResult(),
@@ -83,17 +78,14 @@ fun BluetoothPickerDialog(
                 viewModel.refreshBondedDevices()
             }
         }
-
     LaunchedEffect(Unit) {
         if (permissionState == PermissionUtils.BluetoothPermissionState.Granted) {
             viewModel.refreshBondedDevices()
         }
     }
-
     LaunchedEffect(Unit) {
         viewModel.pairingSuccess.collect { onDismiss() }
     }
-
     DisposableEffect(lifecycleOwner) {
         val observer =
             LifecycleEventObserver { _, event ->
@@ -108,11 +100,9 @@ fun BluetoothPickerDialog(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-
     DisposableEffect(Unit) {
         onDispose { viewModel.resetBluetoothPicker() }
     }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Pilih Printer Bluetooth", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
@@ -147,7 +137,6 @@ fun BluetoothPickerDialog(
                             Text("Buka Pengaturan Aplikasi", fontSize = 13.sp)
                         }
                     }
-
                     PermissionUtils.BluetoothPermissionState.CanRequest -> {
                         Text(
                             "Aplikasi memerlukan izin Bluetooth untuk mencari & " +
@@ -162,7 +151,6 @@ fun BluetoothPickerDialog(
                             Text("Izinkan Akses Bluetooth", fontSize = 13.sp)
                         }
                     }
-
                     PermissionUtils.BluetoothPermissionState.Granted -> {
                         if (!btEnabled) {
                             Text(
@@ -192,7 +180,6 @@ fun BluetoothPickerDialog(
                                     }
                                 }
                             }
-
                             Spacer(Modifier.height(4.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -233,7 +220,6 @@ fun BluetoothPickerDialog(
             TextButton(onClick = onDismiss) { Text("Tutup", fontSize = 13.sp) }
         },
     )
-
     state.pairingTarget?.let { target ->
         BluetoothPinDialog(
             device = target,
@@ -243,7 +229,6 @@ fun BluetoothPickerDialog(
         )
     }
 }
-
 @Composable
 private fun DeviceRow(
     device: BluetoothDeviceInfo,
@@ -268,7 +253,6 @@ private fun DeviceRow(
         }
     }
 }
-
 @Composable
 private fun BluetoothPinDialog(
     device: BluetoothDeviceInfo,
@@ -277,7 +261,6 @@ private fun BluetoothPinDialog(
     onConfirm: (String) -> Unit,
 ) {
     var pin by remember { mutableStateOf("") }
-
     AlertDialog(
         onDismissRequest = { if (!isPairing) onDismiss() },
         title = { Text("Masukkan PIN", fontSize = 15.sp, fontWeight = FontWeight.Bold) },

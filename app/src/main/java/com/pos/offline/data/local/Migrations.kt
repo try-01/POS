@@ -1,8 +1,6 @@
 package com.pos.offline.data.local
-
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-
 object Migrations {
     val MIGRATION_1_2 =
         object : Migration(1, 2) {
@@ -223,7 +221,6 @@ object Migrations {
                 )
             }
         }
-        
         val MIGRATION_11_12 =
         object : Migration(11, 12) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -236,16 +233,9 @@ object Migrations {
     val MIGRATION_12_13 =
         object : Migration(12, 13) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // Kembalian yang BENAR-BENAR diserahkan ke pembeli (fisik).
-                // Selisih `change - changeGiven` (saat change > 0) = tip yang
-                // sengaja tidak diambil pembeli.
                 db.execSQL(
                     "ALTER TABLE transactions ADD COLUMN changeGiven INTEGER NOT NULL DEFAULT 0",
                 )
-                // Backfill data lama: sebelum fitur "change negatif/tip" ada,
-                // kolom `change` SELALU >= 0 dan SELALU diberikan penuh sbg
-                // kembalian. Maka changeGiven lama = change lama (identik
-                // dengan perilaku sebelumnya, tidak ada tip pada data historis).
                 db.execSQL(
                     "UPDATE transactions SET changeGiven = CASE WHEN change > 0 THEN change ELSE 0 END",
                 )
@@ -254,22 +244,9 @@ object Migrations {
     val MIGRATION_13_14 =
         object : Migration(13, 14) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // Menandai apakah `changeGiven` pada transaksi ini benar-benar
-                // KELUAR SEBAGAI UANG TUNAI FISIK dari laci. Relevan HANYA untuk
-                // transaksi QRIS dengan changeGiven > 0 — skenario nyata di
-                // lapangan: pembeli bayar lebih via QRIS (mis. tidak bawa cash),
-                // lalu kembaliannya diminta dalam bentuk uang tunai. Untuk CASH,
-                // nilai ini SELALU true (trivial — kembalian tunai pasti tunai),
-                // dipaksa juga di level TransactionRepository sbg defense-in-depth.
                 db.execSQL(
                     "ALTER TABLE transactions ADD COLUMN changeGivenInCash INTEGER NOT NULL DEFAULT 1",
                 )
-                // Backfill data historis: sebelum fitur ini ada, tidak ada cara
-                // mengetahui apakah kembalian QRIS lama diberikan tunai atau
-                // tidak. Default KONSERVATIF = false untuk QRIS historis, agar
-                // TIDAK mengubah retroaktif expectedCashInDrawer pada shift lama
-                // yang sudah ditutup (shift lama sudah punya snapshot
-                // endingCashExpected tersendiri di tabel shifts).
                 db.execSQL(
                     "UPDATE transactions SET changeGivenInCash = 0 WHERE paymentMethod = 'QRIS'",
                 )
@@ -278,7 +255,8 @@ object Migrations {
     val MIGRATION_14_15 =
         object : Migration(14, 15) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // 1. TABEL PRODUCTS (stock: INTEGER -> REAL)
+            db.execSQL("PRAGMA foreign_keys = OFF;")
+            try {
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `products_new` (
@@ -309,8 +287,6 @@ object Migrations {
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_products_barcode` ON `products` (`barcode`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_products_name` ON `products` (`name`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_products_category` ON `products` (`category`)")
-
-                // 2. TABEL CART_ITEMS (quantity: INTEGER -> REAL)
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `cart_items_new` (
@@ -333,8 +309,6 @@ object Migrations {
                 db.execSQL("DROP TABLE `cart_items`")
                 db.execSQL("ALTER TABLE `cart_items_new` RENAME TO `cart_items`")
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_cart_items_productId` ON `cart_items` (`productId`)")
-
-                // 3. TABEL TRANSACTION_ITEMS (quantity: INTEGER -> REAL)
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `transaction_items_new` (
@@ -360,8 +334,6 @@ object Migrations {
                 db.execSQL("ALTER TABLE `transaction_items_new` RENAME TO `transaction_items`")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_transaction_items_transactionId` ON `transaction_items` (`transactionId`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_transaction_items_productId` ON `transaction_items` (`productId`)")
-
-                // 4. TABEL RETURN_ITEMS (quantityReturned: INTEGER -> REAL)
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `return_items_new` (
@@ -386,9 +358,11 @@ object Migrations {
                 db.execSQL("DROP TABLE `return_items`")
                 db.execSQL("ALTER TABLE `return_items_new` RENAME TO `return_items`")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_return_items_returnId` ON `return_items` (`returnId`)")
+            } finally {
+                db.execSQL("PRAGMA foreign_keys = ON;")
+                }
             }
         }
-
     val ALL: Array<Migration> =
         arrayOf(
             MIGRATION_1_2,

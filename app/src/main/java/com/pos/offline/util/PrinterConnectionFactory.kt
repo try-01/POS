@@ -1,5 +1,4 @@
 package com.pos.offline.util
-
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -30,33 +29,31 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-
 class CancellableBluetoothConnection(
     private val device: BluetoothDevice,
 ) : DeviceConnection() {
     @Volatile private var socket: BluetoothSocket? = null
-
     override fun isConnected(): Boolean = socket?.isConnected == true && super.isConnected()
-
-    @SuppressLint("MissingPermission")
-    @Suppress("DEPRECATION")
-    override fun connect(): DeviceConnection {
-        if (isConnected()) return this
-        try {
-            val uuid = resolveServiceUuid()
-            val newSocket = device.createRfcommSocketToServiceRecord(uuid)
-            socket = newSocket
-            BluetoothAdapter.getDefaultAdapter()?.cancelDiscovery()
-            newSocket.connect()
-            outputStream = newSocket.outputStream
-            data = ByteArray(0)
-        } catch (e: Exception) {
-            disconnect()
-            throw EscPosConnectionException("Unable to connect to bluetooth device.")
-        }
-        return this
+@SuppressLint("MissingPermission")
+override fun connect(): DeviceConnection {
+    if (isConnected()) return this
+    try {
+        val uuid = resolveServiceUuid()
+        val newSocket = device.createRfcommSocketToServiceRecord(uuid)
+        socket = newSocket
+        
+        // DIBERSIHKAN: Menggunakan bluetoothHelper.adapter alih-alih BluetoothAdapter.getDefaultAdapter()
+        bluetoothHelper.adapter?.cancelDiscovery()
+        
+        newSocket.connect()
+        outputStream = newSocket.outputStream
+        data = ByteArray(0)
+    } catch (e: Exception) {
+        disconnect()
+        throw EscPosConnectionException("Unable to connect to bluetooth device.")
     }
-
+    return this
+}
     override fun disconnect(): DeviceConnection {
         data = ByteArray(0)
         outputStream?.let { runCatching { it.close() } }
@@ -65,11 +62,9 @@ class CancellableBluetoothConnection(
         socket = null
         return this
     }
-
     fun forceCloseIfStuck() {
         socket?.let { runCatching { it.close() } }
     }
-
     @SuppressLint("MissingPermission")
     private fun resolveServiceUuid(): UUID {
         val uuids = device.uuids
@@ -79,82 +74,64 @@ class CancellableBluetoothConnection(
         }
         return SPP_UUID
     }
-
     companion object {
         private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
     }
 }
-
 sealed class TestPrintResult {
     object Success : TestPrintResult()
-
     data class Failure(
         val message: String,
     ) : TestPrintResult()
 }
-
 sealed class PrintResult {
     data class Success(
         val printer: PrinterEntity,
         val statusQueryFailed: Boolean = false,
         val nearEndWarning: Boolean = false,
     ) : PrintResult()
-
     data class Failure(
         val printer: PrinterEntity,
         val message: String,
         val statusQueryFailed: Boolean = false,
     ) : PrintResult()
 }
-
 sealed class CashDrawerResult {
     object Success : CashDrawerResult()
-
     data class Failure(
         val message: String,
     ) : CashDrawerResult()
 }
-
 sealed class PaperStatusResult {
     object Ok : PaperStatusResult()
     object PaperOut : PaperStatusResult()
     object NoResponse : PaperStatusResult()
     object NearEnd : PaperStatusResult()
 }
-
 private sealed class ConnectionResolution {
     data class Ready(
         val connection: DeviceConnection,
         val targetLabel: String,
     ) : ConnectionResolution()
-
     data class Error(
         val message: String,
     ) : ConnectionResolution()
 }
-
 private sealed class JobOutcome {
     data class Success(
         val statusQueryFailed: Boolean = false,
         val nearEndWarning: Boolean = false,
     ) : JobOutcome()
-
     data class Failure(
         val message: String,
         val statusQueryFailed: Boolean = false,
     ) : JobOutcome()
 }
-
 class PrinterConnectionFactory(
     private val bluetoothHelper: BluetoothPrinterHelper,
     private val usbHelper: UsbPrinterHelper,
 ) {
-    // Mutual exclusion HARDWARE per printer fisik (keyed by printer.id).
-    // Menjamin testPrint / openCashDrawer / printReceipt / printRawLines untuk
-    // printer yang sama tidak pernah berjalan konkuren, apa pun caller-nya
-    // (PrintCoordinator, PrinterViewModel test-print button, dsb).
     private val printerMutexes = ConcurrentHashMap<Long, Mutex>()
-
     private suspend fun <T> withPrinterLock(
         printerId: Long,
         block: suspend () -> T,
@@ -162,7 +139,6 @@ class PrinterConnectionFactory(
         val mutex = printerMutexes.computeIfAbsent(printerId) { Mutex() }
         return mutex.withLock { block() }
     }
-
     suspend fun testPrint(printer: PrinterEntity): TestPrintResult {
         val outcome = executePrintJob(printer, false) { listOf(buildTestPrintMarkup(printer)) }
         return when (outcome) {
@@ -170,7 +146,6 @@ class PrinterConnectionFactory(
             is JobOutcome.Failure -> TestPrintResult.Failure(outcome.message)
         }
     }
-
     suspend fun printReceipt(
         printer: PrinterEntity,
         openCashDrawer: Boolean = false,
@@ -182,11 +157,7 @@ class PrinterConnectionFactory(
             is JobOutcome.Failure -> PrintResult.Failure(printer, outcome.message, outcome.statusQueryFailed)
         }
     }
-
     suspend fun printRawLines(printer: PrinterEntity, lines: List<ReceiptLine>): PrintResult {
-        // Laporan bisa ratusan baris — pecah per chunk biar parser Dantsu
-        // nggak nerima 1 String raksasa, dan biar lewat jeda antar-chunk
-        // yang sudah ada di executePrintJob().
         val chunkedMarkups = lines.chunked(REPORT_LINE_CHUNK_SIZE).map { ReceiptManager.linesToEscPosMarkup(it) }
         val outcome = executePrintJob(printer, false) { chunkedMarkups }
         return when (outcome) {
@@ -194,7 +165,6 @@ class PrinterConnectionFactory(
             is JobOutcome.Failure -> PrintResult.Failure(printer, outcome.message, outcome.statusQueryFailed)
         }
     }
-
     suspend fun openCashDrawer(printer: PrinterEntity): CashDrawerResult =
         withPrinterLock(printer.id) {
             val resolution = resolveConnection(printer)
@@ -203,17 +173,13 @@ class PrinterConnectionFactory(
                     is ConnectionResolution.Error -> return@withPrinterLock CashDrawerResult.Failure(resolution.message)
                     is ConnectionResolution.Ready -> resolution
                 }
-
             val genericErrorMessage = connectionErrorMessage(printer, ready.targetLabel)
-
             repeat(RETRY_ATTEMPTS_TOTAL) { attempt ->
                 if (attempt > 0) delay(RETRY_DELAY_MS)
-
                 val connected = connectWithTimeout(ready.connection)
                 if (!connected) {
                     return@repeat
                 }
-
                 return@withPrinterLock try {
                     withContext(Dispatchers.IO) {
                         val commands = EscPosPrinterCommands(ready.connection)
@@ -229,10 +195,8 @@ class PrinterConnectionFactory(
                     )
                 }
             }
-
             CashDrawerResult.Failure(genericErrorMessage)
         }
-
     private suspend fun executePrintJob(
         printer: PrinterEntity,
         openCashDrawer: Boolean = false,
@@ -245,17 +209,11 @@ class PrinterConnectionFactory(
                     is ConnectionResolution.Error -> return@withPrinterLock JobOutcome.Failure(resolution.message)
                     is ConnectionResolution.Ready -> resolution
                 }
-
             val genericErrorMessage = connectionErrorMessage(printer, ready.targetLabel)
-
-            // Dipindah keluar dari repeat{} agar hasil pre-check attempt-0 tidak hilang
-            // saat koneksi baru berhasil di attempt ke-2/3 (retry).
             var statusQueryFailed = false
             var nearEndWarning = false
-
             repeat(RETRY_ATTEMPTS_TOTAL) { attempt ->
                 if (attempt > 0) delay(RETRY_DELAY_MS)
-
                 if (attempt == 0 && printer.supportsStatusQuery) {
                     when (preCheckPaperStatus(printer)) {
                         PaperStatusResult.PaperOut -> return@withPrinterLock JobOutcome.Failure("Printer melaporkan kertas habis.")
@@ -263,14 +221,12 @@ class PrinterConnectionFactory(
                         PaperStatusResult.NearEnd -> nearEndWarning = true
                         PaperStatusResult.Ok -> {}
                     }
-                    delay(1000)
+                    delay(2500)
                 }
-
                 val connected = connectWithTimeout(ready.connection)
                 if (!connected) {
                     return@repeat
                 }
-
                 return@withPrinterLock try {
                     val escPosPrinter =
                         withContext(Dispatchers.IO) {
@@ -280,10 +236,6 @@ class PrinterConnectionFactory(
                                     commands.openCashBox()
                                     Thread.sleep(250)
                                 } catch (e: Exception) {
-                                    // Fire-and-forget disengaja: gagal buka laci TIDAK BOLEH
-                                    // menggagalkan pencetakan struk. Dicatat via log agar
-                                    // masih bisa didiagnosis dari Logcat saat ada laporan
-                                    // "laci tidak terbuka saat cetak" dari lapangan.
                                     Log.w(TAG, "Gagal membuka laci kasir saat proses cetak untuk printer '${printer.label}'", e)
                                 }
                             }
@@ -294,7 +246,6 @@ class PrinterConnectionFactory(
                                 printer.charPerLine,
                             ).useEscAsteriskCommand(true)
                         }
-
                     val markups = markupBuilder(escPosPrinter)
                     withContext(Dispatchers.IO) {
                         markups.forEachIndexed { index, markup ->
@@ -307,7 +258,6 @@ class PrinterConnectionFactory(
                             }
                         }
                     }
-
                     withContext(Dispatchers.IO) {
                         escPosPrinter.disconnectPrinter()
                     }
@@ -320,10 +270,8 @@ class PrinterConnectionFactory(
                     )
                 }
             }
-
             JobOutcome.Failure(genericErrorMessage)
         }
-
     @SuppressLint("MissingPermission")
     private suspend fun preCheckPaperStatus(printer: PrinterEntity): PaperStatusResult = withContext(Dispatchers.IO) {
         val cmd = byteArrayOf(0x10, 0x04, 0x04)
@@ -351,10 +299,8 @@ class PrinterConnectionFactory(
                     val adapter = bluetoothHelper.adapter ?: return@withContext PaperStatusResult.NoResponse
                     val device = adapter.getRemoteDevice(address)
                     val uuid = device.uuids?.firstOrNull { it.uuid == SPP_UUID }?.uuid ?: SPP_UUID
-
                     val socket = device.createRfcommSocketToServiceRecord(uuid)
                     adapter.cancelDiscovery()
-
                     var isConnected = false
                     supervisorScope {
                         val connectJob = async(Dispatchers.IO) {
@@ -373,17 +319,13 @@ class PrinterConnectionFactory(
                         connectJob.await()
                         watchdog.cancel()
                     }
-
-                    // FIX: leak socket jika connect() gagal cepat (bukan lewat watchdog timeout)
                     if (!isConnected) {
                         runCatching { socket.close() }
                         return@withContext PaperStatusResult.NoResponse
                     }
-
                     try {
                         socket.outputStream.write(cmd)
                         socket.outputStream.flush()
-
                         var status = -1
                         supervisorScope {
                             val readJob = async(Dispatchers.IO) {
@@ -401,7 +343,6 @@ class PrinterConnectionFactory(
                             readJob.await()
                             watchdog.cancel()
                         }
-
                         when {
                             status == -1 -> PaperStatusResult.NoResponse
                             (status and 0x60) != 0 -> PaperStatusResult.PaperOut
@@ -418,14 +359,12 @@ class PrinterConnectionFactory(
             PaperStatusResult.NoResponse
         }
     }
-
     private suspend fun resolveConnection(printer: PrinterEntity): ConnectionResolution =
         when (printer.connectionType) {
             PrinterConnectionType.WIFI -> resolveWifi(printer)
             PrinterConnectionType.BLUETOOTH -> resolveBluetooth(printer)
             PrinterConnectionType.USB -> resolveUsb(printer)
         }
-
     private fun resolveWifi(printer: PrinterEntity): ConnectionResolution {
         val ip = printer.wifiIpAddress
         val port = printer.wifiPort
@@ -437,7 +376,6 @@ class PrinterConnectionFactory(
             "$ip:$port",
         )
     }
-
     @Suppress("DEPRECATION")
     private fun resolveBluetooth(printer: PrinterEntity): ConnectionResolution {
         val address = printer.bluetoothMacAddress
@@ -457,7 +395,6 @@ class PrinterConnectionFactory(
                 "Bluetooth ponsel sedang mati. Nyalakan Bluetooth terlebih dahulu.",
             )
         }
-
         val device =
             try {
                 adapter.getRemoteDevice(address)
@@ -466,7 +403,6 @@ class PrinterConnectionFactory(
             }
         return ConnectionResolution.Ready(CancellableBluetoothConnection(device), printer.label)
     }
-
     private suspend fun resolveUsb(printer: PrinterEntity): ConnectionResolution {
         val vendorId = printer.usbVendorId
         val productId = printer.usbProductId
@@ -479,17 +415,14 @@ class PrinterConnectionFactory(
         val device =
             usbHelper.findDeviceByVendorProduct(vendorId, productId)
                 ?: return ConnectionResolution.Error("Perangkat USB tidak ditemukan. Pastikan kabel tersambung.")
-
         val permissionResult = usbHelper.requestPermission(device)
         if (permissionResult != UsbPermissionResult.Granted) {
             return ConnectionResolution.Error(
                 "Izin akses USB tidak diberikan. Pastikan kabel tersambung dan izinkan akses saat diminta.",
             )
         }
-
         return ConnectionResolution.Ready(UsbConnection(usbManager, device), printer.label)
     }
-
 private suspend fun connectWithTimeout(connection: DeviceConnection): Boolean =
     supervisorScope {
         val connectJob = async(Dispatchers.IO) { connection.connect() }
@@ -497,11 +430,8 @@ private suspend fun connectWithTimeout(connection: DeviceConnection): Boolean =
             launch(Dispatchers.IO) {
                 delay(CONNECT_TIMEOUT_MS)
                 if (connectJob.isActive) {
-                    // Penanganan khusus Bluetooth
                     (connection as? CancellableBluetoothConnection)?.forceCloseIfStuck()
-                    // Penanganan universal (USB/TCP Dantsu library)
                     runCatching { connection.disconnect() }
-                    
                     connectJob.cancel()
                 }
             }
@@ -515,17 +445,10 @@ private suspend fun connectWithTimeout(connection: DeviceConnection): Boolean =
         watchdog.cancel()
         success
     }
-
     private fun preDisconnectDelayMs(lastChunkChars: Int): Long {
-        // KRITIS: byte chunk terakhir (bawa perintah cut) belum tentu selesai
-        // ditransfer OS ke printer saat printFormattedTextAndCut() return —
-        // disconnect terlalu cepat memutus buffer yg masih terisi, terutama
-        // di Bluetooth. Skala dari panjang chunk TERAKHIR saja karena chunk
-        // sebelumnya sudah dapat jeda 1500ms di loop (lih. executePrintJob).
         val scaled = PRE_DISCONNECT_BASE_DELAY_MS + (lastChunkChars / 1000) * PRE_DISCONNECT_MS_PER_1K_CHARS
         return scaled.coerceIn(PRE_DISCONNECT_BASE_DELAY_MS, PRE_DISCONNECT_MAX_DELAY_MS)
     }
-
     private fun connectionErrorMessage(
         printer: PrinterEntity,
         targetLabel: String,
@@ -535,17 +458,14 @@ private suspend fun connectWithTimeout(connection: DeviceConnection): Boolean =
                 "Tidak dapat terhubung ke $targetLabel. Pastikan printer menyala dan alamat IP " +
                     "masih sama (IP printer bisa berubah jika direstart tanpa IP statis)."
             }
-
             PrinterConnectionType.BLUETOOTH -> {
                 "Tidak dapat terhubung ke \"$targetLabel\". Pastikan printer menyala dan dalam jangkauan."
             }
-
             PrinterConnectionType.USB -> {
                 "Tidak dapat terhubung ke perangkat USB. Pastikan kabel tersambung dengan baik, " +
                     "izin akses masih diberikan, dan printer mendukung mode USB Printer Class standar."
             }
         }
-
     private fun buildTestPrintMarkup(printer: PrinterEntity): String {
         val timestamp = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.forLanguageTag("id-ID")).format(Date())
         return buildString {
@@ -558,7 +478,6 @@ private suspend fun connectWithTimeout(connection: DeviceConnection): Boolean =
             append("[L]--------------------------------\n")
         }
     }
-
     companion object {
         private const val TAG = "PrinterConnectionFactory"
         private const val DEFAULT_PRINTER_DPI = 203

@@ -1,5 +1,4 @@
 package com.pos.offline.ui.components
-
 import android.content.Context
 import android.util.Size
 import androidx.activity.compose.BackHandler
@@ -93,10 +92,6 @@ import com.pos.offline.util.rememberCameraPermissionState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
-
-/**
- * KOMPONEN 1: Mesin Kamera dan Logika Deteksi Presisi ROI
- */
 @Composable
 fun BarcodeScannerCamera(
     onBarcodeScanned: suspend (String) -> Boolean,
@@ -106,7 +101,6 @@ fun BarcodeScannerCamera(
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
     val executor = remember { Executors.newSingleThreadExecutor() }
-
     val scanner = remember {
         BarcodeScanning.getClient(
             BarcodeScannerOptions.Builder()
@@ -119,21 +113,16 @@ fun BarcodeScannerCamera(
                 ).build()
         )
     }
-
     var lastScannedCode by remember { mutableStateOf<String?>(null) }
     var lastScannedTime by remember { mutableLongStateOf(0L) }
-
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
     var cameraError by remember { mutableStateOf<String?>(null) }
-
     fun attemptBind() {
         val provider = cameraProvider ?: return
         val previewView = previewViewRef ?: return
-
         try {
             if (executor.isShutdown) return
-
             val resolutionStrategy = ResolutionStrategy(
                 Size(720, 1280),
                 ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
@@ -141,61 +130,48 @@ fun BarcodeScannerCamera(
             val resolutionSelector = ResolutionSelector.Builder()
                 .setResolutionStrategy(resolutionStrategy)
                 .build()
-
             val preview = Preview.Builder()
                 .setResolutionSelector(resolutionSelector)
                 .build()
                 .also {
                     it.setSurfaceProvider(previewView.surfaceProvider)
                 }
-
             val analysis = ImageAnalysis.Builder()
                 .setResolutionSelector(resolutionSelector)
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
-
             analysis.setAnalyzer(executor) { proxy ->
                 val mediaImage = proxy.image
                 if (mediaImage == null) {
                     proxy.close()
                     return@setAnalyzer
                 }
-
                 try {
                     val rotationDegrees = proxy.imageInfo.rotationDegrees
                     val input = InputImage.fromMediaImage(mediaImage, rotationDegrees)
-
                     scanner.process(input)
                         .addOnSuccessListener { barcodes ->
                             val isRotated = rotationDegrees == 90 || rotationDegrees == 270
                             val imgW = if (isRotated) proxy.height.toFloat() else proxy.width.toFloat()
                             val imgH = if (isRotated) proxy.width.toFloat() else proxy.height.toFloat()
-
                             val targetBarcode = barcodes.firstOrNull { barcode ->
                                 val raw = barcode.rawValue
                                 if (raw.isNullOrBlank()) return@firstOrNull false
-
                                 val rect = barcode.boundingBox ?: return@firstOrNull false
-
                                 val normLeft = rect.left / imgW
                                 val normRight = rect.right / imgW
                                 val normTop = rect.top / imgH
                                 val normBottom = rect.bottom / imgH
-
                                 normLeft >= 0.125f && normRight <= 0.875f &&
                                         normTop >= 0.325f && normBottom <= 0.675f
                             }
-
                             targetBarcode?.rawValue?.let { code ->
                                 val currentTime = System.currentTimeMillis()
-
                                 val isSameCode = (code == lastScannedCode)
                                 val isTimeElapsed = (currentTime - lastScannedTime) > 1500L
-
                                 if (!isSameCode || isTimeElapsed) {
                                     lastScannedCode = code
                                     lastScannedTime = currentTime
-
                                     coroutineScope.launch {
                                         onBarcodeScanned(code)
                                     }
@@ -209,7 +185,6 @@ fun BarcodeScannerCamera(
                     proxy.close()
                 }
             }
-
             provider.unbindAll()
             provider.bindToLifecycle(
                 lifecycleOwner,
@@ -222,11 +197,9 @@ fun BarcodeScannerCamera(
             cameraError = "Gagal membuka kamera."
         }
     }
-
     DisposableEffect(Unit) {
         lastScannedCode = null
         lastScannedTime = 0L
-
         onDispose {
             lastScannedCode = null
             lastScannedTime = 0L
@@ -235,7 +208,6 @@ fun BarcodeScannerCamera(
             scanner.close()
         }
     }
-
     Box(modifier = modifier) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -256,9 +228,7 @@ fun BarcodeScannerCamera(
                 previewView
             },
         )
-
         ScannerViewfinder(modifier = Modifier.fillMaxSize())
-
         cameraError?.let { message ->
             Box(
                 modifier = Modifier
@@ -279,46 +249,32 @@ fun BarcodeScannerCamera(
         }
     }
 }
-
-/**
- * KOMPONEN 2: Logika UI, Izin, Overlay Fullscreen, & Feedback
- */
 @Composable
 fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
     val context = LocalContext.current
     val onScannedState = rememberUpdatedState(onScanned)
-
     val feedbackManager = remember { ScanFeedbackManager(context) }
     val prefsRepository = remember { ScanPreferencesRepository(context) }
-
     val isSoundEnabled by prefsRepository.isSoundEnabled.collectAsStateWithLifecycle()
     val soundVolume by prefsRepository.soundVolume.collectAsStateWithLifecycle()
     val soundDurationMs by prefsRepository.soundDurationMs.collectAsStateWithLifecycle()
-
     val isVibrationEnabled by prefsRepository.isVibrationEnabled.collectAsStateWithLifecycle()
     val vibrationIntensity by prefsRepository.vibrationIntensity.collectAsStateWithLifecycle()
     val vibrationDurationMs by prefsRepository.vibrationDurationMs.collectAsStateWithLifecycle()
-
     val (permState, requestPermission) = rememberCameraPermissionState()
     var showScanner by remember { mutableStateOf(false) }
     var pendingOpen by remember { mutableStateOf(false) }
     var showDeniedDialog by remember { mutableStateOf(false) }
-
     var isMultiScanMode by remember { mutableStateOf(false) }
     var scannedCountBatch by remember { mutableIntStateOf(0) }
     var lastScannedCodeText by remember { mutableStateOf("") }
-    
-    // DEKLARASI STATE ERROR DI PALING ATAS
     var scanErrorMessage by remember { mutableStateOf<String?>(null) }
-
-    // Timer Auto-Dismiss untuk Pesan Error (Hilang otomatis setelah 2.5 detik)
     LaunchedEffect(scanErrorMessage) {
         if (scanErrorMessage != null) {
             delay(2500L)
             scanErrorMessage = null
         }
     }
-
     LaunchedEffect(showScanner) {
         if (showScanner) {
             isMultiScanMode = false
@@ -327,13 +283,11 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
             scanErrorMessage = null
         }
     }
-
     DisposableEffect(Unit) {
         onDispose {
             feedbackManager.release()
         }
     }
-
     LaunchedEffect(permState) {
         if (pendingOpen) {
             when (permState) {
@@ -349,7 +303,6 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
             }
         }
     }
-
     if (showDeniedDialog) {
         val permanentlyDenied = permState == CameraPermissionState.PERMANENTLY_DENIED
         AlertDialog(
@@ -384,10 +337,8 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
             },
         )
     }
-
     if (showScanner) {
         BackHandler { showScanner = false }
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -397,10 +348,8 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                 isMultiScanMode = isMultiScanMode,
                 onBarcodeScanned = { code ->
                     val isSuccess = onScannedState.value(code)
-
                     if (isSuccess) {
                         scanErrorMessage = null
-
                         feedbackManager.triggerSuccessFeedback(
                             soundEnabled = isSoundEnabled,
                             soundVolume = soundVolume,
@@ -409,16 +358,13 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                             vibrationIntensity = vibrationIntensity,
                             vibrationDurationMs = vibrationDurationMs
                         )
-
                         scannedCountBatch++
                         lastScannedCodeText = code
-
                         if (!isMultiScanMode) {
                             showScanner = false
                         }
                     } else {
                         scanErrorMessage = "Produk tidak ditemukan ($code)"
-
                         feedbackManager.triggerFailureFeedback(
                             soundEnabled = isSoundEnabled,
                             soundVolume = soundVolume,
@@ -426,13 +372,10 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                             vibrationIntensity = vibrationIntensity
                         )
                     }
-
                     isSuccess
                 },
                 modifier = Modifier.fillMaxSize(),
             )
-
-            // TOP FLOATING BANNER 1: Indikator Berhasil Masuk Keranjang (Hijau/Primary)
             AnimatedVisibility(
                 visible = scannedCountBatch > 0 && scanErrorMessage == null,
                 enter = fadeIn() + slideInVertically(),
@@ -467,8 +410,6 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                     }
                 }
             }
-
-            // TOP FLOATING BANNER 2: Indikator PRODUK TIDAK DITEMUKAN (Merah Menyala)
             AnimatedVisibility(
                 visible = scanErrorMessage != null,
                 enter = fadeIn() + slideInVertically(),
@@ -504,8 +445,6 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                     }
                 }
             }
-
-            // Tombol Tutup Kamera Atas
             IconButton(
                 onClick = { showScanner = false },
                 modifier = Modifier
@@ -515,8 +454,6 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
             ) {
                 Icon(Icons.Rounded.Close, contentDescription = "Tutup", tint = Color.White)
             }
-
-            // BOTTOM CARD: Kontrol Mode Multi-Scan & Info Item
             Card(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -569,7 +506,6 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                             )
                         )
                     }
-
                     AnimatedVisibility(visible = lastScannedCodeText.isNotEmpty()) {
                         Row(
                             modifier = Modifier
@@ -596,7 +532,6 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                             )
                         }
                     }
-
                     Button(
                         onClick = { showScanner = false },
                         modifier = Modifier.fillMaxWidth(),
@@ -614,7 +549,6 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
             }
         }
     }
-
     return {
         when (permState) {
             CameraPermissionState.GRANTED -> showScanner = true
@@ -626,10 +560,6 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
         }
     }
 }
-
-/**
- * KOMPONEN 3: Gambar Kotak Pembidik (Viewfinder)
- */
 @Composable
 private fun ScannerViewfinder(modifier: Modifier = Modifier) {
     Box(
@@ -640,16 +570,13 @@ private fun ScannerViewfinder(modifier: Modifier = Modifier) {
             val top = (size.height - boxHeight) / 2f
             val right = left + boxWidth
             val bottom = top + boxHeight
-
             val cornerRadiusPx = 16.dp.toPx()
             val strokeWidthPx = 3.dp.toPx()
-
             val outerRect = Rect(0f, 0f, size.width, size.height)
             val boxRect = RoundRect(
                 rect = Rect(left, top, right, bottom),
                 cornerRadius = CornerRadius(cornerRadiusPx)
             )
-
             val overlayPath = Path().apply { addRect(outerRect) }
             val cutoutPath = Path().apply { addRoundRect(boxRect) }
             val dimmedPath = Path.combine(
@@ -657,15 +584,12 @@ private fun ScannerViewfinder(modifier: Modifier = Modifier) {
                 path1 = overlayPath,
                 path2 = cutoutPath
             )
-
             val boxOffset = Offset(left, top)
             val boxSize = GeometrySize(boxWidth, boxHeight)
             val strokeStyle = Stroke(width = strokeWidthPx)
-
             onDrawWithContent {
                 drawContent()
                 drawPath(dimmedPath, Color.Black.copy(alpha = 0.55f))
-
                 drawRoundRect(
                     color = Color.White,
                     topLeft = boxOffset,

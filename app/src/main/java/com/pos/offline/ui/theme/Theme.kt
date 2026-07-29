@@ -1,5 +1,4 @@
 package com.pos.offline.ui.theme
-
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
@@ -10,7 +9,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-
 private val DarkColors =
     darkColorScheme(
         primary = Color(0xFF6FCF97),
@@ -22,7 +20,6 @@ private val DarkColors =
         onSurface = Color(0xFFE6ECF5),
         error = Color(0xFFFF6B6B),
     )
-
 private val LightColors =
     lightColorScheme(
         primary = Color(0xFF1E9E5A),
@@ -34,7 +31,6 @@ private val LightColors =
         onSurface = Color(0xFF101826),
         error = Color(0xFFD32F2F),
     )
-
 private val AppTypography =
     Typography(
         titleLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 22.sp, letterSpacing = 0.sp),
@@ -43,7 +39,6 @@ private val AppTypography =
         bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
         labelLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
     )
-
 @Composable
 fun PosTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),

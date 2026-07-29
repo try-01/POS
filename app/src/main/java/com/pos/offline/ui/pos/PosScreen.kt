@@ -1,5 +1,4 @@
 package com.pos.offline.ui.pos
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -134,7 +133,6 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PosScreen(
@@ -159,13 +157,10 @@ fun PosScreen(
     val changeGivenOverride by viewModel.changeGivenOverride.collectAsStateWithLifecycle()
     val changeGivenInCash by viewModel.changeGivenInCash.collectAsStateWithLifecycle()
     val checkoutState by viewModel.checkoutState.collectAsStateWithLifecycle()
-
     val printUiState by viewModel.printUiState.collectAsStateWithLifecycle()
     val isOpeningDrawer by viewModel.isOpeningDrawer.collectAsStateWithLifecycle()
     val openDrawerOnPrint by viewModel.openDrawerOnPrint.collectAsStateWithLifecycle()
-
     val paymentMethod by viewModel.paymentMethod.collectAsStateWithLifecycle()
-
     val activeCashiers by viewModel.activeCashiers.collectAsStateWithLifecycle()
     val activeShift by viewModel.activeShift.collectAsStateWithLifecycle()
     val openShifts by viewModel.openShifts.collectAsStateWithLifecycle()
@@ -176,25 +171,19 @@ fun PosScreen(
     val stockWarning by viewModel.stockWarning.collectAsStateWithLifecycle()
     val isStartingShift by viewModel.isStartingShift.collectAsStateWithLifecycle()
     val isEndingShift by viewModel.isEndingShift.collectAsStateWithLifecycle()
-
     val isCartEmpty by remember { derivedStateOf { cart.isEmpty() } }
     val isProcessing by remember { derivedStateOf { checkoutState is CheckoutState.Processing } }
     val change by remember(paid, totals) {
         derivedStateOf { paid - totals.total }
     }
-
     val cartQtyByProductId = remember(cart) {
         cart.associate { it.productId to it.quantity }
     }
-    
     val stockByProductId = remember(products) {
         products.associate { it.id to it.stock }
     }
-
     val snackbarHostState = remember { SnackbarHostState() }
-    val lifecycleOwner = LocalLifecycleOwner.current // FIXED: Mengambil Lifecycle Owner dari lokal
-
-    // FIXED: Membungkus pengumpulan event agar berhenti ketika aplikasi masuk background
+    val lifecycleOwner = LocalLifecycleOwner.current 
     LaunchedEffect(viewModel, lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             viewModel.uiEvents.collect { event ->
@@ -209,9 +198,7 @@ fun PosScreen(
             }
         }
     }
-
     val launchScanner = rememberBarcodeScanner(onScanned = viewModel::onBarcodeScanned)
-
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -231,7 +218,6 @@ fun PosScreen(
                         when {
                             currentActiveShift != null -> viewModel.openEndShiftDialog(currentActiveShift)
                             openShifts.isEmpty() -> viewModel.openStartShiftDialog()
-                            // >1 shift terbuka & belum ada yang dipilih -> paksa pilih dulu.
                             else -> viewModel.openShiftListDialog()
                         }
                     },
@@ -239,7 +225,6 @@ fun PosScreen(
                     onOpenDrawerClick = viewModel::openCashDrawerManually,
                 )
                 Spacer(Modifier.height(4.dp))
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -264,7 +249,6 @@ fun PosScreen(
                         Text("Scan")
                     }
                 }
-
                 if (categories.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
                     CategoryChipsRow(
@@ -286,10 +270,8 @@ fun PosScreen(
         ) {
             val isWide = forceWideLayout || maxWidth >= 840.dp
             val maxH = maxHeight
-
             val density = LocalDensity.current
             val imeVisible = WindowInsets.ime.getBottom(density) > 0
-
             if (isWide) {
                 Row(Modifier.fillMaxSize()) {
                     ProductPane(
@@ -334,9 +316,8 @@ fun PosScreen(
                 }
             } else {
                 Box(Modifier.fillMaxSize()) {
-                    // <--- FIX: Ubah Column menjadi Box agar bertumpuk
                     ProductPane(
-                        modifier = Modifier.fillMaxSize(), // <--- FIX: Katalog produk memenuhi layar
+                        modifier = Modifier.fillMaxSize(), 
                         products = products,
                         cartQtyByProductId = cartQtyByProductId,
                         onAdd = viewModel::addToCart,
@@ -344,7 +325,7 @@ fun PosScreen(
                     CartPane(
                         modifier =
                             Modifier
-                                .align(Alignment.BottomCenter) // <--- FIX: Keranjang diposisikan melayang di bawah
+                                .align(Alignment.BottomCenter) 
                                 .fillMaxWidth()
                                 .wrapContentHeight()
                                 .let { base ->
@@ -388,9 +369,6 @@ fun PosScreen(
             }
         }
     }
-
-    // Dialog peringatan stok: mutually-exclusive terhadap dialog hasil checkout
-    // (Success/Error lebih prioritas kalau kebetulan terjadi bersamaan).
     if (stockWarning != null && checkoutState !is CheckoutState.Success && checkoutState !is CheckoutState.Error) {
         val warning = stockWarning!!
         AlertDialog(
@@ -416,7 +394,6 @@ fun PosScreen(
             },
         )
     }
-
     when (val state = checkoutState) {
         is CheckoutState.Success -> {
             SuccessDialog(
@@ -431,7 +408,6 @@ fun PosScreen(
                 onDismiss = viewModel::resetCheckoutState,
             )
         }
-
         is CheckoutState.Error -> {
             AlertDialog(
                 onDismissRequest = viewModel::resetCheckoutState,
@@ -440,12 +416,10 @@ fun PosScreen(
                 text = { Text(state.message) },
             )
         }
-
         else -> {
             Unit
         }
     }
-
     if (showStartShiftDialog) {
         StartShiftDialog(
             cashiers = activeCashiers,
@@ -454,7 +428,6 @@ fun PosScreen(
             onConfirm = { cashierId, startingCash -> viewModel.startShift(cashierId, startingCash) },
         )
     }
-
     shiftSummary?.let { summary ->
         if (showEndShiftDialog) {
             EndShiftDialog(
@@ -470,14 +443,10 @@ fun PosScreen(
             shifts = openShifts,
             activeShiftId = activeShift?.id,
             onCloseShift = { shift ->
-                // Perilaku asli: siapa pun boleh menutup shift siapa pun.
-                // Navigasi ke EndShiftDialog yang tetap minta konfirmasi kas fisik.
                 viewModel.dismissShiftListDialog()
                 viewModel.openEndShiftDialog(shift)
             },
             onDesignateActive = { shift ->
-                // Hanya menentukan atribusi checkout di terminal ini,
-                // TIDAK menutup shift siapa pun.
                 viewModel.selectActiveShift(shift.id)
                 viewModel.dismissShiftListDialog()
             },
@@ -489,7 +458,6 @@ fun PosScreen(
         )
     }
 }
-
 @Composable
 private fun ShiftIndicatorBar(
     openShift: ShiftEntity?,
@@ -541,7 +509,6 @@ private fun ShiftIndicatorBar(
                     },
             )
         }
-
         Box(
             modifier =
                 Modifier
@@ -566,7 +533,6 @@ private fun ShiftIndicatorBar(
             }
         }
         Spacer(Modifier.width(2.dp))
-
         Box(
             modifier =
                 Modifier
@@ -584,9 +550,7 @@ private fun ShiftIndicatorBar(
         }
     }
 }
-
 private val shiftDateFmt = SimpleDateFormat("dd/MM HH:mm", Locale.forLanguageTag("id-ID"))
-
 private fun formatElapsedSince(startedAt: Long): String {
     val diffMs = (System.currentTimeMillis() - startedAt).coerceAtLeast(0L)
     val totalMinutes = diffMs / 60_000
@@ -594,7 +558,6 @@ private fun formatElapsedSince(startedAt: Long): String {
     val minutes = totalMinutes % 60
     return if (hours > 0) "berjalan ${hours}j ${minutes}m" else "berjalan ${minutes}m"
 }
-
 @Composable
 private fun ManageShiftsDialog(
     shifts: List<ShiftEntity>,
@@ -659,7 +622,6 @@ private fun ManageShiftsDialog(
         },
     )
 }
-
 @Composable
 private fun OpenShiftRow(
     shift: ShiftEntity,
@@ -673,7 +635,7 @@ private fun OpenShiftRow(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 12.dp,
         contentPadding = PaddingValues(10.dp),
-        onClick = onCloseClick, // Ketuk baris = tutup shift ini (perilaku asli dipertahankan)
+        onClick = onCloseClick, 
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -709,9 +671,6 @@ private fun OpenShiftRow(
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
-                // Tombol terpisah dgn hit-area sendiri: menekan ini TIDAK memicu
-                // onCloseClick milik GlassCard (nested clickable Compose berhenti
-                // di node terdalam yang menangani sentuhan).
                 if (showDesignateButton && !isDesignatedActive) {
                     Spacer(Modifier.height(6.dp))
                     TextButton(
@@ -738,7 +697,6 @@ private fun OpenShiftRow(
         }
     }
 }
-
 @Composable
 private fun CashierDropdownField(
     cashiers: List<CashierEntity>,
@@ -783,7 +741,6 @@ private fun CashierDropdownField(
         }
     }
 }
-
 @Composable
 private fun StartShiftDialog(
     cashiers: List<CashierEntity>,
@@ -793,14 +750,12 @@ private fun StartShiftDialog(
 ) {
     var selectedCashier by remember { mutableStateOf(cashiers.firstOrNull()) }
     var startingCash by remember { mutableStateOf(0L) }
-
     LaunchedEffect(cashiers) {
         val current = selectedCashier
         if (current == null || cashiers.none { it.id == current.id }) {
             selectedCashier = cashiers.firstOrNull()
         }
     }
-
     AlertDialog(
         onDismissRequest = { if (!isProcessing) onDismiss() },
         title = { Text("Mulai Shift") },
@@ -844,7 +799,6 @@ private fun StartShiftDialog(
         },
     )
 }
-
 @Composable
 private fun EndShiftDialog(
     summary: ShiftSummary,
@@ -853,16 +807,11 @@ private fun EndShiftDialog(
     onConfirm: (actualCash: Long) -> Unit,
 ) {
     var actualCash by remember { mutableStateOf(0L) }
-    // Dilacak terpisah dari nilai karena 0L adalah nilai VALID (mis. shift
-    // tanpa penjualan tunai sama sekali / uang fisik memang habis), bukan
-    // berarti "belum diisi". Tanpa flag ini, kasir tidak akan pernah bisa
-    // menutup shift jika hasil hitung fisiknya kebetulan nol.
     var hasBeenEdited by remember { mutableStateOf(false) }
     val expected = summary.expectedCashInDrawer
     val difference = actualCash - expected
     val isCleanZeroAllowed = actualCash == 0L && expected == 0L
     val hasInput = hasBeenEdited || isCleanZeroAllowed 
-
     AlertDialog(
         onDismissRequest = { if (!isProcessing) onDismiss() },
         title = { Text("Tutup Shift") },
@@ -878,9 +827,7 @@ private fun EndShiftDialog(
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Total Pendapatan", summary.totalRevenue.toRupiah(), emphasize = true)
                 SummaryLine("Laba Kotor", summary.grossProfit.toRupiah(), color = MaterialTheme.colorScheme.primary)
-
                 Spacer(Modifier.height(14.dp))
-
                 Text("💵 Rekonsiliasi Laci", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Kas Awal (Modal)", summary.startingCash.toRupiah())
@@ -901,7 +848,6 @@ private fun EndShiftDialog(
                 }
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Estimasi di Laci", expected.toRupiah(), emphasize = true)
-
                 Spacer(Modifier.height(10.dp))
                 MoneyField(
                     label = "Uang Fisik",
@@ -912,7 +858,6 @@ private fun EndShiftDialog(
                     },
                     modifier = Modifier.fillMaxWidth().height(44.dp),
                 )
-
                 if (hasInput) {
                     Spacer(Modifier.height(10.dp))
                     val diffAbs = kotlin.math.abs(difference)
@@ -950,7 +895,6 @@ private fun EndShiftDialog(
         },
     )
 }
-
 @Composable
 private fun ProductPane(
     modifier: Modifier,
@@ -980,7 +924,6 @@ private fun ProductPane(
         }
     }
 }
-
 @Composable
 private fun ProductCard(
     product: ProductEntity,
@@ -1007,7 +950,6 @@ private fun ProductCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -1028,7 +970,6 @@ private fun ProductCard(
                             },
                     )
                 }
-
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier =
@@ -1059,7 +1000,6 @@ private fun ProductCard(
         }
     }
 }
-
 @Composable
 @Suppress("LongParameterList")
 private fun CartPane(
@@ -1098,7 +1038,6 @@ private fun CartPane(
     var qtyEditItem by remember { mutableStateOf<CartItemEntity?>(null) }
     val showFull = !collapsible || expanded
     var showInsufficientPaymentDialog by remember { mutableStateOf(false) }
-
     fun attemptCheckout() {
         if (paid in 1 until totals.total) {
             showInsufficientPaymentDialog = true
@@ -1106,9 +1045,7 @@ private fun CartPane(
             onCheckout()
         }
     }
-
     val listState = rememberLazyListState()
-
     var previousCartSize by remember { mutableStateOf(cart.size) }
     LaunchedEffect(cart.size) {
         if (cart.size > previousCartSize && cart.isNotEmpty()) {
@@ -1116,7 +1053,6 @@ private fun CartPane(
         }
         previousCartSize = cart.size
     }
-
     Box(
         modifier =
             modifier
@@ -1124,7 +1060,6 @@ private fun CartPane(
                 .background(MaterialTheme.colorScheme.background, RoundedCornerShape(16.dp))
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
                 .clip(RoundedCornerShape(16.dp))
-                // PERISAI SENTUHAN: Menyerap semua sentuhan meleset agar TIDAK MENEMBUS ke produk di belakangnya
                 .clickable(
                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                     indication = null,
@@ -1138,7 +1073,6 @@ private fun CartPane(
                     .then(if (!collapsible) Modifier.fillMaxHeight() else Modifier)
                     .padding(10.dp),
         ) {
-            // Indikator Pull-Bar Tipis (Hanya 4.dp, tidak memakan ruang)
             if (collapsible) {
                 Box(
                     modifier = Modifier
@@ -1150,11 +1084,9 @@ private fun CartPane(
                         .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
                 )
             }
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    // AREA KLIK SELUAS HEADER: Ketuk di mana saja pada baris ini untuk buka/tutup
                     .then(
                         if (collapsible) {
                             Modifier
@@ -1168,8 +1100,6 @@ private fun CartPane(
                 Icon(Icons.Rounded.ShoppingCart, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Keranjang", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-
-                // Menampilkan ringkasan Item + Total Rp saat keranjang terlipat
                 if (collapsible && !expanded && cart.isNotEmpty()) {
                     Text(
                         text = "${cart.size} item · ${totals.total.toRupiah()}",
@@ -1179,7 +1109,6 @@ private fun CartPane(
                         modifier = Modifier.padding(end = 6.dp),
                     )
                 }
-
                 if (cart.isNotEmpty() && showFull) {
                     TextButton(
                         onClick = { showClearConfirm = true },
@@ -1191,7 +1120,6 @@ private fun CartPane(
                         Text("Kosongkan", style = MaterialTheme.typography.bodySmall)
                     }
                 }
-
                 if (collapsible) {
                     Box(
                         modifier = Modifier
@@ -1213,15 +1141,12 @@ private fun CartPane(
                     }
                 }
             }
-
             if (showFull) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
-
-                // 1. AREA LIST ITEM (Scrollable)
                 Box(
                     modifier =
                         Modifier
-                            .weight(1f, fill = false) // fill=false agar keranjang tidak memakan ruang kosong jika item sedikit
+                            .weight(1f, fill = false) 
                             .fillMaxWidth()
                             .clipToBounds(),
                 ) {
@@ -1278,7 +1203,6 @@ private fun CartPane(
                             }
                         }
                     }
-
                     val showTopFade by remember { derivedStateOf { listState.canScrollBackward } }
                     val showBottomFade by remember { derivedStateOf { listState.canScrollForward } }
                     if (showTopFade) {
@@ -1296,8 +1220,6 @@ private fun CartPane(
                         )
                     }
                 }
-
-                // 2. AREA TOTAL & CHECKOUT (Fixed di bawah, tidak ikut ter-scroll)
                 if (cart.isNotEmpty()) {
                     HorizontalDivider(Modifier.padding(vertical = 4.dp))
                     TotalsSummary(
@@ -1376,7 +1298,6 @@ private fun CartPane(
             }
         }
     }
-
     if (showClearConfirm) {
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
@@ -1398,7 +1319,6 @@ private fun CartPane(
             },
         )
     }
-
     qtyEditItem?.let { item ->
         QuantityEditDialog(
             item = item,
@@ -1410,7 +1330,6 @@ private fun CartPane(
             onDismiss = { qtyEditItem = null },
         )
     }
-
     if (showInsufficientPaymentDialog) {
         InsufficientPaymentDialog(
             paid = paid,
@@ -1423,7 +1342,6 @@ private fun CartPane(
         )
     }
 }
-
 @Composable
 private fun InsufficientPaymentDialog(
     paid: Long,
@@ -1471,7 +1389,6 @@ private fun InsufficientPaymentDialog(
         },
     )
 }
-
 @Composable
 private fun CartRow(
     item: CartItemEntity,
@@ -1508,7 +1425,6 @@ private fun CartRow(
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.width(12.dp))
-
         QuantityStepper(
             qty = item.quantity,
             canIncrease = canIncrease,
@@ -1516,9 +1432,7 @@ private fun CartRow(
             onIncrease = onIncrease,
             onQuantityClick = onQuantityClick,
         )
-
         Spacer(Modifier.width(8.dp))
-
         Box(
             modifier =
                 Modifier
@@ -1537,7 +1451,6 @@ private fun CartRow(
         }
     }
 }
-
 @Composable
 private fun QuantityStepper(
     qty: Double,
@@ -1548,7 +1461,6 @@ private fun QuantityStepper(
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         CompactActionBox(icon = Icons.Rounded.Remove, contentDescription = "Kurangi", onClick = onDecrease)
-
         Box(
             modifier =
                 Modifier
@@ -1564,7 +1476,6 @@ private fun QuantityStepper(
                 textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
             )
         }
-
         CompactActionBox(
             icon = Icons.Rounded.Add,
             contentDescription = "Tambah",
@@ -1573,7 +1484,6 @@ private fun QuantityStepper(
         )
     }
 }
-
 @Composable
 private fun CompactActionBox(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -1603,7 +1513,6 @@ private fun CompactActionBox(
         )
     }
 }
-
 @Composable
 @Suppress("LongParameterList")
 private fun TotalsSummary(
@@ -1626,7 +1535,6 @@ private fun TotalsSummary(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         SummaryLine("Subtotal", totals.subtotal.toRupiah())
-
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1652,7 +1560,6 @@ private fun TotalsSummary(
                 color = MaterialTheme.colorScheme.error,
             )
         }
-
         if (totals.discount > 0) {
             val label =
                 if (discountType == DiscountType.PERCENT) {
@@ -1663,17 +1570,14 @@ private fun TotalsSummary(
             SummaryLine(label, "- ${totals.discount.toRupiah()}")
         }
         if (totals.tax > 0) SummaryLine("Pajak", totals.tax.toRupiah())
-
         HorizontalDivider(Modifier.padding(vertical = 2.dp))
         SummaryLine("Total", totals.total.toRupiah(), emphasize = true)
-
         Spacer(Modifier.height(2.dp))
         PaymentMethodToggle(
             selected = paymentMethod,
             onSelect = onPaymentMethodChange,
         )
         Spacer(Modifier.height(2.dp))
-
         MoneyField(
             label = "Bayar",
             value = paid,
@@ -1712,19 +1616,6 @@ private fun TotalsSummary(
         }
     }
 }
-
-/**
- * Field "Kembalian Diberikan" — hanya relevan saat `maxChange > 0`. Default
- * (`value == null`) menampilkan `maxChange` penuh (perilaku lama: kembalian
- * diberikan seutuhnya). Kasir bisa menurunkan nilainya bila sebagian
- * kembalian sengaja tidak diambil pembeli — selisihnya otomatis ditampilkan
- * sebagai "Tip".
- *
- * Catatan edge-case (belum ditangani, didiskusikan di respons): jika kasir
- * menurunkan nilai ini lalu MENAIKKAN nominal "Bayar" setelahnya, nilai di
- * sini tidak ikut menyesuaikan otomatis — selisihnya akan tercatat sebagai
- * tip yang lebih besar dari yang mungkin dimaksud kasir.
- */
 @Composable
 private fun ChangeGivenField(
     maxChange: Long,
@@ -1735,7 +1626,6 @@ private fun ChangeGivenField(
     val effectiveValue = value?.coerceIn(0L, maxChange) ?: maxChange
     var text by remember(effectiveValue) { mutableStateOf(effectiveValue.toString()) }
     val tip = (maxChange - effectiveValue).coerceAtLeast(0L)
-
     Column(modifier = modifier) {
         BasicTextField(
             value = text,
@@ -1743,9 +1633,6 @@ private fun ChangeGivenField(
                 val digits = input.filter { it.isDigit() }
                 text = digits
                 val parsed = (digits.toLongOrNull() ?: 0L).coerceIn(0L, maxChange)
-                // Kalau kasir mengetik ulang nilai = maxChange, kembalikan ke
-                // mode default (null) agar tetap otomatis mengikuti perubahan
-                // "Bayar" berikutnya, bukan "terkunci" ke angka lama.
                 onValueChange(if (parsed == maxChange) null else parsed)
             },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -1798,17 +1685,6 @@ private fun ChangeGivenField(
         }
     }
 }
-
-/**
- * Trigger psikologis untuk kasir: menampilkan secara EKSPLISIT (warna +
- * ikon + nominal rupiah) bahwa kembalian dari transaksi QRIS ini akan
- * mengurangi kas TUNAI di laci — bukan cuma checkbox polos yang gampang
- * diabaikan. Default ON (tunai), karena skenario paling umum saat QRIS
- * overpay adalah pembeli ingin memegang uang cash. Tidak berbentuk dialog
- * konfirmasi (blocking) agar tidak menambah friksi untuk kasus yang cukup
- * sering terjadi — cukup warna kontras + teks yang berubah real-time
- * mengikuti state toggle, selalu terlihat tanpa perlu tap tambahan.
- */
 @Composable
 private fun QrisCashChangeToggle(
     changeGivenAmount: Long,
@@ -1866,7 +1742,6 @@ private fun QrisCashChangeToggle(
         )
     }
 }
-
 @Composable
 private fun PaymentMethodToggle(
     selected: PaymentMethod,
@@ -1895,7 +1770,6 @@ private fun PaymentMethodToggle(
         )
     }
 }
-
 @Composable
 private fun PaymentMethodChip(
     label: String,
@@ -1930,7 +1804,6 @@ private fun PaymentMethodChip(
         )
     }
 }
-
 @Composable
 private fun SummaryLine(
     label: String,
@@ -1952,7 +1825,6 @@ private fun SummaryLine(
         )
     }
 }
-
 @Composable
 private fun MoneyField(
     label: String,
@@ -1961,7 +1833,6 @@ private fun MoneyField(
     modifier: Modifier = Modifier,
 ) {
     var text by remember(value) { mutableStateOf(if (value <= 0) "" else value.toString()) }
-
     BasicTextField(
         value = text,
         onValueChange = { input ->
@@ -2008,7 +1879,6 @@ private fun MoneyField(
         },
     )
 }
-
 @Composable
 private fun DiscountField(
     type: DiscountType,
@@ -2026,11 +1896,9 @@ private fun DiscountField(
             },
         )
     }
-
     val isNominal = type == DiscountType.NOMINAL
     val keyboardType = if (isNominal) KeyboardType.Number else KeyboardType.Decimal
     val visualTransformation = if (isNominal) ThousandsSeparatorTransformation else VisualTransformation.None
-
     BasicTextField(
         value = text,
         onValueChange = { input ->
@@ -2045,7 +1913,6 @@ private fun DiscountField(
                                 c.isDigit() -> {
                                     append(c)
                                 }
-
                                 c == '.' && !dotSeen -> {
                                     append(c)
                                     dotSeen = true
@@ -2124,7 +1991,6 @@ private fun DiscountField(
         },
     )
 }
-
 @Composable
 private fun DecimalField(
     label: String,
@@ -2135,7 +2001,6 @@ private fun DecimalField(
     var text by remember(value) {
         mutableStateOf(if (value <= 0.0) "" else formatPercentTrim(value))
     }
-
     BasicTextField(
         value = text,
         onValueChange = { input ->
@@ -2147,7 +2012,6 @@ private fun DecimalField(
                             c.isDigit() -> {
                                 append(c)
                             }
-
                             c == '.' && !dotSeen -> {
                                 append(c)
                                 dotSeen = true
@@ -2196,7 +2060,6 @@ private fun DecimalField(
         },
     )
 }
-
 @Composable
 private fun QuantityEditDialog(
     item: CartItemEntity,
@@ -2209,11 +2072,8 @@ private fun QuantityEditDialog(
         mutableStateOf(TextFieldValue(text = initial, selection = TextRange(0, initial.length)))
     }
     val focusRequester = remember { FocusRequester() }
-
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
-
     fun confirmWith(qty: Double) = onConfirm(qty.coerceAtLeast(0.0))
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Ubah Jumlah") },
@@ -2234,7 +2094,6 @@ private fun QuantityEditDialog(
                     )
                 }
                 Spacer(Modifier.height(12.dp))
-
                 BasicTextField(
                     value = fieldValue,
                     onValueChange = { newValue ->
@@ -2279,9 +2138,7 @@ private fun QuantityEditDialog(
                         }
                     },
                 )
-
                 Spacer(Modifier.height(12.dp))
-
                 Text(
                     "Pintasan cepat",
                     style = MaterialTheme.typography.labelSmall,
@@ -2314,7 +2171,6 @@ private fun QuantityEditDialog(
         },
     )
 }
-
 @Composable
 private fun SuccessDialog(
     result: CheckoutResult,
@@ -2390,9 +2246,7 @@ private fun SuccessDialog(
                         }
                     }
                 }
-
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
-
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         modifier =
@@ -2410,7 +2264,6 @@ private fun SuccessDialog(
                         Spacer(Modifier.width(8.dp))
                         Text("Buka laci saat mencetak", style = MaterialTheme.typography.bodyMedium)
                     }
-
                     FilledTonalButton(
                         onClick = onPrint,
                         enabled = printUiState !is PrintUiState.Printing,
@@ -2433,7 +2286,6 @@ private fun SuccessDialog(
                     OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) {
                         Text("Ekspor PDF")
                     }
-
                     PrintResultBanner(
                         printUiState = printUiState,
                         onSharePdfFile = onSharePdfFile,
@@ -2444,7 +2296,6 @@ private fun SuccessDialog(
         },
     )
 }
-
 @Composable
 private fun PrintResultBanner(
     printUiState: PrintUiState,
@@ -2460,16 +2311,13 @@ private fun PrintResultBanner(
             is ReceiptPrintOutcome.Failed -> {
                 val printerCount = outcome.attempts.size
                 val reason = outcome.attempts.firstOrNull()?.message ?: ""
-                
                 if (reason.contains("terhubung", ignoreCase = true)) {
-                    // Kasus printer mati / diluar jangkauan
                     if (printerCount > 1) {
                         "Gagal mencetak ke semua printer. Mohon hubungkan ke perangkat" to true
                     } else {
                         "Gagal mencetak ke printer. Mohon hubungkan ke perangkat" to true
                     }
                 } else {
-                    // Kasus lain (misal kertas habis, error I/O)
                     val title = if (printerCount > 1) "Gagal mencetak ke semua printer." else "Gagal mencetak ke printer."
                     "$title\nAlasan: $reason" to true
                 }
@@ -2477,7 +2325,6 @@ private fun PrintResultBanner(
             ReceiptPrintOutcome.NoPrinterConfigured -> "Printer belum diatur." to true
             ReceiptPrintOutcome.AlreadyInProgress -> "Sedang mencetak, mohon tunggu..." to false
         }
-
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -2513,7 +2360,6 @@ private fun PrintResultBanner(
         }
     }
 }
-
 @Composable
 private fun CompactSearchBar(
     query: String,
@@ -2560,7 +2406,6 @@ private fun CompactSearchBar(
         },
     )
 }
-
 @Composable
 private fun CategoryChipsRow(
     categories: List<String>,
@@ -2578,7 +2423,6 @@ private fun CategoryChipsRow(
         }
     }
 }
-
 @Composable
 private fun CategoryChip(
     label: String,

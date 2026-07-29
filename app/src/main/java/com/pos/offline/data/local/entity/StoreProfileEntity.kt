@@ -1,8 +1,6 @@
 package com.pos.offline.data.local.entity
-
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-
 @Entity(tableName = "store_profile")
 data class StoreProfileEntity(
     @PrimaryKey val id: Long = SINGLETON_ID,
@@ -15,7 +13,6 @@ data class StoreProfileEntity(
     companion object {
         const val SINGLETON_ID = 1L
     }
-
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is StoreProfileEntity) return false
@@ -26,7 +23,6 @@ data class StoreProfileEntity(
             autoPrintEnabled == other.autoPrintEnabled &&
             (logoBytes?.contentEquals(other.logoBytes) ?: (other.logoBytes == null))
     }
-
     override fun hashCode(): Int {
         var result = id.hashCode()
         result = 31 * result + storeName.hashCode()

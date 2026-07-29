@@ -1,5 +1,4 @@
 package com.pos.offline.ui.settings
-
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -54,7 +53,6 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
 @Composable
 fun StoreProfileDialog(
     viewModel: StoreProfileViewModel,
@@ -62,23 +60,19 @@ fun StoreProfileDialog(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val form = uiState.formState
-
     LaunchedEffect(viewModel) {
         viewModel.loadFormFromCurrentProfile()
     }
-
     val pickImageLauncher =
         rememberLauncherForActivityResult(
             ActivityResultContracts.GetContent(),
         ) { uri ->
             if (uri != null) viewModel.pickLogo(uri)
         }
-
     val dismissAndCleanup = {
         viewModel.cancelPendingLogoProcessing()
         onDismiss()
     }
-
     Dialog(onDismissRequest = dismissAndCleanup, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -102,7 +96,6 @@ fun StoreProfileDialog(
                         Icon(Icons.Rounded.Close, contentDescription = "Tutup")
                     }
                 }
-
                 Column(
                     modifier =
                         Modifier
@@ -111,7 +104,6 @@ fun StoreProfileDialog(
                             .padding(horizontal = 16.dp)
                             .verticalScroll(rememberScrollState())
                             .imePadding(),
-                    // FIX UX: Mencegah textfield tertutup oleh keyboard
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     Text("Logo Toko", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
@@ -175,7 +167,6 @@ fun StoreProfileDialog(
                         fontSize = 10.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-
                     OutlinedTextField(
                         value = form.storeName,
                         onValueChange = viewModel::updateStoreName,
@@ -198,7 +189,6 @@ fun StoreProfileDialog(
                         minLines = 2,
                         modifier = Modifier.fillMaxWidth(),
                     )
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -217,7 +207,6 @@ fun StoreProfileDialog(
                             onCheckedChange = viewModel::updateAutoPrintEnabled,
                         )
                     }
-
                     Button(
                         onClick = { viewModel.save() },
                         enabled = !uiState.isSaving && !uiState.isProcessingLogo,
@@ -233,14 +222,12 @@ fun StoreProfileDialog(
                             Text("Simpan", fontSize = 13.sp)
                         }
                     }
-
                     Spacer(Modifier.height(16.dp))
                 }
             }
         }
     }
 }
-
 @Composable
 fun LogoPreview(
     logoBytes: ByteArray?,
@@ -258,10 +245,9 @@ fun LogoPreview(
                 null
             }
     }
-
     bitmap?.let { nonNullBitmap ->
         Image(
-            bitmap = nonNullBitmap, // Sekarang menggunakan nonNullBitmap yang dijamin tidak null
+            bitmap = nonNullBitmap, 
             contentDescription = "Logo toko",
             contentScale = ContentScale.Crop,
             modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),

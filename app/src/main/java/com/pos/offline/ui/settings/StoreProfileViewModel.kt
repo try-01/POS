@@ -1,5 +1,4 @@
 package com.pos.offline.ui.settings
-
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,7 +15,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-
 data class StoreProfileFormState(
     val storeName: String = "",
     val address: String = "",
@@ -33,7 +31,6 @@ data class StoreProfileFormState(
             autoPrintEnabled == other.autoPrintEnabled &&
             (logoBytes?.contentEquals(other.logoBytes) ?: (other.logoBytes == null))
     }
-
     override fun hashCode(): Int {
         var result = storeName.hashCode()
         result = 31 * result + address.hashCode()
@@ -43,13 +40,11 @@ data class StoreProfileFormState(
         return result
     }
 }
-
 data class StoreProfileUiState(
     val formState: StoreProfileFormState = StoreProfileFormState(),
     val isProcessingLogo: Boolean = false,
     val isSaving: Boolean = false,
 )
-
 class StoreProfileViewModel(
     private val storeProfileRepository: StoreProfileRepository,
     private val logoImageProcessor: LogoImageProcessor,
@@ -57,13 +52,10 @@ class StoreProfileViewModel(
     val profile: StateFlow<StoreProfileEntity> =
         storeProfileRepository.profile
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StoreProfileEntity())
-
     private val _uiState = MutableStateFlow(StoreProfileUiState())
     val uiState: StateFlow<StoreProfileUiState> = _uiState.asStateFlow()
-
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
-
     fun loadFormFromCurrentProfile() {
         val current = profile.value
         _uiState.value =
@@ -78,19 +70,13 @@ class StoreProfileViewModel(
                     ),
             )
     }
-
     fun updateStoreName(value: String) = updateForm { it.copy(storeName = value) }
-
     fun updateAddress(value: String) = updateForm { it.copy(address = value) }
-
     fun updateFooterNote(value: String) = updateForm { it.copy(footerNote = value) }
-
     fun updateAutoPrintEnabled(value: Boolean) = updateForm { it.copy(autoPrintEnabled = value) }
-
     private var pickLogoJob: Job? = null
-
     fun pickLogo(uri: Uri) {
-        pickLogoJob?.cancel() // batalkan proses logo sebelumnya yang belum selesai
+        pickLogoJob?.cancel() 
         pickLogoJob =
             viewModelScope.launch {
                 _uiState.value = _uiState.value.copy(isProcessingLogo = true)
@@ -103,21 +89,15 @@ class StoreProfileViewModel(
                 _uiState.value = _uiState.value.copy(isProcessingLogo = false)
             }
     }
-
-    /** Dipanggil saat dialog ditutup agar hasil proses logo yang basi tidak
-     * "bocor" ke sesi edit berikutnya setelah form di-reset. */
     fun cancelPendingLogoProcessing() {
         pickLogoJob?.cancel()
         pickLogoJob = null
         _uiState.value = _uiState.value.copy(isProcessingLogo = false)
     }
-
     fun clearLogo() = updateForm { it.copy(logoBytes = null) }
-
     private inline fun updateForm(block: (StoreProfileFormState) -> StoreProfileFormState) {
         _uiState.value = _uiState.value.copy(formState = block(_uiState.value.formState))
     }
-
     fun save() {
         if (_uiState.value.isSaving) return
         val form = _uiState.value.formState
@@ -136,7 +116,6 @@ class StoreProfileViewModel(
             _uiState.value = _uiState.value.copy(isSaving = false)
         }
     }
-
     private fun emitMessage(message: String) {
         viewModelScope.launch { _messages.emit(message) }
     }

@@ -1,5 +1,4 @@
 package com.pos.offline.ui.receipt
-
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -25,9 +24,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import android.graphics.Color as AndroidColor
-
 enum class ReceiptAlign { LEFT, CENTER, RIGHT }
-
 data class ReceiptLine(
     val left: String = "",
     val right: String = "",
@@ -35,22 +32,18 @@ data class ReceiptLine(
     val bold: Boolean = false,
     val large: Boolean = false,
 )
-
 object ReceiptManager {
     private val dateFmt = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("id-ID"))
-
     fun buildLines(
         result: CheckoutResult,
         storeProfile: StoreProfileEntity? = null,
     ): List<ReceiptLine> {
         val tx = result.transaction
         val lines = mutableListOf<ReceiptLine>()
-
         val storeName = storeProfile?.storeName?.trim()
         if (!storeName.isNullOrEmpty()) {
             lines += ReceiptLine(left = storeName, align = ReceiptAlign.CENTER, bold = true, large = true)
         }
-
         val address = storeProfile?.address?.trim()
         if (!address.isNullOrEmpty()) {
             address.split("\n").forEach { rawLine ->
@@ -60,13 +53,10 @@ object ReceiptManager {
                 }
             }
         }
-
         lines += divider()
-
         val dateStr = dateFmt.format(Date(tx.createdAt))
         val invStr = tx.id
         lines += ReceiptLine(left = dateStr, right = invStr)
-
         val cashier = tx.cashierName.trim()
         val shiftId = tx.shiftId?.toString() ?: ""
         if (cashier.isNotEmpty() || shiftId.isNotEmpty()) {
@@ -80,13 +70,10 @@ object ReceiptManager {
                 lines += ReceiptLine(left = "", right = right)
             }
         }
-
         if (tx.isVoid) {
             lines += ReceiptLine(left = "*** TRANSAKSI DIBATALKAN ***", align = ReceiptAlign.CENTER, bold = true)
         }
-
         lines += divider()
-
         for (item in result.items) {
             val name = item.productName.trim().ifEmpty { "(Tanpa nama)" }
             if (item.quantity > 1.0) {
@@ -96,16 +83,12 @@ object ReceiptManager {
                 lines += ReceiptLine(left = name, right = item.lineTotal.toRupiah(), bold = true)
             }
         }
-
         lines += ReceiptLine(left = "")
-
         lines += ReceiptLine(left = "TOTAL: ${tx.total.toRupiah()}", align = ReceiptAlign.CENTER, bold = true, large = true)
         lines += divider()
-
         val gridItems = mutableListOf<Pair<String, String>>()
         val payLabel = paymentMethodLabel(tx.paymentMethod)
         gridItems.add(Pair(payLabel, tx.paidAmount.toRupiah()))
-
         if (tx.change > 0) {
             gridItems.add(Pair("Kembali", tx.change.toRupiah()))
         } else if (tx.change < 0) {
@@ -113,7 +96,6 @@ object ReceiptManager {
         }
         if (tx.discount > 0) gridItems.add(Pair("Diskon", tx.discount.toRupiah()))
         if (tx.tax > 0) gridItems.add(Pair("Pajak", tx.tax.toRupiah()))
-
         gridItems.chunked(2).forEach { chunk ->
             if (chunk.size == 2) {
                 lines += ReceiptLine(left = "${chunk[0].first}: ${chunk[0].second}", right = "${chunk[1].first}: ${chunk[1].second}")
@@ -121,9 +103,7 @@ object ReceiptManager {
                 lines += ReceiptLine(left = "${chunk[0].first}: ${chunk[0].second}")
             }
         }
-
         lines += divider()
-
         val footerNote = storeProfile?.footerNote?.trim()
         if (!footerNote.isNullOrEmpty()) {
             footerNote.split("\n").forEach { rawLine ->
@@ -133,17 +113,10 @@ object ReceiptManager {
                 }
             }
         }
-
         lines += ReceiptLine(left = "")
-
         return lines
     }
-
     private fun divider(): ReceiptLine = ReceiptLine(left = "--------------------------------", align = ReceiptAlign.CENTER)
-
-    // toEscPosBytes() & twoColumn() dihapus: dead code.
-    // Konversi byte ESC/POS aktual didelegasikan ke DantSu EscPosPrinter
-    // via ReceiptManager.linesToEscPosMarkup() -> PrinterConnectionFactory.printRawLines().
     suspend fun exportToPdf(
         context: Context,
         result: CheckoutResult,
@@ -153,7 +126,6 @@ object ReceiptManager {
             val lines = buildLines(result, storeProfile)
             exportPdfFromLines(context, lines, result.transaction.id)
         }
-
     suspend fun exportPdfFromLines(
         context: Context,
         lines: List<ReceiptLine>,
@@ -164,20 +136,17 @@ object ReceiptManager {
             val margin = 14f
             val lineHeight = 20f
             val pageHeight = (lines.size * lineHeight + 2 * margin).toInt().coerceAtLeast(320)
-
             val document = PdfDocument()
             try {
                 val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
                 val page = document.startPage(pageInfo)
                 val canvas = page.canvas
-
                 var y = margin + 14f
                 for (line in lines) {
                     drawLine(canvas, line, pageWidth.toFloat(), margin, y)
                     y += lineHeight
                 }
                 document.finishPage(page)
-
                 val dir = File(context.getExternalFilesDir(null) ?: context.filesDir, "reports").apply { mkdirs() }
                 val file = File(dir, "$fileName.pdf")
                 FileOutputStream(file).use { document.writeTo(it) }
@@ -186,7 +155,6 @@ object ReceiptManager {
                 document.close()
             }
         }
-
     fun renderToBitmap(
         result: CheckoutResult,
         scale: Int = 3,
@@ -199,7 +167,6 @@ object ReceiptManager {
         val h = (lines.size * lineHeight + 2 * margin).toInt()
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp).apply { drawColor(AndroidColor.WHITE) }
-
         var y = margin + lineHeight
         for (line in lines) {
             drawLine(canvas, line, w.toFloat(), margin, y, scale.toFloat())
@@ -207,7 +174,6 @@ object ReceiptManager {
         }
         return bmp
     }
-
     private fun drawLine(
         canvas: Canvas,
         line: ReceiptLine,
@@ -222,14 +188,12 @@ object ReceiptManager {
                 textSize = (if (line.large) 16f else 11f) * scale
                 typeface = if (line.bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
             }
-
         val rightPaint =
             if (line.bold && line.right.isNotEmpty()) {
                 Paint(paint).apply { typeface = Typeface.DEFAULT }
             } else {
                 paint
             }
-
         if (line.right.isNotEmpty()) {
             canvas.drawText(line.left, margin, y, paint)
             val rightW = rightPaint.measureText(line.right)
@@ -239,12 +203,10 @@ object ReceiptManager {
                 ReceiptAlign.LEFT -> {
                     canvas.drawText(line.left, margin, y, paint)
                 }
-
                 ReceiptAlign.CENTER -> {
                     val tw = paint.measureText(line.left)
                     canvas.drawText(line.left, (pageWidth - tw) / 2f, y, paint)
                 }
-
                 ReceiptAlign.RIGHT -> {
                     val tw = paint.measureText(line.left)
                     canvas.drawText(line.left, pageWidth - margin - tw, y, paint)
@@ -252,7 +214,6 @@ object ReceiptManager {
             }
         }
     }
-
     fun buildShareIntent(
         context: Context,
         result: CheckoutResult,
@@ -261,15 +222,12 @@ object ReceiptManager {
         val bitmap = renderToBitmap(result, storeProfile = storeProfile)
         val dir = File(context.cacheDir, "shared_receipts").apply { 
             mkdirs()
-            // Bersihkan file temporer lama agar cache tidak membengkak
             listFiles()?.forEach { oldFile -> runCatching { oldFile.delete() } }
         }
         val file = File(dir, "${result.transaction.id}_${System.currentTimeMillis()}.png")
         FileOutputStream(file).use { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }
-
         val authority = "${context.packageName}.fileprovider"
         val uri = FileProvider.getUriForFile(context, authority, file)
-
         val sendIntent =
             Intent(Intent.ACTION_SEND).apply {
                 type = "image/png"
@@ -278,14 +236,12 @@ object ReceiptManager {
             }
         return Intent.createChooser(sendIntent, "Bagikan Struk")
     }
-
     fun buildPdfShareIntent(
         context: Context,
         file: File,
     ): Intent {
         val authority = "${context.packageName}.fileprovider"
         val uri = FileProvider.getUriForFile(context, authority, file)
-
         val sendIntent =
             Intent(Intent.ACTION_SEND).apply {
                 type = "application/pdf"
@@ -294,7 +250,6 @@ object ReceiptManager {
             }
         return Intent.createChooser(sendIntent, "Bagikan Struk PDF")
     }
-
     fun linesToEscPosMarkup(lines: List<ReceiptLine>): String {
         val sb = StringBuilder()
         for (line in lines) {
@@ -303,7 +258,6 @@ object ReceiptManager {
             val boldEnd = if (line.bold) "</b>" else ""
             val sizeTag = if (line.large) "<font size='big'>" else ""
             val sizeEnd = if (line.large) "</font>" else ""
-
             if (line.right.isNotEmpty()) {
                 sb.append("[L]$boldTag$sizeTag${line.left}$sizeEnd$boldEnd[R]$boldTag$sizeTag${line.right}$sizeEnd$boldEnd\n")
             } else {
@@ -312,16 +266,6 @@ object ReceiptManager {
         }
         return sb.toString()
     }
-
-    /**
-     * Bangun baris laporan penjualan. Setiap section (ringkasan penjualan,
-     * produk terjual, dead-stock) bisa dipilih independen lewat parameter
-     * boolean di bawah — kasir bebas kombinasikan salah satu, dua, atau
-     * ketiganya sekaligus dalam satu dokumen cetak/PDF.
-     *
-     * Header toko & info periode selalu ditampilkan sebagai konteks,
-     * terlepas dari section mana yang dipilih.
-     */
     fun buildSalesReportLines(
         data: SalesReportData,
         storeProfile: StoreProfileEntity?,
@@ -334,13 +278,11 @@ object ReceiptManager {
     ): List<ReceiptLine> {
         val lines = mutableListOf<ReceiptLine>()
         val storeName = storeProfile?.storeName?.trim()?.ifBlank { "Kasir Offline" } ?: "Kasir Offline"
-
         lines += ReceiptLine(left = storeName, align = ReceiptAlign.CENTER, bold = true, large = true)
         lines += ReceiptLine(left = "Laporan Penjualan", align = ReceiptAlign.CENTER)
         lines += ReceiptLine(left = periodLabel, align = ReceiptAlign.CENTER)
         lines += ReceiptLine(left = "Dicetak: ${dateFmt.format(Date())}", align = ReceiptAlign.CENTER)
         if (printedBy != null) lines += ReceiptLine(left = "Kasir: $printedBy", right = shiftId?.let { "Shift: $it" } ?: "")
-
         if (includeSalesSummary) {
             lines += divider()
             lines += ReceiptLine(left = "Total Transaksi", right = "${data.summary.transactionCount} struk")
@@ -351,17 +293,13 @@ object ReceiptManager {
             if (data.returnsTotal > 0) lines += ReceiptLine(left = "  (Termasuk Retur)", right = "- ${data.returnsTotal.toRupiah()}")
             lines += ReceiptLine(left = "Laba Bersih", right = data.labaBersih.toRupiah(), bold = true)
             lines += divider()
-
             lines += ReceiptLine(left = "Metode Pembayaran", align = ReceiptAlign.CENTER, bold = true)
             data.payments.forEach {
                 val label = PaymentMethod.fromStorage(it.paymentMethod).label
-                // Uang riil diterima, bukan nominal transaksi — konsisten dg
-                // tujuan "uang di laci = uang di app".
                 lines += ReceiptLine(left = label, right = "${it.count}x  ${it.actualReceived.toRupiah()}")
             }
             lines += divider()
         }
-
         if (includeProductsSold) {
             val soldProducts = data.products.filter { it.qtySold > 0.0 }
             lines += ReceiptLine(left = "--- Produk Terjual ---", align = ReceiptAlign.CENTER, bold = true)
@@ -375,7 +313,6 @@ object ReceiptManager {
             }
             lines += divider()
         }
-
         if (includeDeadStock) {
             val deadStock = data.products.filter { it.qtySold == 0.0 }
             lines += ReceiptLine(left = "--- Produk Tidak Laku ---", align = ReceiptAlign.CENTER, bold = true)
@@ -389,7 +326,6 @@ object ReceiptManager {
             }
             lines += divider()
         }
-
         lines += ReceiptLine(left = "")
         return lines
     }

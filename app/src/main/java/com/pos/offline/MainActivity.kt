@@ -1,5 +1,4 @@
 package com.pos.offline
-
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
@@ -90,7 +89,6 @@ import com.pos.offline.ui.settings.StoreProfileViewModel
 import com.pos.offline.ui.theme.PosTheme
 import com.pos.offline.util.HardwareScannerInterceptor
 import kotlinx.coroutines.launch
-
 private enum class Dest(
     val label: String,
 ) {
@@ -99,7 +97,6 @@ private enum class Dest(
     REPORT("Laporan"),
     SETTINGS("Pengaturan"),
 }
-
 class MainActivity : ComponentActivity() {
     private val posViewModel: PosViewModel by viewModels {
         ServiceLocator.posViewModelFactory()
@@ -110,7 +107,6 @@ class MainActivity : ComponentActivity() {
                 posViewModel.onBarcodeScanned(barcode)
             }
         }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -120,13 +116,11 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        scannerInterceptor.onKeyEvent(event)
+        if (scannerInterceptor.onKeyEvent(event)) return true
         return super.dispatchKeyEvent(event)
     }
 }
-
 @Composable
 private fun AppRoot() {
     val posViewModel: PosViewModel = viewModel(factory = ServiceLocator.posViewModelFactory())
@@ -140,24 +134,15 @@ private fun AppRoot() {
         viewModel(factory = ServiceLocator.printerViewModelFactory())
     val storeProfileViewModel: StoreProfileViewModel =
         viewModel(factory = ServiceLocator.storeProfileViewModelFactory())
-
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = 0) { Dest.entries.size }
     val currentDest = Dest.entries[pagerState.currentPage]
-
-    // Ambil profil toko terkini untuk diteruskan ke ReceiptManager saat ekspor PDF/Gambar
     val storeProfile by storeProfileViewModel.profile.collectAsStateWithLifecycle()
-
-    // Dikoleksi di level AppRoot (bukan hanya di dalam SettingsScreen) agar
-    // overlay blocking & penonaktifan navigasi berlaku di SELURUH aplikasi —
-    // krusial karena semua ViewModel di sini scope-nya AppRoot, bukan per-tab.
     val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val isRestoringDatabase = settingsUiState.isImporting
-
     val pageAlpha = remember { Animatable(1f) }
     var isJumping by remember { mutableStateOf(false) }
-
     fun goTo(dest: Dest) {
         val target = dest.ordinal
         if (pagerState.currentPage == target) return
@@ -169,17 +154,12 @@ private fun AppRoot() {
             isJumping = false
         }
     }
-
     val openShift by posViewModel.openShift.collectAsStateWithLifecycle()
     var showExitDialog by rememberSaveable { mutableStateOf(false) }
-
-    // Prioritas tertinggi: selama restore berlangsung, tombol back TIDAK BOLEH
-    // melakukan apa pun — window kritis, aplikasi akan segera direstart otomatis.
-    BackHandler(enabled = isRestoringDatabase) { /* sengaja tidak melakukan apa pun */ }
-    BackHandler(enabled = showExitDialog) { showExitDialog = false } // FIXED: Tutup dialog exit saat Back ditekan
+    BackHandler(enabled = isRestoringDatabase) {  }
+    BackHandler(enabled = showExitDialog) { showExitDialog = false } 
     BackHandler(enabled = currentDest != Dest.POS && !isRestoringDatabase && !showExitDialog) { goTo(Dest.POS) }
     BackHandler(enabled = currentDest == Dest.POS && !showExitDialog && !isRestoringDatabase) { showExitDialog = true }
-
     if (showExitDialog) {
         val shift = openShift
         if (shift != null) {
@@ -263,20 +243,16 @@ private fun AppRoot() {
             )
         }
     }
-
     val density = LocalDensity.current
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var isCartExpanded by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
-
     LaunchedEffect(pagerState.currentPage) {
         if (currentDest != Dest.POS) isCartExpanded = false
         menuExpanded = false
     }
-
     val hideFab = isRestoringDatabase || imeVisible || (!isLandscape && currentDest == Dest.POS && isCartExpanded)
-
     Box(
         modifier =
             Modifier
@@ -285,8 +261,6 @@ private fun AppRoot() {
     ) {
         HorizontalPager(
             state = pagerState,
-            // BEST PRACTICE 1: imePadding Dihapus dari Pager.
-            // Pager tetap full screen, inset keyboard diurus oleh layar masing-masing.
             modifier =
                 Modifier
                     .fillMaxSize()
@@ -304,7 +278,6 @@ private fun AppRoot() {
                             context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
                         },
                         onExportPdf = { result ->
-                            // Pindahkan ke background thread mencegah ANR
                             scope.launch {
                                 val file = ReceiptManager.exportToPdf(context, result, storeProfile)
                                 Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
@@ -314,11 +287,9 @@ private fun AppRoot() {
                         onCartExpandedChange = if (isLandscape) ({}) else ({ v: Boolean -> isCartExpanded = v }),
                     )
                 }
-
                 Dest.INVENTORY -> {
                     InventoryScreen(viewModel = inventoryViewModel)
                 }
-
                 Dest.REPORT -> {
                     ReportScreen(
                         viewModel = reportViewModel,
@@ -327,7 +298,6 @@ private fun AppRoot() {
                             context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
                         },
                         onExportPdf = { result ->
-                            // Pindahkan ke background thread mencegah ANR
                             scope.launch {
                                 val file = ReceiptManager.exportToPdf(context, result, storeProfile)
                                 Toast.makeText(context, "Struk tersimpan: ${file.name}", Toast.LENGTH_LONG).show()
@@ -338,7 +308,6 @@ private fun AppRoot() {
                         },
                     )
                 }
-
                 Dest.SETTINGS -> {
                     SettingsScreen(
                         viewModel = settingsViewModel,
@@ -349,7 +318,6 @@ private fun AppRoot() {
                 }
             }
         }
-
         AnimatedVisibility(
             visible = menuExpanded,
             enter = fadeIn(),
@@ -367,7 +335,6 @@ private fun AppRoot() {
                         ) { menuExpanded = false },
             )
         }
-
         AnimatedVisibility(
             visible = !hideFab,
             enter = fadeIn(),
@@ -388,12 +355,6 @@ private fun AppRoot() {
                 },
             )
         }
-
-        // Overlay blocking PENUH APLIKASI (bukan hanya di dalam SettingsScreen).
-        // Dipasang di AppRoot karena semua ViewModel di sini scope-nya AppRoot,
-        // bukan per-tab — mencegah user berpindah tab/memicu aksi apa pun
-        // (mis. menambah item ke keranjang di tab Kasir) selama window kritis
-        // restore database berlangsung.
         AnimatedVisibility(
             visible = isRestoringDatabase,
             enter = fadeIn(),
@@ -408,7 +369,7 @@ private fun AppRoot() {
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                        ) { /* serap semua sentuhan, sengaja tidak melakukan apa pun */ },
+                        ) {  },
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -431,7 +392,6 @@ private fun AppRoot() {
         }
     }
 }
-
 @Composable
 private fun ExpandableMenuFab(
     expanded: Boolean,
@@ -478,7 +438,6 @@ private fun ExpandableMenuFab(
         }
     }
 }
-
 @Composable
 private fun MiniMenuItem(
     dest: Dest,
@@ -501,7 +460,6 @@ private fun MiniMenuItem(
         }
     }
 }
-
 private fun Dest.icon() =
     when (this) {
         Dest.POS -> Icons.Rounded.ShoppingCart

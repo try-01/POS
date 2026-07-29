@@ -1,5 +1,4 @@
 package com.pos.offline.ui.report
-
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -70,6 +69,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -119,7 +121,6 @@ import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportScreen(
@@ -132,6 +133,8 @@ fun ReportScreen(
     val report by viewModel.report.collectAsStateWithLifecycle()
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     val isToday by viewModel.isToday.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.invoiceSearchQuery.collectAsStateWithLifecycle()
+    val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
     val selectedTransaction by viewModel.selectedTransaction.collectAsStateWithLifecycle()
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
     val closedShifts by viewModel.closedShifts.collectAsStateWithLifecycle()
@@ -146,7 +149,6 @@ fun ReportScreen(
     var pendingVoidConfirm by remember { mutableStateOf(false) }
     var voidBanner by remember { mutableStateOf<ReportMessage?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
-
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg ->
             if (selectedTransaction != null) {
@@ -156,14 +158,39 @@ fun ReportScreen(
             }
         }
     }
-
     LaunchedEffect(voidBanner) {
         if (voidBanner != null) {
             delay(3000)
             voidBanner = null
         }
     }
+    var showDatePicker by remember { mutableStateOf(false) }
 
+    // Dialog DatePicker Kalender
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val localDate = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+                            viewModel.selectExactDate(localDate)
+                        }
+                        showDatePicker = false
+                    }
+                ) { Text("Pilih") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Batal") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -200,24 +227,70 @@ fun ReportScreen(
         contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars),
     ) { inner ->
         LazyColumn(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(inner)
-                    .imePadding(),
+            modifier = Modifier.fillMaxSize().padding(inner).imePadding(),
             contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            item(key = "date_navigator") {
-                DateNavigator(
-                    label = selectedDate.format(ReportViewModel.dateFmt),
-                    isToday = isToday,
-                    onPrevious = viewModel::previousDay,
-                    onNext = viewModel::nextDay,
-                    onToday = viewModel::goToday,
+            // 1. Search Bar Transaksi Lintas Tanggal
+            item(key = "invoice_search_bar") {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = viewModel::searchInvoice,
+                    placeholder = { Text("Cari No. Struk (misal INV-...) lintas tanggal…", fontSize = 12.sp) },
+                    leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.searchInvoice("") }) {
+                                Icon(Icons.Rounded.Close, contentDescription = "Hapus", modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
                 )
             }
 
+            // Jika sedang mencari struk lintas tanggal
+            if (searchQuery.isNotBlank()) {
+                item(key = "search_result_header") {
+                    Text(
+                        "Hasil Pencarian Lintas Tanggal (${searchResults.size})",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                if (searchResults.isEmpty()) {
+                    item(key = "search_empty") {
+                        Text(
+                            "Struk \"$searchQuery\" tidak ditemukan.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                    }
+                } else {
+                    items(searchResults, key = { "search_${it.id}" }) { tx ->
+                        TransactionRow(
+                            tx = tx,
+                            onClick = { viewModel.openTransactionDetail(tx.id) }
+                        )
+                    }
+                }
+            } else {
+                // 2. Date Navigator dengan fitur klik Kalender
+                item(key = "date_navigator") {
+                    DateNavigator(
+                        label = selectedDate.format(ReportViewModel.dateFmt),
+                        isToday = isToday,
+                        onPrevious = viewModel::previousDay,
+                        onNext = viewModel::nextDay,
+                        onToday = viewModel::goToday,
+                        onCalendarClick = { showDatePicker = true } // Klik teks/icon untuk buka kalender
+                    )
+                }
             item(key = "sales_report_generator") {
                 val selectedPeriodType by viewModel.selectedPeriodType.collectAsStateWithLifecycle()
                 val salesReportUiState by viewModel.salesReportUiState.collectAsStateWithLifecycle()
@@ -227,10 +300,8 @@ fun ReportScreen(
                 val canGenerateReport by viewModel.canGenerateReport.collectAsStateWithLifecycle()
                 val context = LocalContext.current
                 val scope = rememberCoroutineScope()
-
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Laporan Penjualan", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp), fontWeight = FontWeight.SemiBold)
-
                     Text(
                         "Pilih bagian laporan (bisa lebih dari satu):",
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
@@ -255,7 +326,6 @@ fun ReportScreen(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-
                     Spacer(Modifier.height(2.dp))
                     Text(
                         "Tampilkan periode (tap lagi untuk menutup):",
@@ -267,7 +337,6 @@ fun ReportScreen(
                         enabled = canGenerateReport,
                         onSelect = viewModel::toggleReportPeriod,
                     )
-
                     AnimatedVisibility(
                         visible = salesReportUiState !is SalesReportUiState.Hidden,
                         enter = fadeIn() + expandVertically(),
@@ -291,9 +360,7 @@ fun ReportScreen(
                     }
                 }
             }
-
             item(key = "summary") { SummarySection(report = report) }
-
             if (report.transactionCount > 0) {
                 item(key = "chart") {
                     RevenueTrendChart(
@@ -304,11 +371,9 @@ fun ReportScreen(
                     )
                 }
             }
-
             item(key = "tab_switcher") {
                 ReportTabSwitcher(selected = selectedTab, onSelect = viewModel::selectTab)
             }
-
             when (selectedTab) {
                 ReportTab.TRANSACTIONS -> {
                     item(key = "list_header") {
@@ -319,7 +384,6 @@ fun ReportScreen(
                             modifier = Modifier.padding(top = 2.dp),
                         )
                     }
-
                     if (report.transactions.isEmpty()) {
                         item(key = "empty") { EmptyReport() }
                     } else {
@@ -335,7 +399,6 @@ fun ReportScreen(
                         }
                     }
                 }
-
                 ReportTab.SHIFTS -> {
                     item(key = "payment_breakdown") {
                         PaymentBreakdownSection(
@@ -343,7 +406,6 @@ fun ReportScreen(
                             qrisRevenue = report.qrisRevenue,
                         )
                     }
-
                     item(key = "return_summary") {
                         ReturnSummarySection(
                             cashRefundTotal = returnSummary.cashRefundTotal,
@@ -372,7 +434,6 @@ fun ReportScreen(
                             )
                         }
                     }
-
                     item(key = "closed_shifts_header") {
                         Text(
                             "Riwayat Tutup Shift (${closedShifts.size})",
@@ -381,7 +442,6 @@ fun ReportScreen(
                             modifier = Modifier.padding(top = 2.dp),
                         )
                     }
-
                     if (closedShifts.isEmpty()) {
                         item(key = "empty_shifts") { EmptyClosedShifts() }
                     } else {
@@ -400,7 +460,6 @@ fun ReportScreen(
             }
         }
     }
-
     if (selectedTransaction != null && !pendingVoidConfirm && !showReturnDialog && pendingPrintTarget == null) {
         val current = selectedTransaction!!
         TransactionDetailDialog(
@@ -421,7 +480,6 @@ fun ReportScreen(
             },
         )
     }
-
     pendingPrintTarget?.let { target ->
         PrinterPickerDialog(
             printers = target.availablePrinters,
@@ -429,7 +487,6 @@ fun ReportScreen(
             onDismiss = { viewModel.cancelPrinterPicker() },
         )
     }
-
     if (pendingVoidConfirm) {
         VoidConfirmDialog(
             invoiceId = selectedTransaction?.transaction?.id.orEmpty(),
@@ -440,7 +497,6 @@ fun ReportScreen(
             onDismiss = { pendingVoidConfirm = false },
         )
     }
-
     if (showReturnDialog && selectedTransaction != null) {
         ReturnItemDialog(
             result = selectedTransaction!!,
@@ -452,14 +508,12 @@ fun ReportScreen(
             },
         )
     }
-
     selectedShiftDetail?.let { detail ->
         ClosedShiftDetailDialog(
             detail = detail,
             onDismiss = viewModel::closeShiftDetail,
         )
     }
-
     selectedReturnDetail?.let { detail ->
         ReturnDetailDialog(
             detail = detail,
@@ -471,7 +525,6 @@ fun ReportScreen(
         )
     }
 }
-
 @Composable
 private fun ReportPeriodToggleRow(
     selected: ReportPeriodType?,
@@ -503,7 +556,6 @@ private fun ReportPeriodToggleRow(
         )
     }
 }
-
 @Composable
 private fun ReportPeriodChip(
     label: String,
@@ -534,7 +586,6 @@ private fun ReportPeriodChip(
         )
     }
 }
-
 @Composable
 private fun SalesReportResultCard(
     uiState: SalesReportUiState,
@@ -557,7 +608,6 @@ private fun SalesReportResultCard(
                     Text("Memuat laporan...", style = MaterialTheme.typography.bodySmall)
                 }
             }
-
             is SalesReportUiState.Loaded -> {
                 val data = uiState.data
                 val periodLabel = if (uiState.periodType == ReportPeriodType.MONTHLY) "Bulanan" else "Harian"
@@ -567,7 +617,6 @@ private fun SalesReportResultCard(
                     SummaryLine("Laba Bersih", data.labaBersih.toRupiah(), color = MaterialTheme.colorScheme.primary)
                     if (data.diskon > 0) SummaryLine("Diskon", "- ${data.diskon.toRupiah()}")
                     if (data.summary.taxSum > 0) SummaryLine("Pajak", data.summary.taxSum.toRupiah())
-
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = onPrint, modifier = Modifier.weight(1f)) { Text("Cetak $periodLabel") }
@@ -575,12 +624,10 @@ private fun SalesReportResultCard(
                     }
                 }
             }
-
             SalesReportUiState.Hidden -> Unit
         }
     }
 }
-
 @Composable
 private fun DateNavigator(
     label: String,
@@ -588,6 +635,7 @@ private fun DateNavigator(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onToday: () -> Unit,
+    onCalendarClick: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(14.dp),
@@ -601,15 +649,19 @@ private fun DateNavigator(
                     contentDescription = "Hari sebelumnya",
                     onClick = onPrevious,
                 )
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                // Ketuk area tengah untuk membuka DatePicker Kalender
+                Column(
+                    modifier = Modifier.weight(1f).clickable(onClick = onCalendarClick),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             Icons.Rounded.CalendarMonth,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
+                            contentDescription = "Pilih Tanggal Kalender",
+                            modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.primary,
                         )
-                        Spacer(Modifier.width(5.dp))
+                        Spacer(Modifier.width(6.dp))
                         Text(
                             label,
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
@@ -620,9 +672,15 @@ private fun DateNavigator(
                     }
                     if (isToday) {
                         Text(
-                            "Hari ini",
+                            "Hari ini (Ketuk untuk pilih kalender)",
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                             color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else {
+                        Text(
+                            "Ketuk untuk pilih kalender",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                         )
                     }
                 }
@@ -641,7 +699,185 @@ private fun DateNavigator(
         }
     }
 }
+// Komponen Hirarki Riwayat Produk di ReportScreen.kt
 
+@Composable
+fun ProductHistorySearchSection(
+    query: String,
+    monthGroups: List<MonthSalesGroup>,
+    onQueryChange: (String) -> Unit,
+    onScanClick: () -> Unit,
+    onTransactionClick: (String) -> Unit,
+    onDirectWarrantyClick: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Search Bar (Ketik Nama/SKU/Kategori + Tombol Scan Barcode)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                placeholder = { Text("Cari Nama Produk / SKU / Kategori / Barcode…", fontSize = 11.sp) },
+                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { onQueryChange("") }) {
+                            Icon(Icons.Rounded.Close, contentDescription = "Hapus", modifier = Modifier.size(16.dp))
+                        }
+                    }
+                },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.weight(1f).height(46.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
+                    .clickable(onClick = onScanClick),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Rounded.QrCodeScanner, contentDescription = "Scan", tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+
+        // Tampilan Hasil Hirarki (Bulan -> Tanggal -> Transaksi)
+        if (query.isNotBlank()) {
+            if (monthGroups.isEmpty()) {
+                GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(12.dp)) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            "Tidak ada riwayat penjualan 1 tahun terakhir untuk \"$query\".",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(onClick = onDirectWarrantyClick) {
+                            Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Proses Klaim Garansi Direct (Tanpa Struk)")
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    "Riwayat Penjualan 1 Tahun Terakhir:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                monthGroups.forEach { monthGroup ->
+                    MonthExpandableCard(
+                        monthGroup = monthGroup,
+                        onTransactionClick = onTransactionClick
+                    )
+                }
+
+                // Tombol Direct Warranty jika nota tidak ketemu dari hasil list
+                TextButton(
+                    onClick = onDirectWarrantyClick,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) {
+                    Text("Nota tidak sesuai? Gunakan Garansi Direct (Tanpa Struk)", fontSize = 11.sp)
+                }
+            }
+        }
+    }
+}
+
+// Level 1: Card Bulan (Expandable)
+@Composable
+private fun MonthExpandableCard(
+    monthGroup: MonthSalesGroup,
+    onTransactionClick: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val monthLabel = monthGroup.yearMonth.format(
+        DateTimeFormatter.ofPattern("MMMM yyyy", Locale.forLanguageTag("id-ID"))
+    )
+
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 12.dp,
+        contentPadding = PaddingValues(10.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Rounded.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(monthLabel, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(12.dp)) {
+                    Text("${monthGroup.totalTransactions} Transaksi", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp))
+                }
+                Spacer(Modifier.width(4.dp))
+                Icon(if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown, contentDescription = null)
+            }
+
+            AnimatedVisibility(visible = expanded) {
+                Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    monthGroup.days.forEach { dayGroup ->
+                        DayExpandableSection(
+                            dayGroup = dayGroup,
+                            onTransactionClick = onTransactionClick
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Level 2: Section Tanggal (Expandable)
+@Composable
+private fun DayExpandableSection(
+    dayGroup: DaySalesGroup,
+    onTransactionClick: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val dateLabel = dayGroup.date.format(
+        DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy", Locale.forLanguageTag("id-ID"))
+    )
+
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 8.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(dateLabel, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text("${dayGroup.transactions.size} Nota", style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(4.dp))
+            Icon(if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(16.dp))
+        }
+
+        // Level 3: Daftar Transaksi di Tanggal Tersebut
+        AnimatedVisibility(visible = expanded) {
+            Column(modifier = Modifier.padding(start = 8.dp, top = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                dayGroup.transactions.forEach { tx ->
+                    TransactionRow(
+                        tx = tx,
+                        onClick = { onTransactionClick(tx.id) }
+                    )
+                }
+            }
+        }
+    }
+}
 @Composable
 private fun CompactNavIcon(
     icon: ImageVector,
@@ -670,7 +906,6 @@ private fun CompactNavIcon(
         )
     }
 }
-
 @Composable
 private fun TodayPillButton(onClick: () -> Unit) {
     Row(
@@ -697,7 +932,6 @@ private fun TodayPillButton(onClick: () -> Unit) {
         )
     }
 }
-
 @Composable
 private fun SummarySection(report: DailyReport) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -734,7 +968,6 @@ private fun SummarySection(report: DailyReport) {
                 )
             }
         }
-
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatCard(
                 modifier = Modifier.weight(1f),
@@ -751,7 +984,6 @@ private fun SummarySection(report: DailyReport) {
         }
     }
 }
-
 @Composable
 private fun StatCard(
     modifier: Modifier = Modifier,
@@ -790,7 +1022,6 @@ private fun StatCard(
         }
     }
 }
-
 private fun Long.toCompactRupiah(): String {
     fun trim(d: Double): String {
         val rounded = Math.round(d * 10) / 10.0
@@ -807,7 +1038,6 @@ private fun Long.toCompactRupiah(): String {
         else -> "Rp$this"
     }
 }
-
 @Composable
 private fun RevenueTrendChart(
     date: LocalDate,
@@ -820,7 +1050,6 @@ private fun RevenueTrendChart(
     val gridColor = onSurface.copy(alpha = 0.08f)
     val axisTextColor = onSurface.copy(alpha = 0.55f)
     val textMeasurer = rememberTextMeasurer()
-
     val zone = remember { ZoneId.systemDefault() }
     val dayStartMillis = remember(date) { date.atStartOfDay(zone).toInstant().toEpochMilli() }
     val dayEndMillis =
@@ -831,10 +1060,8 @@ private fun RevenueTrendChart(
                 .toInstant()
                 .toEpochMilli()
         }
-
     val peakHour = remember(hourly) { hourly.indices.maxByOrNull { hourly[it] } ?: 0 }
     val peakValue = remember(hourly) { hourly.getOrElse(peakHour) { 0L } }
-
     val points =
         remember(transactions, dayStartMillis, dayEndMillis) {
             val sorted = transactions.sortedBy { it.createdAt }
@@ -847,9 +1074,7 @@ private fun RevenueTrendChart(
             list.add(dayEndMillis to running)
             list
         }
-
     val labelStyle = remember(axisTextColor) { TextStyle(color = axisTextColor, fontSize = 9.sp) }
-
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 16.dp,
@@ -878,9 +1103,7 @@ private fun RevenueTrendChart(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
             }
-
             Spacer(Modifier.height(10.dp))
-
             Canvas(
                 modifier =
                     Modifier
@@ -896,29 +1119,30 @@ private fun RevenueTrendChart(
                 val plotWidth = plotRight - plotLeft
                 val plotHeight = plotBottom - plotTop
                 val maxRevenue = totalRevenue.coerceAtLeast(1L)
-
                 fun xFor(time: Long): Float {
                     val ratio = (time - dayStartMillis).toFloat() / (dayEndMillis - dayStartMillis).toFloat()
                     return plotLeft + ratio.coerceIn(0f, 1f) * plotWidth
                 }
-
                 fun yFor(value: Long): Float {
                     val ratio = value.toFloat() / maxRevenue.toFloat()
                     return plotBottom - ratio.coerceIn(0f, 1f) * plotHeight
                 }
+val yAxisLabels = remember(maxRevenue, labelStyle) {
+      (0..4).map { i ->
+          val ratio = i / 4f
+          val labelStr = (maxRevenue * ratio).toLong().toCompactRupiah()
+          textMeasurer.measure(labelStr, labelStyle)
+      }
+  }
 
-                val ySteps = 4
-                for (i in 0..ySteps) {
-                    val ratio = i / ySteps.toFloat()
-                    val y = plotBottom - ratio * plotHeight
-                    drawLine(gridColor, Offset(plotLeft, y), Offset(plotRight, y), strokeWidth = 1.dp.toPx())
-                    val measured = textMeasurer.measure((maxRevenue * ratio).toLong().toCompactRupiah(), labelStyle, density = this)
-                    drawText(
-                        textLayoutResult = measured,
-                        topLeft = Offset(0f, (y - measured.size.height / 2f).coerceIn(0f, plotBottom - measured.size.height)),
-                    )
-                }
-
+  // Di dalam Canvas DrawScope:
+  for (i in 0..ySteps) {
+      val ratio = i / ySteps.toFloat()
+      val y = plotBottom - ratio * plotHeight
+      drawLine(...)
+      val measured = yAxisLabels.getOrElse(i) { textMeasurer.measure("0", labelStyle) }
+      drawText(textLayoutResult = measured, topLeft = Offset(0f, (y - measured.size.height / 2f).coerceIn(0f, plotBottom - measured.size.height)))
+  }
                 listOf(0, 6, 12, 18, 24).forEach { hour ->
                     val time = (dayStartMillis + hour.toLong() * 3_600_000L).coerceAtMost(dayEndMillis)
                     val x = xFor(time)
@@ -936,7 +1160,6 @@ private fun RevenueTrendChart(
                         topLeft = Offset(labelX.coerceIn(0f, size.width - measured.size.width), plotBottom + 4.dp.toPx()),
                     )
                 }
-
                 if (points.size >= 2) {
                     val linePath = Path()
                     val areaPath = Path()
@@ -949,15 +1172,14 @@ private fun RevenueTrendChart(
                             areaPath.lineTo(x, y)
                         } else {
                             val prevY = yFor(points[index - 1].second)
-                            linePath.lineTo(x, prevY) // datar dari nilai sebelumnya
-                            linePath.lineTo(x, y) // lonjakan tegak saat transaksi terjadi
+                            linePath.lineTo(x, prevY) 
+                            linePath.lineTo(x, y) 
                             areaPath.lineTo(x, prevY)
                             areaPath.lineTo(x, y)
                         }
                     }
                     areaPath.lineTo(xFor(points.last().first), plotBottom)
                     areaPath.close()
-
                     drawPath(
                         path = areaPath,
                         brush =
@@ -968,7 +1190,6 @@ private fun RevenueTrendChart(
                             ),
                     )
                     drawPath(path = linePath, color = primary, style = Stroke(width = 2.dp.toPx()))
-
                     for (i in 1 until points.size - 1) {
                         val (time, value) = points[i]
                         drawCircle(color = primary, radius = 2.5.dp.toPx(), center = Offset(xFor(time), yFor(value)))
@@ -978,7 +1199,6 @@ private fun RevenueTrendChart(
         }
     }
 }
-
 @Composable
 private fun ReportTabSwitcher(
     selected: ReportTab,
@@ -1007,7 +1227,6 @@ private fun ReportTabSwitcher(
         )
     }
 }
-
 @Composable
 private fun ReportTabChip(
     label: String,
@@ -1037,7 +1256,6 @@ private fun ReportTabChip(
         )
     }
 }
-
 @Composable
 private fun PaymentBreakdownSection(
     cashRevenue: Long,
@@ -1065,7 +1283,6 @@ private fun PaymentBreakdownSection(
         }
     }
 }
-
 @Composable
 private fun ReturnSummarySection(
     cashRefundTotal: Long,
@@ -1093,7 +1310,6 @@ private fun ReturnSummarySection(
         }
     }
 }
-
 @Composable
 private fun ReturnRow(
     ret: ReturnEntity,
@@ -1151,7 +1367,6 @@ private fun ReturnRow(
         }
     }
 }
-
 @Composable
 private fun EmptyReturns() {
     Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
@@ -1171,7 +1386,6 @@ private fun EmptyReturns() {
         }
     }
 }
-
 @Composable
 private fun ReturnDetailDialog(
     detail: ReturnDetail,
@@ -1181,7 +1395,6 @@ private fun ReturnDetailDialog(
     val header = detail.header
     val items = detail.items
     val totalQty = items.sumOf { it.quantityReturned }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Detail Retur") },
@@ -1199,7 +1412,6 @@ private fun ReturnDetailDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
-
                 Spacer(Modifier.height(4.dp))
                 TextButton(
                     onClick = { onViewOriginalTransaction(header.transactionId) },
@@ -1213,20 +1425,16 @@ private fun ReturnDetailDialog(
                     Spacer(Modifier.width(4.dp))
                     Text("Lihat Transaksi Asal", style = MaterialTheme.typography.labelSmall)
                 }
-
                 Spacer(Modifier.height(6.dp))
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Kasir", header.cashierName.ifBlank { "Tanpa kasir" })
                 SummaryLine("Shift", header.shiftId?.let { "#$it" } ?: "Tanpa shift")
-
                 Spacer(Modifier.height(10.dp))
                 Text("Item Diretur (${totalQty.formatQuantity()})", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
-
                 items.forEach { item ->
                     ReturnDetailItemRow(item)
                 }
-
                 Spacer(Modifier.height(6.dp))
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Metode Pengembalian", paymentMethodLabel(header.refundMethod))
@@ -1236,7 +1444,6 @@ private fun ReturnDetailDialog(
                     emphasize = true,
                     color = MaterialTheme.colorScheme.error,
                 )
-
                 if (header.note.isNotBlank()) {
                     Spacer(Modifier.height(10.dp))
                     Text("Catatan", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
@@ -1253,7 +1460,6 @@ private fun ReturnDetailDialog(
         },
     )
 }
-
 @Composable
 private fun ReturnDetailItemRow(item: ReturnItemEntity) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -1278,7 +1484,6 @@ private fun ReturnDetailItemRow(item: ReturnItemEntity) {
         RestockBadge(restocked = item.restocked, hasProduct = item.productId != null)
     }
 }
-
 @Composable
 private fun RestockBadge(
     restocked: Boolean,
@@ -1296,7 +1501,6 @@ private fun RestockBadge(
         color = color,
     )
 }
-
 @Composable
 private fun TransactionRow(
     tx: TransactionEntity,
@@ -1304,7 +1508,6 @@ private fun TransactionRow(
 ) {
     val isVoid = tx.isVoid
     val dimmedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 12.dp,
@@ -1355,7 +1558,6 @@ private fun TransactionRow(
         }
     }
 }
-
 @Composable
 private fun VoidBadge() {
     Surface(
@@ -1371,7 +1573,6 @@ private fun VoidBadge() {
         )
     }
 }
-
 @Composable
 private fun ReturnedBadge() {
     Surface(
@@ -1387,7 +1588,6 @@ private fun ReturnedBadge() {
         )
     }
 }
-
 @Composable
 private fun ReceiptActionsRow(
     onPrint: () -> Unit,
@@ -1420,7 +1620,6 @@ private fun ReceiptActionsRow(
         )
     }
 }
-
 @Composable
 private fun ReceiptActionButton(
     icon: ImageVector,
@@ -1453,7 +1652,6 @@ private fun ReceiptActionButton(
         )
     }
 }
-
 @Composable
 private fun TransactionDetailDialog(
     result: CheckoutResult,
@@ -1471,7 +1669,6 @@ private fun TransactionDetailDialog(
     val tx = result.transaction
     val isVoid = tx.isVoid
     val hasReturn = tx.hasReturn
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Detail Transaksi") },
@@ -1508,7 +1705,6 @@ private fun TransactionDetailDialog(
                     }
                     Spacer(Modifier.height(6.dp))
                 }
-
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         tx.id,
@@ -1536,7 +1732,6 @@ private fun TransactionDetailDialog(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-
                 Spacer(Modifier.height(8.dp))
                 ReceiptActionsRow(
                     onPrint = onPrint,
@@ -1544,13 +1739,11 @@ private fun TransactionDetailDialog(
                     onShare = onShare,
                     printEnabled = printUiState !is PrintUiState.Printing,
                 )
-
                 ReprintResultBanner(
                     printUiState = printUiState,
                     onSharePdfFile = onSharePdfFile,
                     onNavigateToSettings = onNavigateToSettings,
                 )
-
                 if (!isVoid) {
                     Spacer(Modifier.height(8.dp))
                     Row(
@@ -1575,11 +1768,9 @@ private fun TransactionDetailDialog(
                         }
                     }
                 }
-
                 Spacer(Modifier.height(10.dp))
                 Text("Item", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
-
                 result.items.forEach { item ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1608,16 +1799,13 @@ private fun TransactionDetailDialog(
                         )
                     }
                 }
-
                 Spacer(Modifier.height(6.dp))
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
-
                 SummaryLine("Subtotal", tx.subtotal.toRupiah())
                 tx.discountRowLabel()?.let { label ->
                     SummaryLine(label, "- ${tx.discount.toRupiah()}")
                 }
                 if (tx.tax > 0) SummaryLine("Pajak", tx.tax.toRupiah())
-
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Total", tx.total.toRupiah(), emphasize = true)
                 SummaryLine("Bayar", tx.paidAmount.toRupiah())
@@ -1645,10 +1833,8 @@ private fun TransactionDetailDialog(
                         }
                     }
                 }
-
                 Spacer(Modifier.height(8.dp))
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
-
                 SummaryLine("Metode Bayar", paymentMethodLabel(tx.paymentMethod))
                 SummaryLine("Kasir", tx.cashierName.ifBlank { "Tanpa kasir" })
                 tx.shiftId?.let { id ->
@@ -1661,7 +1847,6 @@ private fun TransactionDetailDialog(
         },
     )
 }
-
 @Composable
 private fun ReprintResultBanner(
     printUiState: PrintUiState,
@@ -1677,16 +1862,13 @@ private fun ReprintResultBanner(
             is ReceiptPrintOutcome.Failed -> {
                 val printerCount = outcome.attempts.size
                 val reason = outcome.attempts.firstOrNull()?.message ?: ""
-                
                 if (reason.contains("terhubung", ignoreCase = true)) {
-                    // Kasus printer mati / diluar jangkauan
                     if (printerCount > 1) {
                         "Gagal mencetak ke semua printer. Mohon hubungkan ke perangkat" to true
                     } else {
                         "Gagal mencetak ke printer. Mohon hubungkan ke perangkat" to true
                     }
                 } else {
-                    // Kasus lain (misal kertas habis, error I/O)
                     val title = if (printerCount > 1) "Gagal mencetak ke semua printer." else "Gagal mencetak ke printer."
                     "$title\nAlasan: $reason" to true
                 }
@@ -1694,7 +1876,6 @@ private fun ReprintResultBanner(
             ReceiptPrintOutcome.NoPrinterConfigured -> "Printer belum diatur." to true
             ReceiptPrintOutcome.AlreadyInProgress -> "Sedang mencetak, mohon tunggu..." to false
         }
-
     Spacer(Modifier.height(6.dp))
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -1729,7 +1910,6 @@ private fun ReprintResultBanner(
         }
     }
 }
-
 @Composable
 private fun VoidConfirmDialog(
     invoiceId: String,
@@ -1755,7 +1935,6 @@ private fun VoidConfirmDialog(
         },
     )
 }
-
 private data class ReturnRowState(
     val transactionItemId: Long,
     val productId: Long?,
@@ -1766,7 +1945,6 @@ private data class ReturnRowState(
     val quantity: Double = maxQuantity,
     val restocked: Boolean = productId != null,
 )
-
 @Composable
 private fun ReturnItemDialog(
     result: CheckoutResult,
@@ -1776,7 +1954,6 @@ private fun ReturnItemDialog(
     onSubmit: (items: List<ReturnItemInput>, refundAmount: Long, refundMethod: PaymentMethod, note: String) -> Unit,
 ) {
     val tx = result.transaction
-
     var rows by remember(tx.id) {
         mutableStateOf(
             result.items.map { item ->
@@ -1790,30 +1967,24 @@ private fun ReturnItemDialog(
             },
         )
     }
-
     val suggestedRefund = rows.filter { it.included }.sumOf { kotlin.math.round(it.unitPrice * it.quantity).toLong() }
-
     var refundAmountEdited by remember(tx.id) { mutableStateOf(false) }
     var refundAmountText by remember(tx.id) { mutableStateOf("") }
-
     LaunchedEffect(suggestedRefund) {
         if (!refundAmountEdited) {
             refundAmountText = if (suggestedRefund <= 0L) "" else suggestedRefund.toString()
         }
     }
-
     var refundMethod by remember(tx.id) {
         mutableStateOf(
             if (tx.paymentMethod == PaymentMethod.QRIS.name) PaymentMethod.QRIS else PaymentMethod.CASH,
         )
     }
     var note by remember(tx.id) { mutableStateOf("") }
-
     val includedCount = rows.count { it.included }
     val maxRefundable = tx.total
     val refundAmountValue = refundAmountText.toLongOrNull() ?: 0L
     val isRefundOverLimit = refundAmountValue > maxRefundable
-
     AlertDialog(
         onDismissRequest = { if (!submitting) onDismiss() },
         title = { Text("Retur Item") },
@@ -1850,21 +2021,18 @@ private fun ReturnItemDialog(
                     }
                     Spacer(Modifier.height(6.dp))
                 }
-
                 Text(
                     "Transaksi ${tx.id}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
                 Spacer(Modifier.height(6.dp))
-
                 Text(
                     "Pilih item yang dikembalikan pelanggan:",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 )
                 Spacer(Modifier.height(4.dp))
-
                 rows.forEachIndexed { index, row ->
                     ReturnItemRow(
                         row = row,
@@ -1889,12 +2057,10 @@ private fun ReturnItemDialog(
                     )
                     HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 }
-
                 Spacer(Modifier.height(8.dp))
                 Text("Metode Pengembalian", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 RefundMethodToggle(selected = refundMethod, onSelect = { refundMethod = it })
-
                 Spacer(Modifier.height(10.dp))
                 Text("Nominal Pengembalian", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
@@ -1919,7 +2085,6 @@ private fun ReturnItemDialog(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                     )
                 }
-
                 Spacer(Modifier.height(10.dp))
                 Text("Catatan (opsional)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
@@ -1963,7 +2128,6 @@ private fun ReturnItemDialog(
         },
     )
 }
-
 @Composable
 private fun ReturnItemRow(
     row: ReturnRowState,
@@ -1993,13 +2157,14 @@ private fun ReturnItemRow(
                 modifier = Modifier.fillMaxWidth().padding(start = 40.dp, top = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                MiniStepper(
-                    qty = row.quantity,
-                    canDecrease = row.quantity > 1.0,
-                    canIncrease = row.quantity < row.maxQuantity,
-                    onDecrease = { onQuantityChange(row.quantity - 1.0) },
-                    onIncrease = { onQuantityChange(row.quantity + 1.0) },
-                )
+val step = if (row.maxQuantity % 1.0 == 0.0) 1.0 else 0.1
+  MiniStepper(
+      qty = row.quantity,
+      canDecrease = row.quantity > step,
+      canIncrease = row.quantity < row.maxQuantity,
+      onDecrease = { onQuantityChange((row.quantity - step).coerceAtLeast(step)) },
+      onIncrease = { onQuantityChange((row.quantity + step).coerceAtMost(row.maxQuantity)) },
+  )
                 Spacer(Modifier.width(12.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -2028,7 +2193,6 @@ private fun ReturnItemRow(
         }
     }
 }
-
 @Composable
 private fun MiniStepper(
     qty: Double,
@@ -2069,7 +2233,6 @@ private fun MiniStepper(
         }
     }
 }
-
 @Composable
 private fun RefundMethodToggle(
     selected: PaymentMethod,
@@ -2111,7 +2274,6 @@ private fun RefundMethodToggle(
         }
     }
 }
-
 @Composable
 private fun RefundAmountField(
     value: String,
@@ -2163,7 +2325,6 @@ private fun RefundAmountField(
         },
     )
 }
-
 @Composable
 private fun ClosedShiftRow(
     shift: ShiftEntity,
@@ -2183,7 +2344,6 @@ private fun ClosedShiftRow(
             diff < 0L -> "-${(-diff).toRupiah()}"
             else -> "+${diff.toRupiah()}"
         }
-
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 12.dp,
@@ -2234,7 +2394,6 @@ private fun ClosedShiftRow(
         }
     }
 }
-
 @Composable
 private fun ClosedShiftDetailDialog(
     detail: ClosedShiftDetail,
@@ -2245,7 +2404,6 @@ private fun ClosedShiftDetailDialog(
     val expected = shift.endingCashExpected ?: summary.expectedCashInDrawer
     val actual = shift.endingCashActual ?: 0L
     val difference = shift.cashDifference ?: (actual - expected)
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Detail Tutup Shift") },
@@ -2270,7 +2428,6 @@ private fun ClosedShiftDetailDialog(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
                 }
-
                 Spacer(Modifier.height(10.dp))
                 Text("📋 Ringkasan Shift", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
@@ -2279,7 +2436,6 @@ private fun ClosedShiftDetailDialog(
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Total Pendapatan", summary.totalRevenue.toRupiah(), emphasize = true)
                 SummaryLine("Laba Kotor", summary.grossProfit.toRupiah(), color = MaterialTheme.colorScheme.primary)
-
                 Spacer(Modifier.height(14.dp))
                 Text("💵 Rekonsiliasi Laci", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
@@ -2302,7 +2458,6 @@ private fun ClosedShiftDetailDialog(
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Estimasi di Laci", expected.toRupiah(), emphasize = true)
                 SummaryLine("Kas Fisik (Aktual)", actual.toRupiah())
-
                 Spacer(Modifier.height(6.dp))
                 val diffAbs = kotlin.math.abs(difference)
                 val diffColor =
@@ -2318,7 +2473,6 @@ private fun ClosedShiftDetailDialog(
                         else -> "+${diffAbs.toRupiah()} (Uang Lebih)"
                     }
                 SummaryLine("Selisih", diffLabel, emphasize = true, color = diffColor)
-
                 if (shift.note.isNotBlank()) {
                     Spacer(Modifier.height(10.dp))
                     Text("Catatan", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
@@ -2335,7 +2489,6 @@ private fun ClosedShiftDetailDialog(
         },
     )
 }
-
 @Composable
 private fun EmptyClosedShifts() {
     Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
@@ -2355,7 +2508,6 @@ private fun EmptyClosedShifts() {
         }
     }
 }
-
 @Composable
 private fun SummaryLine(
     label: String,
@@ -2377,7 +2529,6 @@ private fun SummaryLine(
         )
     }
 }
-
 @Composable
 private fun EmptyReport() {
     Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {

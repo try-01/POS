@@ -1,5 +1,4 @@
 package com.pos.offline.util
-
 import android.content.Context
 import android.net.Uri
 import com.pos.offline.data.local.entity.ProductEntity
@@ -10,15 +9,12 @@ import org.apache.poi.ss.usermodel.WorkbookFactory
 import org.apache.poi.xssf.streaming.SXSSFWorkbook
 import java.io.IOException
 import kotlin.math.round
-
 sealed class ExcelOutcome {
     object Success : ExcelOutcome()
-
     data class Error(
         val throwable: Throwable,
     ) : ExcelOutcome()
 }
-
 data class ImportedProductRow(
     val sku: String,
     val barcode: String?,
@@ -28,86 +24,62 @@ data class ImportedProductRow(
     val cost: Long,
     val stock: Double,
 )
-
 data class ExcelImportResult(
     val rows: List<ImportedProductRow>,
     val errors: List<String>,
 )
-
 object ExcelManager {
     fun suggestedExportFileName(): String = "produk_${System.currentTimeMillis()}.xlsx"
-
     suspend fun exportProducts(
         context: Context,
         products: List<ProductEntity>,
         destinationUri: Uri,
     ): ExcelOutcome =
         withContext(Dispatchers.IO) {
-            val workbook = SXSSFWorkbook(100)
-            var outputStream: java.io.OutputStream? = null
             try {
-                val sheet = workbook.createSheet("Produk")
-                val header = sheet.createRow(0)
-                listOf("SKU", "Barcode", "Nama", "Kategori", "Harga Jual", "Modal", "Stok")
-                    .forEachIndexed { i, title ->
-                        header.createCell(i).setCellValue(title)
-                        sheet.setColumnWidth(i, 4000)
+                // SXSSFWorkbook implements AutoCloseable.
+                // Di POI 5.3.0+, workbook.close() (dipanggil otomatis oleh .use)
+                // akan menutup stream SEKALIGUS menghapus temporary files dari disk.
+                SXSSFWorkbook(100).use { workbook ->
+                    val sheet = workbook.createSheet("Produk")
+                    val header = sheet.createRow(0)
+                    listOf("SKU", "Barcode", "Nama", "Kategori", "Harga Jual", "Modal", "Stok")
+                        .forEachIndexed { i, title ->
+                            header.createCell(i).setCellValue(title)
+                            sheet.setColumnWidth(i, 4000)
+                        }
+
+                    products.forEachIndexed { idx, p ->
+                        val row = sheet.createRow(idx + 1)
+                        row.createCell(0).setCellValue(p.sku)
+                        row.createCell(1).setCellValue(p.barcode ?: "")
+                        row.createCell(2).setCellValue(p.name)
+                        row.createCell(3).setCellValue(p.category)
+                        row.createCell(4).setCellValue(p.price.toDouble())
+                        row.createCell(5).setCellValue(p.cost.toDouble())
+                        row.createCell(6).setCellValue(p.stock)
                     }
 
-                products.forEachIndexed { idx, p ->
-                    val row = sheet.createRow(idx + 1)
-                    row.createCell(0).setCellValue(p.sku)
-                    row.createCell(1).setCellValue(p.barcode ?: "")
-                    row.createCell(2).setCellValue(p.name)
-                    row.createCell(3).setCellValue(p.category)
-                    row.createCell(4).setCellValue(p.price.toDouble())
-                    row.createCell(5).setCellValue(p.cost.toDouble())
-                    row.createCell(6).setCellValue(p.stock)
+                    context.contentResolver.openOutputStream(destinationUri)?.use { outputStream ->
+                        workbook.write(outputStream)
+                        ExcelOutcome.Success
+                    } ?: ExcelOutcome.Error(IOException("Tidak bisa membuka output stream"))
                 }
-
-            outputStream = context.contentResolver.openOutputStream(destinationUri)
-            if (outputStream != null) {
-                workbook.write(outputStream)
-                ExcelOutcome.Success
-            } else {
-                ExcelOutcome.Error(IOException("Tidak bisa membuka output stream"))
-            }
-        } catch (e: Exception) {
-            ExcelOutcome.Error(e)
-        } finally {
-            // 1. Tutup output stream terlebih dahulu (pastikan file hasil ekspor ter-flush sempurna)
-            runCatching { outputStream?.close() }
-            // 2. Menutup workbook dan merilis seluruh resource internal POI
-            runCatching { workbook.close() }
+            } catch (e: Exception) {
+                ExcelOutcome.Error(e)
         }
     }
-
-    /**
-     * Membersihkan & menormalkan string angka dari berbagai gaya penulisan umum
-     * di Excel: gaya Indonesia ("8.000", "1.234,50"), gaya US ("8,000", "1234.5"),
-     * atau digit murni ("8000"). Mengembalikan null jika tidak bisa diinterpretasikan.
-     *
-     * Keterbatasan yang disengaja (heuristik umum, dipakai banyak parser serupa):
-     * jika hanya satu jenis pemisah muncul TEPAT SEKALI dan diikuti persis 3 digit
-     * (mis. "8.000"), itu diasumsikan pemisah RIBUAN, bukan desimal 3 angka di
-     * belakang koma — kasus harga dengan presisi 3 desimal sangat jarang di
-     * konteks kasir Rupiah/harga bulat.
-     */
     private fun parseFlexibleNumber(raw: String): Double? {
         val cleaned = raw.trim().filter { it.isDigit() || it == '.' || it == ',' || it == '-' }
         if (cleaned.isBlank() || cleaned == "-") return null
-
         val negative = cleaned.startsWith("-")
         val body = cleaned.removePrefix("-")
         if (body.isBlank()) return null
-
         val hasDot = body.contains('.')
         val hasComma = body.contains(',')
-
         val normalized: String =
             when {
                 hasDot && hasComma -> {
-                    // Pemisah desimal = simbol yang posisinya PALING BELAKANG.
                     val lastDot = body.lastIndexOf('.')
                     val lastComma = body.lastIndexOf(',')
                     if (lastComma > lastDot) {
@@ -121,9 +93,9 @@ object ExcelManager {
                     val digitsAfter = body.length - lastDot - 1
                     val dotCount = body.count { it == '.' }
                     if (dotCount > 1 || digitsAfter == 3) {
-                        body.replace(".", "") // pemisah ribuan
+                        body.replace(".", "") 
                     } else {
-                        body // pemisah desimal, format standar
+                        body 
                     }
                 }
                 hasComma -> {
@@ -131,18 +103,16 @@ object ExcelManager {
                     val digitsAfter = body.length - lastComma - 1
                     val commaCount = body.count { it == ',' }
                     if (commaCount > 1 || digitsAfter == 3) {
-                        body.replace(",", "") // pemisah ribuan
+                        body.replace(",", "") 
                     } else {
-                        body.replace(',', '.') // pemisah desimal
+                        body.replace(',', '.') 
                     }
                 }
                 else -> body
             }
-
         val value = normalized.toDoubleOrNull() ?: return null
         return if (negative) -value else value
     }
-
     suspend fun importProducts(
         context: Context,
         sourceUri: Uri,
@@ -154,7 +124,6 @@ object ExcelManager {
                     val fmt = DataFormatter()
                     val rows = mutableListOf<ImportedProductRow>()
                     val errors = mutableListOf<String>()
-
                     fun parseCurrency(
                         s: String,
                         field: String,
@@ -163,7 +132,6 @@ object ExcelManager {
                         require(value >= 0) { "$field bernilai negatif" }
                         return round(value).toLong()
                     }
-
                     fun parseQty(
                         s: String,
                         field: String,
@@ -172,15 +140,11 @@ object ExcelManager {
                         require(value >= 0) { "$field bernilai negatif" }
                         return value
                     }
-
                     for (i in 1..sheet.lastRowNum) {
                         val row = sheet.getRow(i) ?: continue
-
                         fun cell(c: Int) = fmt.formatCellValue(row.getCell(c)).trim()
-
                         val allBlank = (0..6).all { cell(it).isBlank() }
                         if (allBlank) continue
-
                         runCatching {
                             ImportedProductRow(
                                 sku = cell(0).also { require(it.isNotBlank()) { "SKU kosong" } },
