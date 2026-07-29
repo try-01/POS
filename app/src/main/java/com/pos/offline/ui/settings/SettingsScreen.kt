@@ -77,6 +77,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pos.offline.data.backup.BackupManager
 import com.pos.offline.data.local.entity.CashierEntity
 import com.pos.offline.ui.components.GlassCard
+import com.pos.offline.util.VibrationLevel
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -94,7 +96,7 @@ fun SettingsScreen(
     val soundVolume by viewModel.soundVolume.collectAsStateWithLifecycle()
     val soundDurationMs by viewModel.soundDurationMs.collectAsStateWithLifecycle()
     val isVibrationEnabled by viewModel.isVibrationEnabled.collectAsStateWithLifecycle()
-    val vibrationIntensity by viewModel.vibrationIntensity.collectAsStateWithLifecycle()
+    val vibrationLevel by viewModel.vibrationLevel.collectAsStateWithLifecycle()
     val vibrationDurationMs by viewModel.vibrationDurationMs.collectAsStateWithLifecycle()
     var showPrinterDialog by remember { mutableStateOf(false) }
     var showStoreProfileDialog by remember { mutableStateOf(false) }
@@ -204,22 +206,23 @@ fun SettingsScreen(
         ) {
             Spacer(Modifier.height(4.dp))
             SectionLabel("Umpan Balik Pemindai (Scanner Feedback)")
-            FuturisticFeedbackControls(
-                isSoundEnabled = isSoundEnabled,
-                soundVolume = soundVolume,
-                soundDurationMs = soundDurationMs,
-                isVibrationEnabled = isVibrationEnabled,
-                vibrationIntensity = vibrationIntensity,
-                vibrationDurationMs = vibrationDurationMs,
-                onSoundToggle = { viewModel.setSoundEnabled(it) },
-                onSoundVolumeChange = { viewModel.setSoundVolume(it) },
-                onSoundDurationChange = { viewModel.setSoundDurationMs(it) },
-                onTestSound = { viewModel.testSoundPreview() },
-                onVibrationToggle = { viewModel.setVibrationEnabled(it) },
-                onVibrationIntensityChange = { viewModel.setVibrationIntensity(it) },
-                onVibrationDurationChange = { viewModel.setVibrationDurationMs(it) },
-                onTestVibration = { viewModel.testVibrationPreview() },
-            )
+            // UBAH BAGIAN PEMANGGILAN INI:
+FuturisticFeedbackControls(
+    isSoundEnabled = isSoundEnabled,
+    soundVolume = soundVolume,
+    soundDurationMs = soundDurationMs,
+    isVibrationEnabled = isVibrationEnabled,
+    vibrationLevel = vibrationLevel, // Menggunakan vibrationLevel
+    vibrationDurationMs = vibrationDurationMs,
+    onSoundToggle = { viewModel.setSoundEnabled(it) },
+    onSoundVolumeChange = { viewModel.setSoundVolume(it) },
+    onSoundDurationChange = { viewModel.setSoundDurationMs(it) },
+    onTestSound = { viewModel.testSoundPreview() },
+    onVibrationToggle = { viewModel.setVibrationEnabled(it) },
+    onVibrationLevelChange = { viewModel.setVibrationLevel(it) }, // Menggunakan setVibrationLevel
+    onVibrationDurationChange = { viewModel.setVibrationDurationMs(it) },
+    onTestVibration = { viewModel.testVibrationPreview() },
+)
             SectionLabel("Cadangkan & Pulihkan")
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -588,7 +591,6 @@ private fun FuturisticFeedbackControls(
         }
     }
 }
-
 @Composable
 private fun FeedbackSectionCard(
     icon: ImageVector,
