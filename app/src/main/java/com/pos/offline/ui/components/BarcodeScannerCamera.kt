@@ -1,8 +1,6 @@
 package com.pos.offline.ui.components
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.util.Size
 import androidx.activity.compose.BackHandler
 import androidx.camera.core.CameraSelector
@@ -13,6 +11,10 @@ import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -88,6 +90,7 @@ import com.pos.offline.util.ScanFeedbackManager
 import com.pos.offline.util.ScanPreferencesRepository
 import com.pos.offline.util.openAppSettings
 import com.pos.offline.util.rememberCameraPermissionState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 
@@ -129,7 +132,6 @@ fun BarcodeScannerCamera(
         val previewView = previewViewRef ?: return
 
         try {
-            // Guard: Mencegah RejectedExecutionException jika executor sudah shutdown
             if (executor.isShutdown) return
 
             val resolutionStrategy = ResolutionStrategy(
@@ -169,7 +171,6 @@ fun BarcodeScannerCamera(
                             val imgW = if (isRotated) proxy.height.toFloat() else proxy.width.toFloat()
                             val imgH = if (isRotated) proxy.width.toFloat() else proxy.height.toFloat()
 
-                            // Filter ROI: Hanya memproses barcode yang 100% berada di dalam bingkai tengah
                             val targetBarcode = barcodes.firstOrNull { barcode ->
                                 val raw = barcode.rawValue
                                 if (raw.isNullOrBlank()) return@firstOrNull false
@@ -181,7 +182,6 @@ fun BarcodeScannerCamera(
                                 val normTop = rect.top / imgH
                                 val normBottom = rect.bottom / imgH
 
-                                // Batas presisi bingkai tengah (X: 12.5% - 87.5%, Y: 32.5% - 67.5%)
                                 normLeft >= 0.125f && normRight <= 0.875f &&
                                         normTop >= 0.325f && normBottom <= 0.675f
                             }
@@ -190,12 +190,12 @@ fun BarcodeScannerCamera(
                                 val currentTime = System.currentTimeMillis()
 
                                 val isSameCode = (code == lastScannedCode)
-                                val isTimeElapsed = (currentTime - lastScannedTime) > 1200L
+                                val isTimeElapsed = (currentTime - lastScannedTime) > 1500L
 
                                 if (!isSameCode || isTimeElapsed) {
                                     lastScannedCode = code
                                     lastScannedTime = currentTime
-                                    
+
                                     coroutineScope.launch {
                                         onBarcodeScanned(code)
                                     }
@@ -206,7 +206,6 @@ fun BarcodeScannerCamera(
                             proxy.close()
                         }
                 } catch (e: Exception) {
-                    // WAJIB: Tutup proxy jika terjadi exception saat membungkus frame
                     proxy.close()
                 }
             }
@@ -225,12 +224,10 @@ fun BarcodeScannerCamera(
     }
 
     DisposableEffect(Unit) {
-        // DEFENSIVE FIX: Reset total state cooldown saat sesi kamera baru dibuka
         lastScannedCode = null
         lastScannedTime = 0L
 
         onDispose {
-            // Reset kembali saat kamera ditutup
             lastScannedCode = null
             lastScannedTime = 0L
             cameraProvider?.unbindAll()
@@ -244,7 +241,6 @@ fun BarcodeScannerCamera(
             modifier = Modifier.fillMaxSize(),
             factory = { c: Context ->
                 val previewView = PreviewView(c).apply {
-                    // Mode COMPATIBLE (TextureView) menghilangkan lag & kedipan saat kamera dibuka
                     implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                 }
                 previewViewRef = previewView
@@ -261,7 +257,6 @@ fun BarcodeScannerCamera(
             },
         )
 
-        // Bingkai Kotak Pembidik
         ScannerViewfinder(modifier = Modifier.fillMaxSize())
 
         cameraError?.let { message ->
@@ -312,12 +307,24 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
     var isMultiScanMode by remember { mutableStateOf(false) }
     var scannedCountBatch by remember { mutableIntStateOf(0) }
     var lastScannedCodeText by remember { mutableStateOf("") }
+    
+    // DEKLARASI STATE ERROR DI PALING ATAS
+    var scanErrorMessage by remember { mutableStateOf<String?>(null) }
+
+    // Timer Auto-Dismiss untuk Pesan Error (Hilang otomatis setelah 2.5 detik)
+    LaunchedEffect(scanErrorMessage) {
+        if (scanErrorMessage != null) {
+            delay(2500L)
+            scanErrorMessage = null
+        }
+    }
 
     LaunchedEffect(showScanner) {
         if (showScanner) {
-            isMultiScanMode = false 
-            scannedCountBatch = 0   
-            lastScannedCodeText = "" 
+            isMultiScanMode = false
+            scannedCountBatch = 0
+            lastScannedCodeText = ""
+            scanErrorMessage = null
         }
     }
 
@@ -378,9 +385,7 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
         )
     }
 
-    // ARSITEKTUR BOX OVERLAY FULLSCREEN: Bebas dari Bug Overlap Navigation Bar
     if (showScanner) {
-        // Tombol Back / Swipe Gesture HP otomatis menutup layar kamera
         BackHandler { showScanner = false }
 
         Box(
@@ -388,51 +393,50 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                 .fillMaxSize()
                 .background(Color.Black)
         ) {
-BarcodeScannerCamera(
-    isMultiScanMode = isMultiScanMode,
-    onBarcodeScanned = { code ->
-        val isSuccess = onScannedState.value(code)
+            BarcodeScannerCamera(
+                isMultiScanMode = isMultiScanMode,
+                onBarcodeScanned = { code ->
+                    val isSuccess = onScannedState.value(code)
 
-        if (isSuccess) {
-            scanErrorMessage = null
+                    if (isSuccess) {
+                        scanErrorMessage = null
 
-            // Feedback BERHASIL (Suara Bip Tinggi + Getar Terpilih)
-            feedbackManager.triggerSuccessFeedback(
-                soundEnabled = isSoundEnabled,
-                soundVolume = soundVolume,
-                soundDurationMs = soundDurationMs,
-                vibrationEnabled = isVibrationEnabled,
-                vibrationIntensity = vibrationIntensity,
-                vibrationDurationMs = vibrationDurationMs
+                        feedbackManager.triggerSuccessFeedback(
+                            soundEnabled = isSoundEnabled,
+                            soundVolume = soundVolume,
+                            soundDurationMs = soundDurationMs,
+                            vibrationEnabled = isVibrationEnabled,
+                            vibrationIntensity = vibrationIntensity,
+                            vibrationDurationMs = vibrationDurationMs
+                        )
+
+                        scannedCountBatch++
+                        lastScannedCodeText = code
+
+                        if (!isMultiScanMode) {
+                            showScanner = false
+                        }
+                    } else {
+                        scanErrorMessage = "Produk tidak ditemukan ($code)"
+
+                        feedbackManager.triggerFailureFeedback(
+                            soundEnabled = isSoundEnabled,
+                            soundVolume = soundVolume,
+                            vibrationEnabled = isVibrationEnabled,
+                            vibrationIntensity = vibrationIntensity
+                        )
+                    }
+
+                    isSuccess
+                },
+                modifier = Modifier.fillMaxSize(),
             )
 
-            scannedCountBatch++
-            lastScannedCodeText = code
-
-            if (!isMultiScanMode) {
-                showScanner = false
-            }
-        } else {
-            // Tampilkan Banner Merah Error di Kamera
-            scanErrorMessage = "Produk tidak ditemukan ($code)"
-
-            // Feedback GAGAL (Suara Tet-Tet Error + Getar Peringatan)
-            feedbackManager.triggerFailureFeedback(
-                soundEnabled = isSoundEnabled,
-                soundVolume = soundVolume,
-                vibrationEnabled = isVibrationEnabled,
-                vibrationIntensity = vibrationIntensity
-            )
-        }
-
-        isSuccess
-    },
-    modifier = Modifier.fillMaxSize(),
-)
-
-            // TOP FLOATING BANNER: Indikator Jumlah Item Masuk Keranjang (Jelas Terlihat Kasir)
+            // TOP FLOATING BANNER 1: Indikator Berhasil Masuk Keranjang (Hijau/Primary)
             AnimatedVisibility(
-                visible = scannedCountBatch > 0,
+                visible = scannedCountBatch > 0 && scanErrorMessage == null,
+                enter = fadeIn() + slideInVertically(),
+                exit = fadeOut() + slideOutVertically(),
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .statusBarsPadding()
@@ -464,6 +468,43 @@ BarcodeScannerCamera(
                 }
             }
 
+            // TOP FLOATING BANNER 2: Indikator PRODUK TIDAK DITEMUKAN (Merah Menyala)
+            AnimatedVisibility(
+                visible = scanErrorMessage != null,
+                enter = fadeIn() + slideInVertically(),
+                exit = fadeOut() + slideOutVertically(),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(start = 16.dp, top = 12.dp, end = 60.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    tonalElevation = 8.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = scanErrorMessage ?: "",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
             // Tombol Tutup Kamera Atas
             IconButton(
                 onClick = { showScanner = false },
@@ -475,13 +516,13 @@ BarcodeScannerCamera(
                 Icon(Icons.Rounded.Close, contentDescription = "Tutup", tint = Color.White)
             }
 
-            // BOTTOM CARD: Dijamin 100% Mengambang Bebas di Atas Tombol Navigasi Sistem
+            // BOTTOM CARD: Kontrol Mode Multi-Scan & Info Item
             Card(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
-                    .navigationBarsPadding() // Murni Native 100% Akurat di Semua Merk HP
+                    .navigationBarsPadding()
                     .padding(bottom = 12.dp, top = 4.dp),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(
@@ -587,7 +628,7 @@ BarcodeScannerCamera(
 }
 
 /**
- * KOMPONEN 3: Gambar Kotak Pembidik (Viewfinder) - Enterprise Zero-GC Allocation
+ * KOMPONEN 3: Gambar Kotak Pembidik (Viewfinder)
  */
 @Composable
 private fun ScannerViewfinder(modifier: Modifier = Modifier) {
@@ -623,10 +664,8 @@ private fun ScannerViewfinder(modifier: Modifier = Modifier) {
 
             onDrawWithContent {
                 drawContent()
-                // Redupkan layar di luar bingkai
                 drawPath(dimmedPath, Color.Black.copy(alpha = 0.55f))
 
-                // Gambar garis bingkai putih di tengah
                 drawRoundRect(
                     color = Color.White,
                     topLeft = boxOffset,
