@@ -159,6 +159,21 @@ fun ReportScreen(
     var pendingVoidConfirm by remember { mutableStateOf(false) }
     var voidBanner by remember { mutableStateOf<ReportMessage?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val productHistoryQuery by viewModel.productHistoryQuery.collectAsStateWithLifecycle()
+    val productHistoryHierarchy by viewModel.productHistoryHierarchy.collectAsStateWithLifecycle()
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showDirectWarrantyDialog by remember { mutableStateOf(false) }
+    // 1. Inisialisasi fungsi pembuka scanner
+    val openScanner = rememberBarcodeScanner { scannedCode ->
+    // Logika ketika barcode berhasil terbaca oleh kamera:
+    // Kirim kode barcode ke ViewModel untuk dicari
+        val isFound = viewModel.searchByBarcode(scannedCode)
+    
+    // Kembalikan nilai Boolean:
+    // - true: Hasil ditemukan (sistem akan mentrigger feedback SUKSES)
+    // - false: Hasil tidak ditemukan (sistem akan mentrigger feedback GAGAL)
+        isFound 
+    }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg ->
@@ -175,8 +190,6 @@ fun ReportScreen(
             voidBanner = null
         }
     }
-    var showDatePicker by remember { mutableStateOf(false) }
-
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -200,6 +213,39 @@ fun ReportScreen(
         ) {
             DatePicker(state = datePickerState)
         }
+    }
+
+    // === 2. TAMBAHKAN DIALOG GARANSI DIRECT DI SINI ===
+    if (showDirectWarrantyDialog) {
+        AlertDialog(
+            onDismissRequest = { showDirectWarrantyDialog = false },
+            title = { 
+                Text("Klaim Garansi Direct", fontWeight = FontWeight.Bold, fontSize = 15.sp) 
+            },
+            text = {
+                Text(
+                    "Fitur ini digunakan jika pembeli kehilangan struk. " +
+                    "Sistem akan membuat ID Transaksi Garansi Sintetis " +
+                    "agar stok pengganti terpotong, barang rusak tercatat, dan laci kasir tetap balance.",
+                    fontSize = 12.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDirectWarrantyDialog = false
+                        // Panggil logika/fitur proses garansi kamu di sini
+                    }
+                ) {
+                    Text("Proses Garansi Direct", fontSize = 13.sp)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showDirectWarrantyDialog = false }) {
+                    Text("Batal", fontSize = 13.sp)
+                }
+            }
+        )
     }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -241,26 +287,89 @@ fun ReportScreen(
             contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // === ITEM 1: BAR PENCARIAN NOMOR STRUK BAWAAN KODE-MU ===
             item(key = "invoice_search_bar") {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = viewModel::searchInvoice,
-                    placeholder = { Text("Cari No. Struk (misal INV-...) lintas tanggal…", fontSize = 12.sp) },
-                    leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.searchInvoice("") }) {
-                                Icon(Icons.Rounded.Close, contentDescription = "Hapus", modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
+OutlinedTextField(
+    value = productHistoryQuery,
+    onValueChange = { viewModel.searchProductHistory(it) },
+    placeholder = { Text("Ketik nama produk, barcode, atau SKU...", fontSize = 12.sp) },
+    leadingIcon = {
+        Icon(Icons.Rounded.Search, contentDescription = null)
+    },
+    trailingIcon = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Tombol Hapus Teks (jika ada teks)
+            if (productHistoryQuery.isNotEmpty()) {
+                IconButton(onClick = { viewModel.searchProductHistory("") }) {
+                    Icon(Icons.Rounded.Close, contentDescription = "Hapus", modifier = Modifier.size(16.dp))
+                }
+            }
+            
+            // TOMBOL SCAN BARCODE (Memanggil kamera)
+            IconButton(onClick = { openScanner() }) {
+                Icon(
+                    Icons.Rounded.QrCodeScanner, 
+                    contentDescription = "Scan Barcode",
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
+        }
+    },
+    singleLine = true,
+    modifier = Modifier.fillMaxWidth()
+)
+            }
 
+            // === ITEM 2 (BARU): TOMBOL KLAIM GARANSI DIRECT ===
+            item(key = "direct_warranty_button") {
+                OutlinedButton(
+                    onClick = { showDirectWarrantyDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Icon(Icons.Rounded.Build, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Klaim Garansi Direct (Tanpa Struk / Hilang)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+
+            // === ITEM 3 (BARU): HASIL PENCARIAN HIRARKI PRODUK (BULAN -> TANGGAL -> STRUK) ===
+            if (productHistoryQuery.isNotBlank()) {
+                item(key = "product_history_header") {
+                    Text(
+                        "Hasil Pencarian Produk Lintas 1 Tahun",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                if (productHistoryHierarchy.isEmpty()) {
+                    item(key = "product_history_empty") {
+                        Text(
+                            "Tidak ada transaksi produk \"$productHistoryQuery\" dalam 365 hari terakhir.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                } else {
+                    item(key = "product_history_list") {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            productHistoryHierarchy.forEach { monthGroup ->
+                                MonthGroupCard(
+                                    monthGroup = monthGroup,
+                                    onTransactionClick = { txId -> viewModel.openTransactionDetail(txId) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // === PENCARIAN NOMOR STRUK LINTAS TANGGAL BAWAAN KODE-MU ===
             if (searchQuery.isNotBlank()) {
                 item(key = "search_result_header") {
                     Text(
@@ -287,7 +396,8 @@ fun ReportScreen(
                         )
                     }
                 }
-            } else {
+            } else if (productHistoryQuery.isBlank()) {
+                // Tampilkan DateNavigator & Laporan Harian hanya jika semua pencarian kosong
                 item(key = "date_navigator") {
                     DateNavigator(
                         label = selectedDate.format(ReportViewModel.dateFmt),
@@ -2591,6 +2701,84 @@ private fun EmptyReport() {
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             )
+        }
+    }
+}
+
+@Composable
+private fun MonthGroupCard(
+    monthGroup: MonthSalesGroup,
+    onTransactionClick: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(true) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            // Level 1: Bulan
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "📅 ${monthGroup.yearMonth}",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${monthGroup.totalTransactions} Transaksi >",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            // Level 2 & 3: Tanggal & Transaksi
+            if (expanded) {
+                Spacer(Modifier.height(6.dp))
+                monthGroup.days.forEach { dayGroup ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 8.dp, top = 4.dp)
+                    ) {
+                        Text(
+                            text = "📌 Tanggal ${dayGroup.date}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+
+                        dayGroup.transactions.forEach { tx ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onTransactionClick(tx.id) }
+                                    .padding(vertical = 4.dp, horizontal = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Struk #${tx.id.takeLast(6)}",
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    text = tx.total.toRupiah(),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
