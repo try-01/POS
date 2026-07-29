@@ -3,7 +3,6 @@ package com.pos.offline.data.local.dao
 import androidx.room.Dao
 import androidx.room.Query
 import com.pos.offline.data.local.entity.ProductEntity
-import com.pos.offline.data.local.entity.TransactionEntity // PERBAIKAN: Import TransactionEntity ditambahkan
 import kotlinx.coroutines.flow.Flow
 
 data class SalesSummary(
@@ -35,6 +34,9 @@ data class ProductSalesRow(
 
 @Dao
 interface ReportDao {
+    // PERBAIKAN: Perhitungan actualReceivedSum menggunakan CASE
+    // CASH = paidAmount - changeGiven (penerimaan kas bersih)
+    // QRIS/Lainnya = total (penerimaan sesuai total belanja)
     @Query("""
         SELECT COUNT(*) as transactionCount, 
                COALESCE(SUM(subtotal), 0) as subtotalSum,
@@ -50,6 +52,7 @@ interface ReportDao {
     """)
     suspend fun getSalesSummary(start: Long, end: Long): SalesSummary
 
+    // PERBAIKAN Temuan 9: revenueSum menggunakan lineTotal yang sudah memperhitungkan diskon
     @Query("""
         SELECT COALESCE(SUM(ti.quantity), 0) as itemsSoldSum,
                COALESCE(SUM(ti.lineTotal), 0) as revenueSum,
@@ -68,6 +71,7 @@ interface ReportDao {
     """)
     suspend fun getRestockedReturnsCost(start: Long, end: Long): Long
 
+    // PERBAIKAN: Perhitungan actualReceived per metode pembayaran
     @Query("""
         SELECT paymentMethod, 
                COALESCE(SUM(total), 0) as total, 
@@ -115,37 +119,39 @@ interface ReportDao {
     """)
     fun observeProductsByTopSales(start: Long, end: Long): Flow<List<ProductEntity>>
 
-    @Query("""
-        SELECT DISTINCT t.* 
-        FROM transactions t
-        INNER JOIN transaction_items ti ON t.id = ti.transactionId
-        WHERE (ti.productName LIKE '%' || :query || '%' 
-           OR ti.productId = :productId 
-           OR t.id LIKE '%' || :query || '%')
-          AND t.status = 'COMPLETED'
-        ORDER BY t.createdAt DESC
-        LIMIT 50
-    """)
-    suspend fun searchTransactionsByProduct(query: String, productId: Long? = null): List<TransactionEntity>
+    // Tambahkan query ini di ReportDao.kt
+@Query("""
+    SELECT DISTINCT t.* 
+    FROM transactions t
+    INNER JOIN transaction_items ti ON t.id = ti.transactionId
+    WHERE (ti.productName LIKE '%' || :query || '%' 
+       OR ti.productId = :productId 
+       OR t.id LIKE '%' || :query || '%')
+      AND t.status = 'COMPLETED'
+    ORDER BY t.createdAt DESC
+    LIMIT 50
+""")
+suspend fun searchTransactionsByProduct(query: String, productId: Long? = null): List<TransactionEntity>
 
-    @Query("""
-        SELECT DISTINCT t.*
-        FROM transactions t
-        INNER JOIN transaction_items ti ON t.id = ti.transactionId
-        LEFT JOIN products p ON ti.productId = p.id
-        WHERE t.createdAt >= :oneYearAgoMillis
-          AND t.status = 'COMPLETED'
-          AND (
-              ti.productName LIKE '%' || :query || '%'
-              OR p.name LIKE '%' || :query || '%'
-              OR p.sku LIKE '%' || :query || '%'
-              OR p.category LIKE '%' || :query || '%'
-              OR p.barcode = :query
-          )
-        ORDER BY t.createdAt DESC
-    """)
-    suspend fun searchProductSalesHistory1Year(
-        query: String,
-        oneYearAgoMillis: Long
-    ): List<TransactionEntity>
+// Tambahkan di ReportDao.kt
+@Query("""
+    SELECT DISTINCT t.*
+    FROM transactions t
+    INNER JOIN transaction_items ti ON t.id = ti.transactionId
+    LEFT JOIN products p ON ti.productId = p.id
+    WHERE t.createdAt >= :oneYearAgoMillis
+      AND t.status = 'COMPLETED'
+      AND (
+          ti.productName LIKE '%' || :query || '%'
+          OR p.name LIKE '%' || :query || '%'
+          OR p.sku LIKE '%' || :query || '%'
+          OR p.category LIKE '%' || :query || '%'
+          OR p.barcode = :query
+      )
+    ORDER BY t.createdAt DESC
+""")
+suspend fun searchProductSalesHistory1Year(
+    query: String,
+    oneYearAgoMillis: Long
+): List<TransactionEntity>
 }
