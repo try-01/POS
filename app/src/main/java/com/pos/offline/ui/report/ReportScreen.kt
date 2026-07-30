@@ -5,6 +5,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -287,59 +288,38 @@ val openScanner = rememberBarcodeScanner { scannedCode ->
             contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-// === ITEM 1: BAR PENCARIAN UNIFIKASI (STRUK & PRODUK 1 TAHUN) ===
-item(key = "unified_search_bar") {
-    OutlinedTextField(
-        value = productHistoryQuery,
-        onValueChange = { query ->
-            viewModel.searchProductHistory(query)
-            viewModel.searchInvoice(query)
-        },
-        placeholder = { Text("Cari produk, barcode, SKU, atau No. Struk (INV-)...", fontSize = 12.sp) },
-        leadingIcon = {
-            Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
-        },
-        trailingIcon = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (productHistoryQuery.isNotEmpty()) {
-                    IconButton(
-                        onClick = {
-                            viewModel.searchProductHistory("")
-                            viewModel.searchInvoice("")
-                        }
-                    ) {
-                        Icon(Icons.Rounded.Close, contentDescription = "Hapus", modifier = Modifier.size(16.dp))
-                    }
-                }
-                IconButton(onClick = { openScanner() }) {
-                    Icon(
-                        Icons.Rounded.QrCodeScanner, 
-                        contentDescription = "Scan Barcode",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        },
-        singleLine = true,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
-    )
-}
-
-// === ITEM 2: TOMBOL KLAIM GARANSI DIRECT ===
-item(key = "direct_warranty_button") {
-    OutlinedButton(
-        onClick = { showDirectWarrantyDialog = true },
+// === ITEM 1: BAR PENCARIAN UNIFIKASI & ACTION BUTTONS ===
+item(key = "unified_search_actions") {
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
-        colors = ButtonDefaults.outlinedButtonColors(
-            contentColor = MaterialTheme.colorScheme.error
-        )
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Rounded.Build, contentDescription = null, modifier = Modifier.size(16.dp))
-        Spacer(Modifier.width(8.dp))
-        Text("Klaim Garansi Direct (Tanpa Struk / Hilang)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        // Search Bar dengan tinggi 34.dp (Sama seperti di Inventory)
+        CompactReportSearchBar(
+            query = productHistoryQuery,
+            onQueryChange = { query ->
+                viewModel.searchProductHistory(query)
+                viewModel.searchInvoice(query)
+            },
+            modifier = Modifier.weight(1f).height(34.dp)
+        )
+        Spacer(Modifier.width(6.dp))
+        
+        // Tombol Scan Barcode
+        CompactSquareIconButton(
+            icon = Icons.Rounded.QrCodeScanner,
+            contentDescription = "Scan Barcode",
+            onClick = { openScanner() }
+        )
+        Spacer(Modifier.width(6.dp))
+        
+        // Tombol Klaim Garansi Direct (Menggunakan Icon Build/Kunci Inggris)
+        CompactSquareIconButton(
+            icon = Icons.Rounded.Build,
+            contentDescription = "Klaim Garansi Direct",
+            onClick = { showDirectWarrantyDialog = true },
+            isError = true // Membuat warnanya menjadi merah agar mencolok
+        )
     }
 }
 
@@ -430,8 +410,11 @@ item(key = "sales_report_generator") {
             val context = LocalContext.current
 
             GlassCard(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                contentPadding = PaddingValues(12.dp)
+                 modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                 .animateContentSize(),
+            contentPadding = PaddingValues(12.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
@@ -733,7 +716,10 @@ private fun SalesReportResultCard(
     onExportPdf: () -> Unit,
 ) {
     GlassCard(
-        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp)
+            .animateContentSize(),
         contentPadding = PaddingValues(12.dp),
     ) {
         when (uiState) {
@@ -2799,5 +2785,97 @@ private fun MonthGroupCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CompactReportSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BasicTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 13.sp,
+        ),
+        modifier = modifier,
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Rounded.Search,
+                    contentDescription = "Cari",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Box(Modifier.weight(1f)) {
+                    if (query.isEmpty()) {
+                        Text(
+                            text = "Cari struk / produk...",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    innerTextField()
+                }
+                if (query.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clip(CircleShape)
+                            .clickable { onQueryChange("") },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = "Hapus pencarian",
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun CompactSquareIconButton(
+    icon: ImageVector,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    isError: Boolean = false
+) {
+    // Jika isError true, icon akan berwarna merah (untuk garansi). Jika tidak, warna primary.
+    val color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    val borderColor = if (isError) MaterialTheme.colorScheme.error.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant
+    
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(16.dp),
+            tint = color,
+        )
     }
 }
