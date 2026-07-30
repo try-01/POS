@@ -661,7 +661,6 @@ item(key = "sales_report_generator") {
         )
     }
 }
-}
 
 @Composable
 private fun ReportPeriodToggleRow(
