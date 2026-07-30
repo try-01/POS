@@ -6,6 +6,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -413,7 +415,12 @@ item(key = "sales_report_generator") {
                  modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
-                 .animateContentSize(),
+                 .animateContentSize(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessLow // Membuat animasi sedikit lebih lambat dan halus
+                    )
+                 ),
             contentPadding = PaddingValues(12.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -719,7 +726,12 @@ private fun SalesReportResultCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 4.dp)
-            .animateContentSize(),
+            ..animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            ),
         contentPadding = PaddingValues(12.dp),
     ) {
         when (uiState) {
