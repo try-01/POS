@@ -92,9 +92,9 @@ class ScanFeedbackManager(context: Context) {
 
     fun playBeep(volume: Int, durationMs: Int) {
         try {
-            if (toneGenerator == null) {
-                toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, volume.coerceIn(0, 100))
-            }
+            toneGenerator?.release()
+            val validVol = volume.coerceIn(0, 100)
+            toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, validVol)
             toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, durationMs.coerceIn(50, 300))
         } catch (e: Exception) {
             Log.e(TAG, "Error playBeep: ${e.message}")

@@ -1,11 +1,15 @@
 package com.pos.offline.data.local.dao
+
 import androidx.room.Dao
 import androidx.room.Delete
-import androidx.room.Upsert
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Upsert
 import com.pos.offline.data.local.entity.ProductEntity
 import kotlinx.coroutines.flow.Flow
+
 @Dao
 interface ProductDao {
     @Query("SELECT * FROM products WHERE active = 1 ORDER BY updatedAt DESC")
@@ -24,8 +28,6 @@ interface ProductDao {
     @Query("SELECT * FROM products WHERE id = :id")
     suspend fun getById(id: Long): ProductEntity?
 
-    // PENGGUNAAN RESMI ROOM 2.5+:
-    // Menggunakan @Upsert murni alih-alih Insert(REPLACE) agar tidak memicu CASCADE DELETE tersembunyi
     @Upsert
     suspend fun upsert(product: ProductEntity): Long
 
@@ -36,7 +38,7 @@ interface ProductDao {
         """
         UPDATE products
         SET stock = stock - :qty, updatedAt = :now
-        WHERE id = :id AND stock >= :qty
+        WHERE id = :id
         """,
     )
     suspend fun decrementStock(
@@ -83,6 +85,6 @@ interface ProductDao {
     @Query("SELECT * FROM products WHERE sku = :sku LIMIT 1")
     suspend fun getBySku(sku: String): ProductEntity?
 
-    @Upsert
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAll(products: List<ProductEntity>)
 }

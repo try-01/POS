@@ -62,7 +62,7 @@ class UsbPrinterHelper(
                     addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
                     addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
                 }
-            ContextCompat.registerReceiver(appContext, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+            ContextCompat.registerReceiver(appContext, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
             awaitClose {
                 runCatching { appContext.unregisterReceiver(receiver) }
             }

@@ -255,8 +255,29 @@ object Migrations {
     val MIGRATION_14_15 =
         object : Migration(14, 15) {
             override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("PRAGMA foreign_keys = OFF;")
             try {
+                // 1. Migrasi tabel anak (cart_items) terlebih dahulu agar Foreign Key ke products dilepas sebelum products dihapus
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `cart_items_new` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `productId` INTEGER NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `unitPrice` INTEGER NOT NULL,
+                        `quantity` REAL NOT NULL DEFAULT 1
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `cart_items_new` (`id`, `productId`, `name`, `unitPrice`, `quantity`)
+                    SELECT `id`, `productId`, `name`, `unitPrice`, CAST(`quantity` AS REAL)
+                    FROM `cart_items`
+                    """.trimIndent(),
+                )
+                db.execSQL("DROP TABLE `cart_items`")
+
+                // 2. Migrasi tabel induk (products)
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS `products_new` (
@@ -287,26 +308,8 @@ object Migrations {
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_products_barcode` ON `products` (`barcode`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_products_name` ON `products` (`name`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_products_category` ON `products` (`category`)")
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS `cart_items_new` (
-                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                        `productId` INTEGER NOT NULL,
-                        `name` TEXT NOT NULL,
-                        `unitPrice` INTEGER NOT NULL,
-                        `quantity` REAL NOT NULL DEFAULT 1,
-                        FOREIGN KEY(`productId`) REFERENCES `products`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
-                    )
-                    """.trimIndent(),
-                )
-                db.execSQL(
-                    """
-                    INSERT INTO `cart_items_new` (`id`, `productId`, `name`, `unitPrice`, `quantity`)
-                    SELECT `id`, `productId`, `name`, `unitPrice`, CAST(`quantity` AS REAL)
-                    FROM `cart_items`
-                    """.trimIndent(),
-                )
-                db.execSQL("DROP TABLE `cart_items`")
+
+                // 3. Terapkan kembali Foreign Key constraint pada cart_items
                 db.execSQL("ALTER TABLE `cart_items_new` RENAME TO `cart_items`")
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_cart_items_productId` ON `cart_items` (`productId`)")
                 db.execSQL(

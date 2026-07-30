@@ -77,7 +77,7 @@ object BackupManager {
         }
     private fun checkpointWal(context: Context) {
         val writable = PosDatabase.getInstance(context).openHelper.writableDatabase
-        writable.query("PRAGMA wal_checkpoint(FULL)").use { it.moveToFirst() }
+        writable.query("PRAGMA wal_checkpoint(TRUNCATE)").use { it.moveToFirst() }
     }
     private fun checkpointWalTruncate(context: Context) {
         val writable = PosDatabase.getInstance(context).openHelper.writableDatabase

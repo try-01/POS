@@ -29,6 +29,7 @@ import com.pos.offline.ui.receipt.ReceiptManager
 import com.pos.offline.util.PrintCoordinator
 import com.pos.offline.util.formatQuantity
 import com.pos.offline.util.toRupiah
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,6 +47,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -141,6 +143,14 @@ private data class ReportSelection(
     val includeDeadStock: Boolean,
 )
 
+sealed interface SearchUiState {
+    object Idle : SearchUiState
+    object Loading : SearchUiState
+    data class InvoiceResults(val transactions: List<TransactionEntity>) : SearchUiState
+    data class ProductHistoryResults(val hierarchy: List<MonthSalesGroup>) : SearchUiState
+    data class Empty(val query: String) : SearchUiState
+}
+
 @OptIn(ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
 class ReportViewModel(
     private val transactionRepository: TransactionRepository,
@@ -150,7 +160,6 @@ class ReportViewModel(
     private val printerRepository: PrinterRepository,
     private val reportRepository: ReportRepository,
     private val storeProfileRepository: StoreProfileRepository,
-    // PERBAIKAN 1: Menambahkan dependency productRepository & reportDao ke Constructor
     private val productRepository: ProductRepository,
     private val reportDao: ReportDao,
 ) : ViewModel() {
@@ -418,7 +427,7 @@ class ReportViewModel(
         _printUiState.value = PrintUiState.Result(outcome, result)
     }
 
-    // PERBAIKAN 2: Manajemen State Pencarian Transaksi/Struk
+    // Manajemen State Pencarian Transaksi/Struk
     private val _invoiceSearchQuery = MutableStateFlow("")
     val invoiceSearchQuery: StateFlow<String> = _invoiceSearchQuery.asStateFlow()
 
@@ -452,7 +461,7 @@ class ReportViewModel(
         }
     }
 
-    // PERBAIKAN 3: Hirarki Riwayat Penjualan Produk 1 Tahun Terakhir
+    // Hirarki Riwayat Penjualan Produk 1 Tahun Terakhir
     private val _productHistoryQuery = MutableStateFlow("")
     val productHistoryQuery: StateFlow<String> = _productHistoryQuery.asStateFlow()
 
@@ -474,7 +483,6 @@ class ReportViewModel(
 
                         val rawTransactions = reportDao.searchProductSalesHistory1Year(query.trim(), oneYearAgoMillis)
 
-                        // Grouping terstruktur: Map Entry -> DaySalesGroup -> MonthSalesGroup
                         val grouped = rawTransactions
                             .groupBy { tx ->
                                 val instant = Instant.ofEpochMilli(tx.createdAt)
@@ -503,6 +511,40 @@ class ReportViewModel(
 
     fun searchProductHistory(query: String) {
         _productHistoryQuery.value = query
+    }
+
+    // Menggabungkan state pencarian produk & invoice ke dalam 1 Flow yang reaktif
+    val searchUiState: StateFlow<SearchUiState> = combine(
+        invoiceSearchQuery,
+        productHistoryQuery,
+        searchResults,
+        productHistoryHierarchy
+    ) { invoiceQuery, productQuery, invoices, productHierarchy ->
+        val activeQuery = productQuery.ifBlank { invoiceQuery }
+        
+        when {
+            activeQuery.isBlank() -> SearchUiState.Idle
+            productQuery.isNotBlank() && productHierarchy.isNotEmpty() -> {
+                SearchUiState.ProductHistoryResults(productHierarchy)
+            }
+            invoiceQuery.isNotBlank() && invoices.isNotEmpty() -> {
+                SearchUiState.InvoiceResults(invoices)
+            }
+            else -> SearchUiState.Empty(activeQuery)
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = SearchUiState.Idle
+    )
+
+    fun buildCurrentReportLinesForExportAsync(onResult: (List<ReceiptLine>?) -> Unit) {
+        viewModelScope.launch(Dispatchers.Default) {
+            val lines = buildCurrentReportLinesForExport()
+            withContext(Dispatchers.Main) {
+                onResult(lines)
+            }
+        }
     }
 
     private val _selectedPeriodType = MutableStateFlow<ReportPeriodType?>(null)
@@ -584,12 +626,12 @@ class ReportViewModel(
     private suspend fun buildReportLines(
         periodType: ReportPeriodType,
         data: SalesReportData,
-    ): List<ReceiptLine> {
+    ): List<ReceiptLine> = withContext(Dispatchers.Default) {
         val profile = storeProfileRepository.get()
         val now = LocalDate.now(zone)
         val periodLabel = periodLabelFor(now, periodType == ReportPeriodType.MONTHLY)
         val shift = shiftRepository.getOpenShift()
-        return ReceiptManager.buildSalesReportLines(
+        ReceiptManager.buildSalesReportLines(
             data = data,
             storeProfile = profile,
             periodLabel = periodLabel,
@@ -601,9 +643,9 @@ class ReportViewModel(
         )
     }
 
-    suspend fun buildCurrentReportLinesForExport(): List<ReceiptLine>? {
-        val state = salesReportUiState.value as? SalesReportUiState.Loaded ?: return null
-        return buildReportLines(state.periodType, state.data)
+    suspend fun buildCurrentReportLinesForExport(): List<ReceiptLine>? = withContext(Dispatchers.Default) {
+        val state = salesReportUiState.value as? SalesReportUiState.Loaded ?: return@withContext null
+        buildReportLines(state.periodType, state.data)
     }
 
     private fun buildEmptyStateNote(data: SalesReportData): String? {

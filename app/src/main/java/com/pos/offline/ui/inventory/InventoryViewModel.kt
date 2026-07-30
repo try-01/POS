@@ -238,7 +238,7 @@ suspend fun onBarcodeScanned(raw: String?): Boolean {
         when {
             product == null -> {
                 _scanNotFound.value = ScanNotFoundState(sanitized)
-                true 
+                false 
             }
             product.active -> {
                 startEdit(product)

@@ -244,7 +244,7 @@ class PrinterConnectionFactory(
                         PaperStatusResult.NearEnd -> nearEndWarning = true
                         PaperStatusResult.Ok -> {}
                     }
-                    delay(2500)
+                    delay(1200)
                 }
                 val connected = connectWithTimeout(ready.connection)
                 if (!connected) {

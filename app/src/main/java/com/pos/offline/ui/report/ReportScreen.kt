@@ -148,7 +148,6 @@ fun ReportScreen(
     val report by viewModel.report.collectAsStateWithLifecycle()
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     val isToday by viewModel.isToday.collectAsStateWithLifecycle()
-    val searchQuery by viewModel.invoiceSearchQuery.collectAsStateWithLifecycle()
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
     val selectedTransaction by viewModel.selectedTransaction.collectAsStateWithLifecycle()
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
@@ -166,6 +165,7 @@ fun ReportScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val productHistoryQuery by viewModel.productHistoryQuery.collectAsStateWithLifecycle()
     val productHistoryHierarchy by viewModel.productHistoryHierarchy.collectAsStateWithLifecycle()
+    val searchUiState by viewModel.searchUiState.collectAsStateWithLifecycle()
     var showDatePicker by remember { mutableStateOf(false) }
     var showDirectWarrantyDialog by remember { mutableStateOf(false) }
 // PERBAIKAN: Panggil kedua fungsi pencarian saat barcode discan
@@ -288,11 +288,10 @@ val openScanner = rememberBarcodeScanner { scannedCode ->
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
 // === ITEM 1: BAR PENCARIAN UNIFIKASI (STRUK & PRODUK 1 TAHUN) ===
-item(key = "invoice_search_bar") {
+item(key = "unified_search_bar") {
     OutlinedTextField(
         value = productHistoryQuery,
         onValueChange = { query ->
-            // Jalankan pencarian produk 1 tahun dan nomor struk sekaligus
             viewModel.searchProductHistory(query)
             viewModel.searchInvoice(query)
         },
@@ -302,8 +301,7 @@ item(key = "invoice_search_bar") {
         },
         trailingIcon = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Tombol Hapus Teks
-                if (productHistoryQuery.isNotEmpty() || searchQuery.isNotEmpty()) {
+                if (productHistoryQuery.isNotEmpty()) {
                     IconButton(
                         onClick = {
                             viewModel.searchProductHistory("")
@@ -313,8 +311,6 @@ item(key = "invoice_search_bar") {
                         Icon(Icons.Rounded.Close, contentDescription = "Hapus", modifier = Modifier.size(16.dp))
                     }
                 }
-                
-                // TOMBOL SCAN BARCODE KAMERA
                 IconButton(onClick = { openScanner() }) {
                     Icon(
                         Icons.Rounded.QrCodeScanner, 
@@ -331,202 +327,213 @@ item(key = "invoice_search_bar") {
     )
 }
 
-            // === ITEM 2 (BARU): TOMBOL KLAIM GARANSI DIRECT ===
-            item(key = "direct_warranty_button") {
-                OutlinedButton(
-                    onClick = { showDirectWarrantyDialog = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Icon(Icons.Rounded.Build, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Klaim Garansi Direct (Tanpa Struk / Hilang)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
-            }
+// === ITEM 2: TOMBOL KLAIM GARANSI DIRECT ===
+item(key = "direct_warranty_button") {
+    OutlinedButton(
+        onClick = { showDirectWarrantyDialog = true },
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = MaterialTheme.colorScheme.error
+        )
+    ) {
+        Icon(Icons.Rounded.Build, contentDescription = null, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Klaim Garansi Direct (Tanpa Struk / Hilang)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
 
-            // === ITEM 3 (BARU): HASIL PENCARIAN HIRARKI PRODUK (BULAN -> TANGGAL -> STRUK) ===
-            if (productHistoryQuery.isNotBlank()) {
-                item(key = "product_history_header") {
+// === RENDER EKSKLUSIF MENGGUNAKAN SEALED STATE ===
+when (val state = searchUiState) {
+    is SearchUiState.ProductHistoryResults -> {
+        item(key = "product_history_header") {
+            Text(
+                "Hasil Pencarian Produk Lintas 1 Tahun",
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        items(
+            items = state.hierarchy,
+            key = { "month_${it.yearMonth}" }
+        ) { monthGroup ->
+            MonthGroupCard(
+                monthGroup = monthGroup,
+                onTransactionClick = { txId -> viewModel.openTransactionDetail(txId) }
+            )
+        }
+    }
+
+    is SearchUiState.InvoiceResults -> {
+        item(key = "invoice_search_header") {
+            Text(
+                "Hasil Pencarian Struk (${state.transactions.size})",
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        items(
+            items = state.transactions,
+            key = { "invoice_${it.id}" }
+        ) { tx ->
+            TransactionRow(
+                tx = tx,
+                onClick = { viewModel.openTransactionDetail(tx.id) }
+            )
+        }
+    }
+
+    is SearchUiState.Empty -> {
+        item(key = "search_empty_state") {
+            Text(
+                "Data \"${state.query}\" tidak ditemukan dalam 365 hari terakhir.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                modifier = Modifier.padding(vertical = 12.dp)
+            )
+        }
+    }
+
+    SearchUiState.Loading -> {
+        item(key = "search_loading") {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+            }
+        }
+    }
+
+    SearchUiState.Idle -> {
+        // TAMPILAN LAPORAN HARIAN NORMAL (Tampil saat tidak ada pencarian)
+        item(key = "date_navigator") {
+            DateNavigator(
+                label = selectedDate.format(ReportViewModel.dateFmt),
+                isToday = isToday,
+                onPrevious = viewModel::previousDay,
+                onNext = viewModel::nextDay,
+                onToday = viewModel::goToday,
+                onCalendarClick = { showDatePicker = true }
+            )
+        }
+
+item(key = "sales_report_generator") {
+            val periodType by viewModel.selectedPeriodType.collectAsStateWithLifecycle()
+            val includeSalesSummary by viewModel.includeSalesSummary.collectAsStateWithLifecycle()
+            val includeProductsSold by viewModel.includeProductsSold.collectAsStateWithLifecycle()
+            val includeDeadStock by viewModel.includeDeadStock.collectAsStateWithLifecycle()
+            val salesReportState by viewModel.salesReportUiState.collectAsStateWithLifecycle()
+            val scope = rememberCoroutineScope()
+            val context = LocalContext.current
+
+            GlassCard(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                contentPadding = PaddingValues(12.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Hasil Pencarian Produk Lintas 1 Tahun",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        "Generator Laporan Penjualan",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
                     )
-                }
-                if (productHistoryHierarchy.isEmpty()) {
-                    item(key = "product_history_empty") {
-                        Text(
-                            "Tidak ada transaksi produk \"$productHistoryQuery\" dalam 365 hari terakhir.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    }
-                } else {
-                    item(key = "product_history_list") {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            productHistoryHierarchy.forEach { monthGroup ->
-                                MonthGroupCard(
-                                    monthGroup = monthGroup,
-                                    onTransactionClick = { txId -> viewModel.openTransactionDetail(txId) }
-                                )
-                            }
+                    ReportPeriodToggleRow(
+                        selected = periodType,
+                        enabled = true,
+                        onSelect = viewModel::toggleReportPeriod
+                    )
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = includeSalesSummary,
+                                onCheckedChange = viewModel::toggleIncludeSalesSummary
+                            )
+                            Text("Ringkasan Penjualan & Keuangan", fontSize = 12.sp)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = includeProductsSold,
+                                onCheckedChange = viewModel::toggleIncludeProductsSold
+                            )
+                            Text("Daftar Produk Terjual", fontSize = 12.sp)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = includeDeadStock,
+                                onCheckedChange = viewModel::toggleIncludeDeadStock
+                            )
+                            Text("Daftar Produk Tidak Laku (Dead Stock)", fontSize = 12.sp)
                         }
                     }
-                }
-            }
-
-            // === PENCARIAN NOMOR STRUK LINTAS TANGGAL BAWAAN KODE-MU ===
-            if (searchQuery.isNotBlank()) {
-                item(key = "search_result_header") {
-                    Text(
-                        "Hasil Pencarian Lintas Tanggal (${searchResults.size})",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                if (searchResults.isEmpty()) {
-                    item(key = "search_empty") {
-                        Text(
-                            "Struk \"$searchQuery\" tidak ditemukan.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(vertical = 12.dp)
+                    if (periodType != null) {
+                        SalesReportResultCard(
+                            uiState = salesReportState,
+                            onPrint = viewModel::printSalesReport,
+                            onExportPdf = {
+                                viewModel.buildCurrentReportLinesForExportAsync { lines ->
+                                    if (lines != null) {
+                                        scope.launch {
+                                            val file = ReceiptManager.exportPdfFromLines(
+                                                context,
+                                                lines,
+                                                "Laporan_${periodType?.name}_${selectedDate}"
+                                            )
+                                            viewModel.notifyPdfExported()
+                                            onSharePdfFile(file)
+                                        }
+                                    }
+                                }
+                            }
                         )
                     }
+                }
+            }
+        }
+
+        item(key = "summary") { SummarySection(report = report) }
+
+        if (report.transactionCount > 0) {
+            item(key = "revenue_trend_chart") {
+                RevenueTrendChart(
+                    date = report.date,
+                    transactions = report.transactions.filterNot { it.isVoid },
+                    totalRevenue = report.totalRevenue,
+                    hourly = report.hourlyRevenue,
+                )
+            }
+        }
+
+        item(key = "tab_switcher") {
+            ReportTabSwitcher(selected = selectedTab, onSelect = viewModel::selectTab)
+        }
+
+        when (selectedTab) {
+            ReportTab.TRANSACTIONS -> {
+                item(key = "list_header") {
+                    Text(
+                        "Daftar Transaksi (${report.transactions.size})",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                if (report.transactions.isEmpty()) {
+                    item(key = "empty") { EmptyReport() }
                 } else {
-                    items(searchResults, key = { "search_${it.id}" }) { tx ->
+                    items(
+                        items = report.transactions,
+                        key = { it.id },
+                        contentType = { "transaction" },
+                    ) { tx ->
                         TransactionRow(
                             tx = tx,
-                            onClick = { viewModel.openTransactionDetail(tx.id) }
+                            onClick = { viewModel.openTransactionDetail(tx.id) },
                         )
                     }
                 }
-            } else if (productHistoryQuery.isBlank()) {
-                // Tampilkan DateNavigator & Laporan Harian hanya jika semua pencarian kosong
-                item(key = "date_navigator") {
-                    DateNavigator(
-                        label = selectedDate.format(ReportViewModel.dateFmt),
-                        isToday = isToday,
-                        onPrevious = viewModel::previousDay,
-                        onNext = viewModel::nextDay,
-                        onToday = viewModel::goToday,
-                        onCalendarClick = { showDatePicker = true }
-                    )
-                }
-                item(key = "sales_report_generator") {
-                    val selectedPeriodType by viewModel.selectedPeriodType.collectAsStateWithLifecycle()
-                    val salesReportUiState by viewModel.salesReportUiState.collectAsStateWithLifecycle()
-                    val includeSalesSummary by viewModel.includeSalesSummary.collectAsStateWithLifecycle()
-                    val includeProductsSold by viewModel.includeProductsSold.collectAsStateWithLifecycle()
-                    val includeDeadStock by viewModel.includeDeadStock.collectAsStateWithLifecycle()
-                    val canGenerateReport by viewModel.canGenerateReport.collectAsStateWithLifecycle()
-                    val context = LocalContext.current
-                    val scope = rememberCoroutineScope()
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Laporan Penjualan", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp), fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "Pilih bagian laporan (bisa lebih dari satu):",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = includeSalesSummary, onCheckedChange = viewModel::toggleIncludeSalesSummary)
-                            Text("Laporan Penjualan", style = MaterialTheme.typography.bodySmall)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = includeProductsSold, onCheckedChange = viewModel::toggleIncludeProductsSold)
-                            Text("Produk Terjual", style = MaterialTheme.typography.bodySmall)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = includeDeadStock, onCheckedChange = viewModel::toggleIncludeDeadStock)
-                            Text("Dead Stock (Tidak Laku)", style = MaterialTheme.typography.bodySmall)
-                        }
-                        if (!canGenerateReport) {
-                            Text(
-                                "Pilih minimal satu bagian laporan.",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        }
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            "Tampilkan periode (tap lagi untuk menutup):",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        )
-                        ReportPeriodToggleRow(
-                            selected = selectedPeriodType,
-                            enabled = canGenerateReport,
-                            onSelect = viewModel::toggleReportPeriod,
-                        )
-                        AnimatedVisibility(
-                            visible = salesReportUiState !is SalesReportUiState.Hidden,
-                            enter = fadeIn() + expandVertically(),
-                            exit = fadeOut() + shrinkVertically(),
-                        ) {
-                            SalesReportResultCard(
-                                uiState = salesReportUiState,
-                                onPrint = viewModel::printSalesReport,
-                                onExportPdf = {
-                                    scope.launch {
-                                        val lines = viewModel.buildCurrentReportLinesForExport() ?: return@launch
-                                        val isMonthly =
-                                            (salesReportUiState as? SalesReportUiState.Loaded)?.periodType == ReportPeriodType.MONTHLY
-                                        val suffix = if (isMonthly) "Bulanan" else "Harian"
-                                        val file = ReceiptManager.exportPdfFromLines(context, lines, "Laporan_$suffix")
-                                        context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))
-                                        viewModel.notifyPdfExported()
-                                    }
-                                },
-                            )
-                        }
-                    }
-                }
-                item(key = "summary") { SummarySection(report = report) }
-                if (report.transactionCount > 0) {
-                    item(key = "chart") {
-                        RevenueTrendChart(
-                            date = report.date,
-                            transactions = report.transactions.filterNot { it.isVoid },
-                            totalRevenue = report.totalRevenue,
-                            hourly = report.hourlyRevenue,
-                        )
-                    }
-                }
-                item(key = "tab_switcher") {
-                    ReportTabSwitcher(selected = selectedTab, onSelect = viewModel::selectTab)
-                }
-                when (selectedTab) {
-                    ReportTab.TRANSACTIONS -> {
-                        item(key = "list_header") {
-                            Text(
-                                "Daftar Transaksi (${report.transactions.size})",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(top = 2.dp),
-                            )
-                        }
-                        if (report.transactions.isEmpty()) {
-                            item(key = "empty") { EmptyReport() }
-                        } else {
-                            items(
-                                items = report.transactions,
-                                key = { it.id },
-                                contentType = { "transaction" },
-                            ) { tx ->
-                                TransactionRow(
-                                    tx = tx,
-                                    onClick = { viewModel.openTransactionDetail(tx.id) },
-                                )
-                            }
-                        }
-                    }
+            }
                     ReportTab.SHIFTS -> {
                         item(key = "payment_breakdown") {
                             PaymentBreakdownSection(

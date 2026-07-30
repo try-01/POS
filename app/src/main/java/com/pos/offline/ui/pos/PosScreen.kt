@@ -1887,7 +1887,7 @@ private fun DiscountField(
     onValueChange: (Double) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var text by remember(type, rawValue) {
+    var text by remember(type) {
         mutableStateOf(
             when {
                 rawValue <= 0.0 -> ""
@@ -1895,6 +1895,17 @@ private fun DiscountField(
                 else -> formatPercentTrim(rawValue)
             },
         )
+    }
+
+    LaunchedEffect(type, rawValue) {
+        val parsed = text.toDoubleOrNull() ?: 0.0
+        if (parsed != rawValue && (rawValue == 0.0 || !text.endsWith("."))) {
+            text = when {
+                rawValue <= 0.0 -> ""
+                type == DiscountType.NOMINAL -> rawValue.toLong().toString()
+                else -> formatPercentTrim(rawValue)
+            }
+        }
     }
     val isNominal = type == DiscountType.NOMINAL
     val keyboardType = if (isNominal) KeyboardType.Number else KeyboardType.Decimal

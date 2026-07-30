@@ -135,18 +135,22 @@ object ReceiptManager {
             val pageWidth = 240
             val margin = 14f
             val lineHeight = 20f
-            val pageHeight = (lines.size * lineHeight + 2 * margin).toInt().coerceAtLeast(320)
+            val linesPerPage = 35 
+            val pageHeight = (linesPerPage * lineHeight + 2 * margin).toInt()
             val document = PdfDocument()
             try {
-                val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
-                val page = document.startPage(pageInfo)
-                val canvas = page.canvas
-                var y = margin + 14f
-                for (line in lines) {
-                    drawLine(canvas, line, pageWidth.toFloat(), margin, y)
-                    y += lineHeight
+                val chunks = lines.chunked(linesPerPage)
+                chunks.forEachIndexed { index, pageLines ->
+                    val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, index + 1).create()
+                    val page = document.startPage(pageInfo)
+                    val canvas = page.canvas
+                    var y = margin + 14f
+                    for (line in pageLines) {
+                        drawLine(canvas, line, pageWidth.toFloat(), margin, y)
+                        y += lineHeight
+                    }
+                    document.finishPage(page)
                 }
-                document.finishPage(page)
                 val dir = File(context.getExternalFilesDir(null) ?: context.filesDir, "reports").apply { mkdirs() }
                 val file = File(dir, "$fileName.pdf")
                 FileOutputStream(file).use { document.writeTo(it) }

@@ -60,14 +60,16 @@ object ExcelManager {
                         row.createCell(6).setCellValue(p.stock)
                     }
 
-                    context.contentResolver.openOutputStream(destinationUri)?.use { outputStream ->
+                    val result = context.contentResolver.openOutputStream(destinationUri)?.use { outputStream ->
                         workbook.write(outputStream)
                         ExcelOutcome.Success
                     } ?: ExcelOutcome.Error(IOException("Tidak bisa membuka output stream"))
+                    workbook.dispose()
+                    result
                 }
             } catch (e: Exception) {
                 ExcelOutcome.Error(e)
-        }
+            }
     }
     private fun parseFlexibleNumber(raw: String): Double? {
         val cleaned = raw.trim().filter { it.isDigit() || it == '.' || it == ',' || it == '-' }

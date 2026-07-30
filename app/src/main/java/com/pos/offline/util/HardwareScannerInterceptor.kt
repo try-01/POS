@@ -26,13 +26,13 @@ fun onKeyEvent(event: KeyEvent): Boolean {
       val charCode = event.unicodeChar
       if (charCode == 0) return false
       val char = charCode.toChar()
-      if (!char.isLetterOrDigit() && char != '-') {
+      if (!char.isLetterOrDigit() && char !in "-_./: #") {
           buffer.clear()
           return false
       }
       if (buffer.isNotEmpty() && (now - lastCharTime) > maxCharGapMs) buffer.clear()
       buffer.append(char)
       lastCharTime = now
-      return true
+      return false
   }
 }
