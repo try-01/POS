@@ -75,6 +75,10 @@ class PosViewModel(
     private val _showStartShiftDialog = MutableStateFlow(false)
     private val _showEndShiftDialog = MutableStateFlow(false)
     private val _showShiftListDialog = MutableStateFlow(false)
+    // Backward-compatible API untuk file lain yang masih membaca "ada shift terbuka atau tidak"
+    val openShift: StateFlow<ShiftEntity?> =
+        shiftRepository.openShift
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     // ─── Intermediate flows (private) ────────────────────────────────────────
 

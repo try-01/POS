@@ -18,6 +18,11 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AttachMoney
@@ -992,7 +997,7 @@ internal fun CashierDropdownField(
                 modifier = Modifier.weight(1f),
             )
             Icon(
-                androidx.compose.material.icons.Icons.Rounded.KeyboardArrowDown,
+                Icons.Rounded.KeyboardArrowDown,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
             )
@@ -1012,106 +1017,4 @@ internal fun CashierDropdownField(
             }
         }
     }
-}
-
-/**
- * SummaryLine dipakai oleh EndShiftDialog.
- * Versi internal di file ini agar dialog tidak bergantung ke PosComponent.
- */
-@Composable
-internal fun SummaryLine(
-    label: String,
-    value: String,
-    emphasize: Boolean = false,
-    color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified,
-) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            label,
-            style = if (emphasize) {
-                MaterialTheme.typography.titleMedium
-            } else {
-                MaterialTheme.typography.bodyMedium
-            },
-            color = color,
-        )
-        Text(
-            value,
-            style = if (emphasize) {
-                MaterialTheme.typography.titleMedium
-            } else {
-                MaterialTheme.typography.bodyMedium
-            },
-            fontWeight = if (emphasize) FontWeight.Bold else FontWeight.Normal,
-            color = color,
-        )
-    }
-}
-
-/**
- * MoneyField dipakai oleh StartShiftDialog dan EndShiftDialog.
- * Versi internal di file ini.
- */
-@Composable
-internal fun MoneyField(
-    label: String,
-    value: Long,
-    onValueChange: (Long) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var text by remember(value) {
-        mutableStateOf(if (value <= 0) "" else value.toString())
-    }
-    BasicTextField(
-        value = text,
-        onValueChange = { input ->
-            val digits = input.filter { it.isDigit() }
-            text = digits
-            onValueChange(digits.toLongOrNull() ?: 0L)
-        },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        singleLine = true,
-        visualTransformation = ThousandsSeparatorTransformation,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-        ),
-        modifier = modifier,
-        decorationBox = { innerTextField ->
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    )
-                    .border(
-                        1.dp,
-                        MaterialTheme.colorScheme.outlineVariant,
-                        RoundedCornerShape(10.dp),
-                    )
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "$label: ",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                androidx.compose.foundation.layout.Box(Modifier.weight(1f)) {
-                    if (text.isEmpty()) {
-                        Text(
-                            text = "0",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                        )
-                    }
-                    innerTextField()
-                }
-            }
-        },
-    )
 }

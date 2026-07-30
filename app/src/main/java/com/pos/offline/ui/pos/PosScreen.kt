@@ -55,11 +55,25 @@ fun PosScreen(
     onSharePdfFile: (File) -> Unit,
     onExportPdf: (CheckoutResult) -> Unit,
     forceWideLayout: Boolean = false,
+    isCartExpanded: Boolean = false,
+    onCartExpandedChange: (Boolean) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val localState = rememberPosLocalState()
     val snackbarHostState = remember { SnackbarHostState() }
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    LaunchedEffect(isCartExpanded) {
+        if (localState.isCartExpanded != isCartExpanded) {
+            localState.setCartExpanded(isCartExpanded)
+        }
+    }
+
+    LaunchedEffect(localState.isCartExpanded) {
+        if (localState.isCartExpanded != isCartExpanded) {
+            onCartExpandedChange(localState.isCartExpanded)
+        }
+    }
 
     // ── Snackbar event handler ────────────────────────────────────────────────
     LaunchedEffect(viewModel, lifecycleOwner) {
@@ -108,7 +122,7 @@ fun PosScreen(
                             .fillMaxHeight(),
                         products = uiState.catalog.products,
                         cartQtyByProductId = uiState.catalog.cartQtyByProductId,
-                        onAdd = { onAction(PosAction.AddToCart(it), viewModel) },
+                        onAdd = { viewModel.onAction(PosAction.AddToCart(it)) },
                     )
                     Spacer(Modifier.width(12.dp))
                     CartPaneContent(
@@ -240,10 +254,4 @@ private fun PosTopBar(
             )
         }
     }
-}
-
-// ─── Helper: bridge PosAction ke viewModel tanpa boilerplate ─────────────────
-
-private fun onAction(action: PosAction, viewModel: PosViewModel) {
-    viewModel.onAction(action)
 }
