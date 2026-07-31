@@ -730,19 +730,20 @@ internal fun TotalsSummary(
     totals: Totals,
     onAction: (PosAction) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         SummaryLine("Subtotal", totals.subtotal.toRupiah())
 
+        // Poin 2: Tinggi field 34dp, tanpa padding vertical tambahan
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             DiscountField(
                 type = payment.discountType,
                 rawValue = payment.discountValue,
                 onToggleType = { onAction(PosAction.ToggleDiscountType) },
                 onValueChange = { onAction(PosAction.SetDiscountValue(it)) },
-                modifier = Modifier.weight(1f).height(40.dp),
+                modifier = Modifier.weight(1f).height(34.dp),
             )
             DecimalField(
                 label = "Pajak (%)",
@@ -750,7 +751,7 @@ internal fun TotalsSummary(
                 onValueChange = { pct ->
                     onAction(PosAction.SetTaxRate((pct / 100.0).coerceIn(0.0, 100.0)))
                 },
-                modifier = Modifier.weight(1f).height(40.dp),
+                modifier = Modifier.weight(1f).height(34.dp),
             )
         }
 
@@ -769,9 +770,9 @@ internal fun TotalsSummary(
         }
         if (totals.tax > 0) SummaryLine("Pajak", totals.tax.toRupiah())
 
-        HorizontalDivider(Modifier.padding(vertical = 2.dp))
+        HorizontalDivider(Modifier.padding(vertical = 1.dp))
 
-        // Poin 3: Total + Payment method switch inline
+        // Total + payment switch inline
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -781,7 +782,6 @@ internal fun TotalsSummary(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
-            // Compact payment method switch
             CompactPaymentSwitch(
                 selected = payment.method,
                 onToggle = {
@@ -798,15 +798,12 @@ internal fun TotalsSummary(
             )
         }
 
-        Spacer(Modifier.height(2.dp))
-
-        // Poin 4: MoneyField + preset chips row
-        MoneyFieldWithPresets(
-            label = "Bayar",
+        // Poin 1 & 2: Field bayar 34dp dengan preset di dalam
+        PayMoneyField(
             value = payment.paid,
             total = totals.total,
             onValueChange = { onAction(PosAction.SetPaid(it)) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().height(34.dp),
         )
 
         if (payment.paid > 0) {
@@ -818,7 +815,6 @@ internal fun TotalsSummary(
                     color = MaterialTheme.colorScheme.error,
                 )
                 change > 0L -> {
-                    Spacer(Modifier.height(2.dp))
                     ChangeGivenField(
                         maxChange = change,
                         value = payment.changeGivenOverride,
@@ -826,7 +822,6 @@ internal fun TotalsSummary(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     if (payment.method == PaymentMethod.QRIS) {
-                        Spacer(Modifier.height(4.dp))
                         val effectiveChangeGiven = payment.changeGivenOverride
                             ?.coerceIn(0L, change) ?: change
                         QrisCashChangeToggle(
@@ -882,67 +877,95 @@ private fun CompactPaymentSwitch(
     }
 }
 
-// ─── Poin 4: MoneyField with preset chips ─────────────────────────────────────
+// ─── Poin 1 & 2: Field bayar compact dengan preset di dalam ──────────────────
 
 @Composable
-private fun MoneyFieldWithPresets(
-    label: String,
+private fun PayMoneyField(
     value: Long,
     total: Long,
     onValueChange: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier) {
-        MoneyField(
-            label = label,
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth().height(44.dp),
-        )
-        Spacer(Modifier.height(4.dp))
-        // Preset row: Pas, 50rb, 100rb
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            PresetChip(
-                label = "Pas",
-                onClick = { onValueChange(total) },
-                modifier = Modifier.weight(1f),
-            )
-            PresetChip(
-                label = "50rb",
-                onClick = { onValueChange(50_000L) },
-                modifier = Modifier.weight(1f),
-            )
-            PresetChip(
-                label = "100rb",
-                onClick = { onValueChange(100_000L) },
-                modifier = Modifier.weight(1f),
-            )
-        }
+    var text by remember(value) {
+        mutableStateOf(if (value <= 0) "" else value.toString())
     }
+    BasicTextField(
+        value = text,
+        onValueChange = { input ->
+            val digits = input.filter { it.isDigit() }
+            text = digits
+            onValueChange(digits.toLongOrNull() ?: 0L)
+        },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        singleLine = true,
+        visualTransformation = ThousandsSeparatorTransformation,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+        ),
+        modifier = modifier,
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .border(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant,
+                        RoundedCornerShape(10.dp),
+                    )
+                    .padding(start = 10.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Bayar: ",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Box(Modifier.weight(1f)) {
+                    if (text.isEmpty()) {
+                        Text(
+                            text = "0",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                        )
+                    }
+                    innerTextField()
+                }
+                // Preset chips di dalam field
+                InlinePresetChip(
+                    label = "50rb",
+                    onClick = { onValueChange(50_000L) },
+                )
+                Spacer(Modifier.width(3.dp))
+                InlinePresetChip(
+                    label = "100rb",
+                    onClick = { onValueChange(100_000L) },
+                )
+            }
+        },
+    )
 }
 
 @Composable
-private fun PresetChip(
+private fun InlinePresetChip(
     label: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier
-            .height(28.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-            .clickable(onClick = onClick),
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 7.dp, vertical = 3.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
         )
     }
 }
@@ -960,7 +983,7 @@ private fun ChangeGivenField(
     var text by remember(effectiveValue) { mutableStateOf(effectiveValue.toString()) }
     val tip = (maxChange - effectiveValue).coerceAtLeast(0L)
 
-    Column(modifier = modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
         BasicTextField(
             value = text,
             onValueChange = { input ->
@@ -976,7 +999,7 @@ private fun ChangeGivenField(
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
             ),
-            modifier = Modifier.fillMaxWidth().height(44.dp),
+            modifier = Modifier.fillMaxWidth().height(34.dp),
             decorationBox = { innerTextField ->
                 Row(
                     modifier = Modifier
@@ -988,12 +1011,12 @@ private fun ChangeGivenField(
                             MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
                             RoundedCornerShape(10.dp),
                         )
-                        .padding(horizontal = 12.dp),
+                        .padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "Kembalian Diberikan: ",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "Kembalian: ",
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Box(Modifier.weight(1f)) {
@@ -1010,10 +1033,9 @@ private fun ChangeGivenField(
             },
         )
         if (tip > 0L) {
-            Spacer(Modifier.height(2.dp))
             Text(
                 text = "Tip: ${tip.toRupiah()}",
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(start = 4.dp),

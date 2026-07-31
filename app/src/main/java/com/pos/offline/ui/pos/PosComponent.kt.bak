@@ -7,6 +7,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -45,6 +45,7 @@ import androidx.compose.material.icons.rounded.QrCode
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ShoppingCart
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -72,7 +73,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pos.offline.data.local.entity.CartItemEntity
@@ -113,29 +113,19 @@ internal fun ShiftIndicatorBar(
                     .size(6.dp)
                     .clip(CircleShape)
                     .background(
-                        if (openShift != null) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                        },
+                        if (openShift != null) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                     ),
             )
             Spacer(Modifier.width(6.dp))
             Text(
-                text = if (openShift != null) {
-                    "${openShift.cashierName} · Shift Aktif"
-                } else {
-                    "Tanpa Shift · Ketuk untuk mulai"
-                },
+                text = if (openShift != null) "${openShift.cashierName} · Shift Aktif"
+                else "Tanpa Shift · Ketuk untuk mulai",
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                color = if (openShift != null) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                },
+                color = if (openShift != null) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             )
         }
-        // Drawer button
         Box(
             modifier = Modifier
                 .size(26.dp)
@@ -159,7 +149,6 @@ internal fun ShiftIndicatorBar(
             }
         }
         Spacer(Modifier.width(2.dp))
-        // Manage button
         Box(
             modifier = Modifier
                 .size(26.dp)
@@ -198,11 +187,7 @@ internal fun CompactSearchBar(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(12.dp))
-                    .border(
-                        1.dp,
-                        MaterialTheme.colorScheme.outlineVariant,
-                        RoundedCornerShape(12.dp),
-                    )
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -236,18 +221,10 @@ internal fun CategoryChipsRow(
 ) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         item(key = "__all__") {
-            CategoryChip(
-                label = "Semua",
-                selected = selected == null,
-                onClick = { onSelect(null) },
-            )
+            CategoryChip(label = "Semua", selected = selected == null, onClick = { onSelect(null) })
         }
         items(items = categories, key = { it }) { cat ->
-            CategoryChip(
-                label = cat,
-                selected = selected == cat,
-                onClick = { onSelect(cat) },
-            )
+            CategoryChip(label = cat, selected = selected == cat, onClick = { onSelect(cat) })
         }
     }
 }
@@ -270,11 +247,8 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
             text = label,
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) {
-                MaterialTheme.colorScheme.onPrimary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -346,11 +320,8 @@ private fun ProductCard(
                     Text(
                         text = if (outOfStock) "Habis" else "Stok: ${remainingStock.formatQuantity()}",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color = if (outOfStock) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        },
+                        color = if (outOfStock) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
                 }
                 Box(
@@ -366,11 +337,8 @@ private fun ProductCard(
                     Icon(
                         Icons.Rounded.Add,
                         contentDescription = "Tambah ${product.name}",
-                        tint = if (outOfStock) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.onPrimary
-                        },
+                        tint = if (outOfStock) MaterialTheme.colorScheme.onSurfaceVariant
+                        else MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(14.dp),
                     )
                 }
@@ -381,36 +349,6 @@ private fun ProductCard(
 
 // ─── Cart pane ────────────────────────────────────────────────────────────────
 
-@Composable
-internal fun CartPane(
-    modifier: Modifier,
-    uiState: PosUiState,
-    localState: PosLocalStateHolder,
-    onAction: (PosAction) -> Unit,
-) {
-    val cart = uiState.cart
-    val payment = uiState.payment
-    val catalog = uiState.catalog
-    val checkout = uiState.checkout
-
-    val showFull = localState.isCartExpanded || !modifier.toString().contains("wrapContent")
-    // Kita pakai parameter collapsible secara eksplisit agar lebih jelas:
-    // CartPane sekarang menerima collapsible flag dari caller
-    CartPaneContent(
-        modifier = modifier,
-        cart = cart,
-        payment = payment,
-        catalog = catalog,
-        checkout = checkout,
-        localState = localState,
-        onAction = onAction,
-    )
-}
-
-/**
- * Narrow layout: collapsible = true
- * Wide layout: collapsible = false
- */
 @Composable
 internal fun CartPaneContent(
     modifier: Modifier,
@@ -482,26 +420,17 @@ internal fun CartPaneContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(
-                        if (collapsible) {
-                            Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable(onClick = localState::toggleCart)
-                                .padding(vertical = 2.dp)
-                        } else Modifier,
+                        if (collapsible) Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = localState::toggleCart)
+                            .padding(vertical = 2.dp)
+                        else Modifier,
                     ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    Icons.Rounded.ShoppingCart,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                )
+                Icon(Icons.Rounded.ShoppingCart, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(
-                    "Keranjang",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                )
+                Text("Keranjang", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 if (collapsible && !expanded && !cart.isEmpty) {
                     Text(
                         text = "${cart.items.size} item · ${cart.totals.total.toRupiah()}",
@@ -517,11 +446,7 @@ internal fun CartPaneContent(
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                         modifier = Modifier.height(28.dp),
                     ) {
-                        Icon(
-                            Icons.Rounded.Delete,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
+                        Icon(Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("Kosongkan", style = MaterialTheme.typography.bodySmall)
                     }
@@ -531,22 +456,13 @@ internal fun CartPaneContent(
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            ),
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = if (expanded) {
-                                Icons.Rounded.KeyboardArrowDown
-                            } else {
-                                Icons.Rounded.KeyboardArrowUp
-                            },
-                            contentDescription = if (expanded) {
-                                "Ciutkan keranjang"
-                            } else {
-                                "Perluas keranjang"
-                            },
+                            imageVector = if (expanded) Icons.Rounded.KeyboardArrowDown
+                            else Icons.Rounded.KeyboardArrowUp,
+                            contentDescription = if (expanded) "Ciutkan" else "Perluas",
                             modifier = Modifier.size(18.dp),
                         )
                     }
@@ -567,9 +483,7 @@ internal fun CartPaneContent(
                         if (cart.isEmpty) {
                             item(key = "empty_cart") {
                                 Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 24.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -577,34 +491,26 @@ internal fun CartPaneContent(
                                             Icons.Rounded.ShoppingCart,
                                             contentDescription = null,
                                             modifier = Modifier.size(32.dp),
-                                            tint = MaterialTheme.colorScheme.onSurface.copy(
-                                                alpha = 0.3f,
-                                            ),
+                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                                         )
                                         Spacer(Modifier.height(8.dp))
                                         Text(
                                             "Keranjang masih kosong",
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(
-                                                alpha = 0.5f,
-                                            ),
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                         )
                                         Text(
                                             "Ketuk produk di atas untuk menambahkan",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(
-                                                alpha = 0.4f,
-                                            ),
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                                         )
                                     }
                                 }
                             }
                         } else {
                             items(items = cart.items, key = { it.id }) { item ->
-                                val stock = catalog.stockByProductId[item.productId]
                                 CartRow(
                                     item = item,
-                                    canIncrease = stock == null || item.quantity < stock,
                                     onIncrease = { onAction(PosAction.IncreaseQty(item)) },
                                     onDecrease = { onAction(PosAction.DecreaseQty(item)) },
                                     onRemove = { onAction(PosAction.RemoveFromCart(item)) },
@@ -615,7 +521,6 @@ internal fun CartPaneContent(
                         }
                     }
 
-                    // Scroll indicators
                     val showTopFade by remember { derivedStateOf { listState.canScrollBackward } }
                     val showBottomFade by remember { derivedStateOf { listState.canScrollForward } }
                     if (showTopFade) {
@@ -646,9 +551,7 @@ internal fun CartPaneContent(
                     Button(
                         onClick = ::attemptCheckout,
                         enabled = !cart.isEmpty && !checkout.isProcessing,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(42.dp),
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
                         shape = RoundedCornerShape(12.dp),
                     ) {
                         if (checkout.isProcessing) {
@@ -658,11 +561,7 @@ internal fun CartPaneContent(
                                 strokeWidth = 2.dp,
                             )
                         } else {
-                            Icon(
-                                Icons.Rounded.Check,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                            )
+                            Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Bayar · ${cart.totals.total.toRupiah()}")
                         }
@@ -673,9 +572,7 @@ internal fun CartPaneContent(
                 // Collapsed mini-bar
                 Spacer(Modifier.height(4.dp))
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 84.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = 84.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -709,11 +606,11 @@ internal fun CartPaneContent(
 }
 
 // ─── Cart row ─────────────────────────────────────────────────────────────────
+// Poin 1: Tidak ada parameter canIncrease. Tombol + selalu bisa diklik.
 
 @Composable
 internal fun CartRow(
     item: CartItemEntity,
-    canIncrease: Boolean,
     onIncrease: () -> Unit,
     onDecrease: () -> Unit,
     onRemove: () -> Unit,
@@ -721,9 +618,7 @@ internal fun CartRow(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
+        modifier = modifier.fillMaxWidth().padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -747,7 +642,6 @@ internal fun CartRow(
         Spacer(Modifier.width(12.dp))
         QuantityStepper(
             qty = item.quantity,
-            canIncrease = canIncrease,
             onDecrease = onDecrease,
             onIncrease = onIncrease,
             onQuantityClick = onQuantityClick,
@@ -774,17 +668,12 @@ internal fun CartRow(
 @Composable
 private fun QuantityStepper(
     qty: Double,
-    canIncrease: Boolean,
     onDecrease: () -> Unit,
     onIncrease: () -> Unit,
     onQuantityClick: () -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        CompactActionBox(
-            icon = Icons.Rounded.Remove,
-            contentDescription = "Kurangi",
-            onClick = onDecrease,
-        )
+        CompactActionBox(icon = Icons.Rounded.Remove, contentDescription = "Kurangi", onClick = onDecrease)
         Box(
             modifier = Modifier
                 .width(36.dp)
@@ -799,13 +688,8 @@ private fun QuantityStepper(
                 textDecoration = TextDecoration.Underline,
             )
         }
-        CompactActionBox(
-            icon = Icons.Rounded.Add,
-            contentDescription = "Tambah",
-            dimmed = !canIncrease,
-            // Perbaikan: disabled secara perilaku bila stok habis
-            onClick = { if (canIncrease) onIncrease() },
-        )
+        // Poin 1: Tombol + SELALU aktif, tidak pernah dimmed
+        CompactActionBox(icon = Icons.Rounded.Add, contentDescription = "Tambah", onClick = onIncrease)
     }
 }
 
@@ -824,24 +708,21 @@ internal fun CompactActionBox(
                 if (dimmed) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                 else MaterialTheme.colorScheme.surfaceVariant,
             )
-            .clickable(
-                enabled = !dimmed,
-                onClick = onClick,
-            ),
+            .clickable(enabled = !dimmed, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             icon,
             contentDescription = contentDescription,
             modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                alpha = if (dimmed) 0.4f else 1f,
-            ),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (dimmed) 0.4f else 1f),
         )
     }
 }
 
 // ─── Totals summary ───────────────────────────────────────────────────────────
+// Poin 3: PaymentMethodToggle sebagai icon switch kecil di samping Total
+// Poin 4: Preset bayar cepat
 
 @Composable
 internal fun TotalsSummary(
@@ -853,9 +734,7 @@ internal fun TotalsSummary(
         SummaryLine("Subtotal", totals.subtotal.toRupiah())
 
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 2.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             DiscountField(
@@ -863,9 +742,7 @@ internal fun TotalsSummary(
                 rawValue = payment.discountValue,
                 onToggleType = { onAction(PosAction.ToggleDiscountType) },
                 onValueChange = { onAction(PosAction.SetDiscountValue(it)) },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(40.dp),
+                modifier = Modifier.weight(1f).height(40.dp),
             )
             DecimalField(
                 label = "Pajak (%)",
@@ -873,9 +750,7 @@ internal fun TotalsSummary(
                 onValueChange = { pct ->
                     onAction(PosAction.SetTaxRate((pct / 100.0).coerceIn(0.0, 100.0)))
                 },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(40.dp),
+                modifier = Modifier.weight(1f).height(40.dp),
             )
         }
 
@@ -887,32 +762,51 @@ internal fun TotalsSummary(
             )
         }
         if (totals.discount > 0) {
-            val label = if (payment.discountType == DiscountType.PERCENT) {
+            val label = if (payment.discountType == DiscountType.PERCENT)
                 "Diskon (${formatPercentTrim(payment.discountValue)}%)"
-            } else {
-                "Diskon"
-            }
+            else "Diskon"
             SummaryLine(label, "- ${totals.discount.toRupiah()}")
         }
         if (totals.tax > 0) SummaryLine("Pajak", totals.tax.toRupiah())
 
         HorizontalDivider(Modifier.padding(vertical = 2.dp))
-        SummaryLine("Total", totals.total.toRupiah(), emphasize = true)
+
+        // Poin 3: Total + Payment method switch inline
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Total",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            // Compact payment method switch
+            CompactPaymentSwitch(
+                selected = payment.method,
+                onToggle = {
+                    val next = if (payment.method == PaymentMethod.CASH)
+                        PaymentMethod.QRIS else PaymentMethod.CASH
+                    onAction(PosAction.SetPaymentMethod(next))
+                },
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                totals.total.toRupiah(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+        }
 
         Spacer(Modifier.height(2.dp))
-        PaymentMethodToggle(
-            selected = payment.method,
-            onSelect = { onAction(PosAction.SetPaymentMethod(it)) },
-        )
 
-        Spacer(Modifier.height(2.dp))
-        MoneyField(
+        // Poin 4: MoneyField + preset chips row
+        MoneyFieldWithPresets(
             label = "Bayar",
             value = payment.paid,
+            total = totals.total,
             onValueChange = { onAction(PosAction.SetPaid(it)) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp),
+            modifier = Modifier.fillMaxWidth(),
         )
 
         if (payment.paid > 0) {
@@ -932,7 +826,7 @@ internal fun TotalsSummary(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     if (payment.method == PaymentMethod.QRIS) {
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(4.dp))
                         val effectiveChangeGiven = payment.changeGivenOverride
                             ?.coerceIn(0L, change) ?: change
                         QrisCashChangeToggle(
@@ -944,68 +838,111 @@ internal fun TotalsSummary(
                     }
                 }
                 else -> SummaryLine(
-                    "Kembalian",
-                    0L.toRupiah(),
-                    color = MaterialTheme.colorScheme.primary,
+                    "Kembalian", 0L.toRupiah(), color = MaterialTheme.colorScheme.primary,
                 )
             }
         }
     }
 }
 
-// ─── Payment method toggle ────────────────────────────────────────────────────
+// ─── Poin 3: Compact payment method switch ────────────────────────────────────
 
 @Composable
-private fun PaymentMethodToggle(selected: PaymentMethod, onSelect: (PaymentMethod) -> Unit) {
+private fun CompactPaymentSwitch(
+    selected: PaymentMethod,
+    onToggle: () -> Unit,
+) {
+    val isCash = selected == PaymentMethod.CASH
     Row(
         modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (isCash) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                else MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+            )
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        PaymentMethodChip(
-            label = "Tunai",
-            selected = selected == PaymentMethod.CASH,
-            onClick = { onSelect(PaymentMethod.CASH) },
-            modifier = Modifier.weight(1f),
+        Text(
+            text = if (isCash) "Tunai" else "QRIS",
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+            fontWeight = FontWeight.Bold,
+            color = if (isCash) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.tertiary,
         )
-        PaymentMethodChip(
-            label = "QRIS",
-            selected = selected == PaymentMethod.QRIS,
-            onClick = { onSelect(PaymentMethod.QRIS) },
-            modifier = Modifier.weight(1f),
+        Icon(
+            Icons.Rounded.SwapHoriz,
+            contentDescription = "Ganti metode bayar",
+            modifier = Modifier.size(14.dp),
+            tint = if (isCash) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.tertiary,
         )
     }
 }
 
+// ─── Poin 4: MoneyField with preset chips ─────────────────────────────────────
+
 @Composable
-private fun PaymentMethodChip(
+private fun MoneyFieldWithPresets(
     label: String,
-    selected: Boolean,
+    value: Long,
+    total: Long,
+    onValueChange: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        MoneyField(
+            label = label,
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+        )
+        Spacer(Modifier.height(4.dp))
+        // Preset row: Pas, 50rb, 100rb
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            PresetChip(
+                label = "Pas",
+                onClick = { onValueChange(total) },
+                modifier = Modifier.weight(1f),
+            )
+            PresetChip(
+                label = "50rb",
+                onClick = { onValueChange(50_000L) },
+                modifier = Modifier.weight(1f),
+            )
+            PresetChip(
+                label = "100rb",
+                onClick = { onValueChange(100_000L) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PresetChip(
+    label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
+            .height(28.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
-            )
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) {
-                MaterialTheme.colorScheme.onPrimary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -1039,9 +976,7 @@ private fun ChangeGivenField(
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
             ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp),
+            modifier = Modifier.fillMaxWidth().height(44.dp),
             decorationBox = { innerTextField ->
                 Row(
                     modifier = Modifier
@@ -1087,6 +1022,8 @@ private fun ChangeGivenField(
     }
 }
 
+// ─── Poin 5: QrisCashChangeToggle lebih compact ──────────────────────────────
+
 @Composable
 private fun QrisCashChangeToggle(
     changeGivenAmount: Long,
@@ -1094,50 +1031,47 @@ private fun QrisCashChangeToggle(
     onToggle: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val bgColor = if (isCash) {
-        MaterialTheme.colorScheme.tertiaryContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-    }
-    val contentColor = if (isCash) {
-        MaterialTheme.colorScheme.onTertiaryContainer
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val bgColor = if (isCash) MaterialTheme.colorScheme.tertiaryContainer
+    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+    val contentColor = if (isCash) MaterialTheme.colorScheme.onTertiaryContainer
+    else MaterialTheme.colorScheme.onSurfaceVariant
 
-    Column(
+    // Poin 5: Padding lebih kecil agar tidak terlalu tinggi
+    Row(
         modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(bgColor)
             .clickable { onToggle(!isCash) }
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = if (isCash) Icons.Rounded.AttachMoney else Icons.Rounded.QrCode,
-                contentDescription = null,
-                tint = contentColor,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(8.dp))
+        Icon(
+            imageVector = if (isCash) Icons.Rounded.AttachMoney else Icons.Rounded.QrCode,
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "Kembalian Tunai dari Laci?",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                 fontWeight = FontWeight.SemiBold,
                 color = contentColor,
-                modifier = Modifier.weight(1f),
             )
-            Switch(checked = isCash, onCheckedChange = onToggle)
+            Text(
+                text = if (isCash) "⚠ ${changeGivenAmount.toRupiah()} dari laci"
+                else "Non-tunai — tidak mengurangi kas",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                color = contentColor.copy(alpha = 0.8f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = if (isCash) {
-                "⚠ ${changeGivenAmount.toRupiah()} akan diambil TUNAI dari laci meski dibayar via QRIS."
-            } else {
-                "Kembalian dianggap dikembalikan non-tunai — tidak mengurangi kas laci."
-            },
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-            color = contentColor.copy(alpha = 0.85f),
+        Switch(
+            checked = isCash,
+            onCheckedChange = onToggle,
+            modifier = Modifier.height(24.dp),
         )
     }
 }
@@ -1154,20 +1088,14 @@ internal fun SummaryLine(
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(
             label,
-            style = if (emphasize) {
-                MaterialTheme.typography.titleMedium
-            } else {
-                MaterialTheme.typography.bodyMedium
-            },
+            style = if (emphasize) MaterialTheme.typography.titleMedium
+            else MaterialTheme.typography.bodyMedium,
             color = color,
         )
         Text(
             value,
-            style = if (emphasize) {
-                MaterialTheme.typography.titleMedium
-            } else {
-                MaterialTheme.typography.bodyMedium
-            },
+            style = if (emphasize) MaterialTheme.typography.titleMedium
+            else MaterialTheme.typography.bodyMedium,
             fontWeight = if (emphasize) FontWeight.Bold else FontWeight.Normal,
             color = color,
         )
@@ -1205,11 +1133,7 @@ internal fun MoneyField(
                     .fillMaxSize()
                     .clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                    .border(
-                        1.dp,
-                        MaterialTheme.colorScheme.outlineVariant,
-                        RoundedCornerShape(10.dp),
-                    )
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1277,10 +1201,7 @@ internal fun DiscountField(
                     for (c in input) {
                         when {
                             c.isDigit() -> append(c)
-                            c == '.' && !dotSeen -> {
-                                append(c)
-                                dotSeen = true
-                            }
+                            c == '.' && !dotSeen -> { append(c); dotSeen = true }
                         }
                     }
                 }
@@ -1302,11 +1223,7 @@ internal fun DiscountField(
                     .fillMaxSize()
                     .clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                    .border(
-                        1.dp,
-                        MaterialTheme.colorScheme.outlineVariant,
-                        RoundedCornerShape(10.dp),
-                    ),
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(
@@ -1337,9 +1254,7 @@ internal fun DiscountField(
                         .background(MaterialTheme.colorScheme.outlineVariant),
                 )
                 Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 10.dp),
+                    modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
                 ) {
                     if (text.isEmpty()) {
                         Text(
@@ -1373,10 +1288,7 @@ internal fun DecimalField(
                 for (c in input) {
                     when {
                         c.isDigit() -> append(c)
-                        c == '.' && !dotSeen -> {
-                            append(c)
-                            dotSeen = true
-                        }
+                        c == '.' && !dotSeen -> { append(c); dotSeen = true }
                     }
                 }
             }
@@ -1396,11 +1308,7 @@ internal fun DecimalField(
                     .fillMaxSize()
                     .clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                    .border(
-                        1.dp,
-                        MaterialTheme.colorScheme.outlineVariant,
-                        RoundedCornerShape(10.dp),
-                    )
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
