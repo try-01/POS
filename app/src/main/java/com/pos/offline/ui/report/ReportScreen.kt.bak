@@ -217,7 +217,7 @@ val openScanner = rememberBarcodeScanner { scannedCode ->
             DatePicker(state = datePickerState)
         }
     }
-    Box(modifier = Modifier.fillMaxSize()) {
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -554,19 +554,6 @@ item(key = "sales_report_generator") {
             }
         }
     }
-    }
-// --- LAYAR GARANSI DIRECT (MENUTUPI REPORT SCREEN) ---
-// Pastikan ini di luar Scaffold, tapi masih di dalam ReportScreen
-androidx.compose.animation.AnimatedVisibility(
-    visible = showDirectWarrantyScreen,
-    enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.slideInVertically { it },
-    exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.slideOutVertically { it }
-) {
-    DirectWarrantyScreen(
-        onNavigateBack = { showDirectWarrantyScreen = false }
-    )
-}
-}
     if (selectedTransaction != null && !pendingVoidConfirm && !showReturnDialog && pendingPrintTarget == null) {
         val current = selectedTransaction!!
         TransactionDetailDialog(
@@ -631,6 +618,18 @@ androidx.compose.animation.AnimatedVisibility(
             onDismiss = viewModel::closeReturnDetail,
         )
     }
+}
+// --- LAYAR GARANSI DIRECT (MENUTUPI REPORT SCREEN) ---
+// Pastikan ini di luar Scaffold, tapi masih di dalam ReportScreen
+androidx.compose.animation.AnimatedVisibility(
+    visible = showDirectWarrantyScreen,
+    enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.slideInVertically { it },
+    exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.slideOutVertically { it }
+) {
+    DirectWarrantyScreen(
+        onNavigateBack = { showDirectWarrantyScreen = false }
+    )
+}
 }
 
 @Composable
