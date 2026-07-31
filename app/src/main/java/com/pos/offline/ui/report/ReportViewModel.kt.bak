@@ -9,7 +9,6 @@ import com.pos.offline.data.local.entity.ReturnEntity
 import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.isVoid
-import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.PrinterRepository
 import com.pos.offline.data.repository.ProductRepository
@@ -544,54 +543,6 @@ class ReportViewModel(
             val lines = buildCurrentReportLinesForExport()
             withContext(Dispatchers.Main) {
                 onResult(lines)
-            }
-        }
-    }
-
-    fun processDirectWarranty(product: ProductEntity, qty: Double, note: String) {
-        viewModelScope.launch {
-            try {
-                // 1. Ambil data Shift & Kasir yang sedang aktif saat ini
-                val openShift = shiftRepository.getOpenShift()
-                val shiftId = openShift?.id
-                val cashierId = openShift?.cashierId
-                val cashierName = openShift?.cashierName ?: "Kasir (Tidak Diketahui)"
-
-                // 2. Simpan laporan garansi ke database melalui ReturnRepository
-                // Kita memanggil fungsi processManualWarrantyClaim yang sudah ada di kodemu
-                val outcome = returnRepository.processManualWarrantyClaim(
-                    productName = product.name,
-                    productId = product.id,
-                    quantity = qty,
-                    refundAmount = 0L, // Rp 0 karena ini garansi tukar barang (bukan kembali uang)
-                    refundMethod = PaymentMethod.OTHER, // Menggunakan metode "OTHER" untuk klaim
-                    shiftId = shiftId,
-                    cashierId = cashierId,
-                    cashierName = cashierName,
-                    note = note
-                )
-
-                // 3. Jika riwayat garansi berhasil dicatat, kurangi stok barang fisiknya
-                if (outcome is ReturnOutcome.Success) {
-                    val remainingStock = product.stock - qty
-                    
-                    // Buat salinan produk dengan stok yang sudah dikurangi dan waktu update terbaru
-                    val updatedProduct = product.copy(
-                        stock = remainingStock,
-                        updatedAt = System.currentTimeMillis()
-                    )
-                    
-                    // Simpan perubahan stok ke database produk
-                    productRepository.save(updatedProduct)
-                    
-                    // TODO (Opsional): Tampilkan notifikasi sukses ke UI menggunakan SharedFlow / Toast
-                } else {
-                    // TODO (Opsional): Tangani jika terjadi kegagalan (misalnya tampilkan pesan error)
-                }
-
-            } catch (e: Exception) {
-                // Mencegah aplikasi crash jika terjadi masalah tak terduga pada database
-                e.printStackTrace()
             }
         }
     }

@@ -352,17 +352,27 @@ object BackupManager {
             }
         return Intent.createChooser(sendIntent, "Bagikan Cadangan Database")
     }
-fun restartApp(context: Context) {
+    fun restartApp(context: Context) {
         val packageManager = context.packageManager
         val intent = packageManager.getLaunchIntentForPackage(context.packageName)
         val componentName = intent?.component
         if (componentName != null) {
             val restartIntent = Intent.makeRestartActivityTask(componentName)
-            context.startActivity(restartIntent)
-            if (context is android.app.Activity) {
-                context.finishAffinity()
-            }
-            Runtime.getRuntime().exit(0)
+            val pendingIntent = android.app.PendingIntent.getActivity(
+                context,
+                0,
+                restartIntent,
+                android.app.PendingIntent.FLAG_CANCEL_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+            )
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
+            alarmManager?.set(
+                android.app.AlarmManager.RTC,
+                System.currentTimeMillis() + 100L,
+                pendingIntent,
+            )
+            // Matikan proses secara instan untuk membunuh seluruh background InvalidationTracker thread
+            android.os.Process.killProcess(android.os.Process.myPid())
+            kotlin.system.exitProcess(0)
         }
     }
 }

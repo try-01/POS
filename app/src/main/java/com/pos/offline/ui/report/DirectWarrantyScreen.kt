@@ -12,10 +12,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,23 +40,28 @@ fun DirectWarrantyScreen(
     searchQuery: String,
     onQueryChange: (String) -> Unit,
     onScanClick: () -> Unit,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    // Menambahkan fungsi callback saat proses garansi disetujui di dialog
+    onSubmitWarranty: (product: ProductEntity, qty: Double, note: String) -> Unit
 ) {
     BackHandler(onBack = onNavigateBack)
     
-    // Ambil data produk dari database secara real-time
     val products by inventoryViewModel.products.collectAsStateWithLifecycle()
+    
+    // State untuk menyimpan produk yang sedang diklik (untuk memunculkan dialog)
+    var selectedProductForWarranty by remember { mutableStateOf<ProductEntity?>(null) }
 
-    // Logika Pencarian: Filter Nama, SKU, atau Kategori (Mengabaikan huruf besar/kecil)
     val filteredProducts = remember(searchQuery, products) {
         if (searchQuery.isBlank()) {
-            emptyList() // Kosongkan daftar jika belum mengetik apa-apa
+            emptyList() 
         } else {
             val q = searchQuery.lowercase()
             products.filter {
                 it.name.lowercase().contains(q) ||
                 it.sku.lowercase().contains(q) ||
-                it.category.lowercase().contains(q)
+                it.category.lowercase().contains(q) ||
+                // PERBAIKAN: Tambahkan pencocokan Barcode di sini
+                (it.barcode?.lowercase()?.contains(q) == true)
             }
         }
     }
@@ -65,11 +73,10 @@ fun DirectWarrantyScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding() // PERBAIKAN 1: Mencegah overlap dengan jam/baterai di atas
-                .navigationBarsPadding() // Mencegah overlap dengan tombol navigasi HP di bawah
-                .imePadding() // Menyesuaikan otomatis jika keyboard muncul
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding()
         ) {
-            // --- HEADER & SEARCH BAR ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -93,7 +100,6 @@ fun DirectWarrantyScreen(
                 
                 Spacer(Modifier.width(8.dp))
                 
-                // Panggil onScanClick yang sudah diamankan dari ReportScreen
                 WarrantySquareIconButton(
                     icon = Icons.Rounded.QrCodeScanner,
                     contentDescription = "Scan Barcode Produk",
@@ -103,7 +109,6 @@ fun DirectWarrantyScreen(
             
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-            // --- DAFTAR PRODUK ---
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(12.dp),
@@ -134,7 +139,8 @@ fun DirectWarrantyScreen(
                         WarrantyProductRow(
                             product = product,
                             onClick = {
-                                // TODO: Aksi saat kasir memilih produk untuk digaransi
+                                // Saat diklik, simpan produk ke State untuk membuka dialog
+                                selectedProductForWarranty = product
                             }
                         )
                     }
@@ -142,7 +148,109 @@ fun DirectWarrantyScreen(
             }
         }
     }
+
+    // Tampilkan Dialog jika ada produk yang dipilih
+    selectedProductForWarranty?.let { product ->
+        WarrantyClaimDialog(
+            product = product,
+            onDismiss = { selectedProductForWarranty = null }, // Tutup dialog
+            onSubmit = { qty, note ->
+                // Panggil callback ke ReportScreen
+                onSubmitWarranty(product, qty, note)
+                // Tutup dialog dan kembali ke layar laporan
+                selectedProductForWarranty = null
+                onNavigateBack()
+            }
+        )
+    }
 }
+
+@Composable
+private fun WarrantyClaimDialog(
+    product: ProductEntity,
+    onDismiss: () -> Unit,
+    onSubmit: (qty: Double, note: String) -> Unit
+) {
+    var qty by remember { mutableStateOf(1.0) }
+    var note by remember { mutableStateOf("") }
+    
+    // Menentukan langkah penambahan/pengurangan berdasarkan tipe stok
+    val step = if (product.stock % 1.0 == 0.0) 1.0 else 0.1
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { 
+            Text("Proses Garansi Direct", fontSize = 16.sp, fontWeight = FontWeight.Bold) 
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Produk: ${product.name}\nStok di inventory: ${product.stock}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                // Stepper Qty
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Jumlah Klaim:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    
+                    // Tombol Minus
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable { if (qty > step) qty -= step },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Rounded.Remove, contentDescription = "Kurangi", modifier = Modifier.size(16.dp))
+                    }
+                    
+                    Text(
+                        text = qty.toString(),
+                        modifier = Modifier.width(40.dp),
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    // Tombol Plus
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable { qty += step },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Rounded.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp))
+                    }
+                }
+                
+                // Input Catatan
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("Catatan Kerusakan (Wajib/Opsional)", fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    minLines = 2
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSubmit(qty, note) }) {
+                Text("Konfirmasi Garansi", fontSize = 13.sp)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Batal", fontSize = 13.sp)
+            }
+        }
+    )
+}
+
+// ... [Biarkan fungsi WarrantyProductRow, WarrantySearchBar, dan WarrantySquareIconButton persis sama seperti sebelumnya] ...
 
 @Composable
 private fun WarrantyProductRow(
@@ -192,8 +300,6 @@ private fun WarrantyProductRow(
         }
     }
 }
-
-// ... (Biarkan fungsi WarrantySearchBar & WarrantySquareIconButton sama seperti sebelumnya) ...
 
 @Composable
 private fun WarrantySearchBar(

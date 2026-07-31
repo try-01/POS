@@ -124,6 +124,7 @@ import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 import com.pos.offline.ui.components.discountRowLabel
 import com.pos.offline.ui.components.paymentMethodLabel
+import com.pos.offline.ui.inventory.InventoryViewModel
 import com.pos.offline.ui.receipt.PrintUiState
 import com.pos.offline.ui.receipt.ReceiptManager
 import com.pos.offline.ui.receipt.forTransaction
