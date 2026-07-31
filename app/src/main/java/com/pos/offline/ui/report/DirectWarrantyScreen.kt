@@ -11,7 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Search
@@ -78,7 +78,7 @@ fun DirectWarrantyScreen(
             ) {
                 IconButton(onClick = onNavigateBack) {
                     Icon(
-                        Icons.Rounded.ArrowBack, 
+                        Icons.AutoMirrored.Rounded.ArrowBack, 
                         contentDescription = "Kembali",
                         tint = MaterialTheme.colorScheme.onBackground
                     )
