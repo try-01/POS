@@ -64,7 +64,8 @@ object ExcelManager {
                         workbook.write(outputStream)
                         ExcelOutcome.Success
                     } ?: ExcelOutcome.Error(IOException("Tidak bisa membuka output stream"))
-                    workbook.dispose()
+                    
+                    // Baris workbook.dispose() telah dihapus di sini karena .use sudah sepenuhnya menanganinya
                     result
                 }
             } catch (e: Exception) {
