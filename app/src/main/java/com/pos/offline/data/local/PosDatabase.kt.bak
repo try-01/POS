@@ -60,9 +60,6 @@ abstract class PosDatabase : RoomDatabase() {
         private var INSTANCE: PosDatabase? = null
         fun getInstance(context: Context): PosDatabase =
             INSTANCE ?: synchronized(this) {
-                if (com.pos.offline.data.backup.RestoreGuard.isInProgress) {
-                    throw IllegalStateException("Database sedang dalam proses pemulihan (restore). Akses ditolak sementara.")
-                }
                 INSTANCE ?: Room
                     .databaseBuilder(
                         context.applicationContext,
