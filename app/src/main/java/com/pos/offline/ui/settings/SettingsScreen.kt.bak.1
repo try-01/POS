@@ -106,7 +106,7 @@ fun SettingsScreen(
         ) { uri -> if (uri != null) viewModel.exportDatabase(uri) }
     val importLauncher =
         rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.GetContent(),
+            contract = ActivityResultContracts.OpenDocument(),
         ) { uri -> if (uri != null) viewModel.requestRestore(uri) }
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg ->
@@ -282,7 +282,7 @@ FuturisticFeedbackControls(
                         }
                     }
                     OutlinedButton(
-                        onClick = { importLauncher.launch("*/*") },
+                        onClick = { importLauncher.launch(arrayOf("*/*")) },
                         enabled = !uiState.isBusy,
                         modifier = Modifier.fillMaxWidth(),
                     ) {

@@ -6,7 +6,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -15,7 +14,6 @@ import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,49 +24,33 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.pos.offline.ui.inventory.InventoryViewModel
-import com.pos.offline.data.local.entity.ProductEntity
-import com.pos.offline.util.toRupiah
+import com.pos.offline.ui.components.rememberBarcodeScanner
 
 @Composable
 fun DirectWarrantyScreen(
-    inventoryViewModel: InventoryViewModel,
-    searchQuery: String,
-    onQueryChange: (String) -> Unit,
-    onScanClick: () -> Unit,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    // Nantinya kita akan menambahkan parameter ViewModel khusus di sini
 ) {
+    // Menangkap tombol "Back" di HP agar tidak keluar aplikasi, tapi kembali ke ReportScreen
     BackHandler(onBack = onNavigateBack)
     
-    // Ambil data produk dari database secara real-time
-    val products by inventoryViewModel.products.collectAsStateWithLifecycle()
-
-    // Logika Pencarian: Filter Nama, SKU, atau Kategori (Mengabaikan huruf besar/kecil)
-    val filteredProducts = remember(searchQuery, products) {
-        if (searchQuery.isBlank()) {
-            emptyList() // Kosongkan daftar jika belum mengetik apa-apa
-        } else {
-            val q = searchQuery.lowercase()
-            products.filter {
-                it.name.lowercase().contains(q) ||
-                it.sku.lowercase().contains(q) ||
-                it.category.lowercase().contains(q)
-            }
-        }
+    // State untuk SearchBar
+    var searchQuery by remember { mutableStateOf("") }
+    
+    // Inisialisasi Scanner Barcode
+    val openScanner = rememberBarcodeScanner { scannedCode ->
+        searchQuery = scannedCode
+        // TODO: Panggil fungsi ViewModel untuk mencari produk berdasarkan barcode
+        true
     }
 
+    // Layar Penuh menutupi area yang tersedia
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding() // PERBAIKAN 1: Mencegah overlap dengan jam/baterai di atas
-                .navigationBarsPadding() // Mencegah overlap dengan tombol navigasi HP di bawah
-                .imePadding() // Menyesuaikan otomatis jika keyboard muncul
-        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            
             // --- HEADER & SEARCH BAR ---
             Row(
                 modifier = Modifier
@@ -76,6 +58,7 @@ fun DirectWarrantyScreen(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Tombol Back
                 IconButton(onClick = onNavigateBack) {
                     Icon(
                         Icons.Rounded.ArrowBack, 
@@ -83,117 +66,46 @@ fun DirectWarrantyScreen(
                         tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
+                
                 Spacer(Modifier.width(4.dp))
                 
+                // Search Bar Khusus Garansi (Tinggi 40.dp agar lebih nyaman di layar penuh)
                 WarrantySearchBar(
                     query = searchQuery,
-                    onQueryChange = onQueryChange,
+                    onQueryChange = { searchQuery = it },
                     modifier = Modifier.weight(1f).height(40.dp)
                 )
                 
                 Spacer(Modifier.width(8.dp))
                 
-                // Panggil onScanClick yang sudah diamankan dari ReportScreen
+                // Tombol Scan Barcode Khusus Garansi
                 WarrantySquareIconButton(
                     icon = Icons.Rounded.QrCodeScanner,
                     contentDescription = "Scan Barcode Produk",
-                    onClick = onScanClick
+                    onClick = { openScanner() }
                 )
             }
             
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-            // --- DAFTAR PRODUK ---
+            // --- DAFTAR PRODUK (LAZY COLUMN) ---
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (searchQuery.isEmpty()) {
-                    item {
-                        Text(
-                            "Ketik nama produk, SKU, kategori, atau scan barcode untuk mencari produk yang akan diklaim...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                } else if (filteredProducts.isEmpty()) {
-                    item {
-                        Text(
-                            "Produk tidak ditemukan.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                } else {
-                    items(
-                        items = filteredProducts,
-                        key = { it.id }
-                    ) { product ->
-                        WarrantyProductRow(
-                            product = product,
-                            onClick = {
-                                // TODO: Aksi saat kasir memilih produk untuk digaransi
-                            }
-                        )
-                    }
+                // Dummy Item (Hanya untuk melihat tampilannya)
+                item {
+                    Text(
+                        "Ketik nama atau scan barcode untuk mencari produk yang akan diklaim...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
     }
 }
-
-@Composable
-private fun WarrantyProductRow(
-    product: ProductEntity,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    product.name,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    "SKU: ${product.sku}  •  Kategori: ${product.category.ifBlank { "-" }}",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Stok: ${product.stock}  •  Harga: ${product.price.toRupiah()}",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Icon(
-                Icons.Rounded.Build,
-                contentDescription = "Pilih untuk Garansi",
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.error
-            )
-        }
-    }
-}
-
-// ... (Biarkan fungsi WarrantySearchBar & WarrantySquareIconButton sama seperti sebelumnya) ...
 
 @Composable
 private fun WarrantySearchBar(
@@ -214,7 +126,7 @@ private fun WarrantySearchBar(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(12.dp)) // Sedikit lebih membulat (12.dp)
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -267,7 +179,7 @@ private fun WarrantySquareIconButton(
 ) {
     Box(
         modifier = Modifier
-            .size(40.dp)
+            .size(40.dp) // Sedikit lebih besar agar mudah ditekan
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),

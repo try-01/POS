@@ -293,7 +293,6 @@ private fun AppRoot() {
                 Dest.REPORT -> {
                     ReportScreen(
                         viewModel = reportViewModel,
-                        inventoryViewModel = inventoryViewModel,
                         onNavigateToSettings = { goTo(Dest.SETTINGS) },
                         onSharePdfFile = { file ->
                             context.startActivity(ReceiptManager.buildPdfShareIntent(context, file))

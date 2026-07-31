@@ -143,6 +143,7 @@ import java.util.Locale
 @Composable
 fun ReportScreen(
     viewModel: ReportViewModel,
+    inventoryViewModel: InventoryViewModel,
     onNavigateToSettings: () -> Unit,
     onSharePdfFile: (File) -> Unit,
     onExportPdf: (CheckoutResult) -> Unit,
@@ -170,7 +171,15 @@ fun ReportScreen(
     val productHistoryHierarchy by viewModel.productHistoryHierarchy.collectAsStateWithLifecycle()
     val searchUiState by viewModel.searchUiState.collectAsStateWithLifecycle()
     var showDatePicker by remember { mutableStateOf(false) }
-    var showDirectWarrantyScreen by remember { mutableStateOf(false) } // Ganti nama variabelnya agar lebih pas
+    var showDirectWarrantyScreen by remember { mutableStateOf(false) }
+    var warrantySearchQuery by remember { mutableStateOf("") } // Menyimpan teks pencarian garansi
+
+    // Mesin scanner diletakkan di luar animasi agar sistem Android meresponsnya dengan baik
+    val warrantyScanner = rememberBarcodeScanner { scannedCode ->
+        warrantySearchQuery = scannedCode // Masukkan hasil scan ke kolom pencarian
+        true 
+    }
+
 // PERBAIKAN: Panggil kedua fungsi pencarian saat barcode discan
 val openScanner = rememberBarcodeScanner { scannedCode ->
     viewModel.searchProductHistory(scannedCode)
@@ -563,7 +572,14 @@ androidx.compose.animation.AnimatedVisibility(
     exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.slideOutVertically { it }
 ) {
     DirectWarrantyScreen(
-        onNavigateBack = { showDirectWarrantyScreen = false }
+        inventoryViewModel = inventoryViewModel, // Kirim akses database produk
+        searchQuery = warrantySearchQuery,
+        onQueryChange = { warrantySearchQuery = it },
+        onScanClick = { warrantyScanner() }, // Panggil kamera dengan aman
+        onNavigateBack = { 
+            showDirectWarrantyScreen = false 
+            warrantySearchQuery = "" // Kosongkan pencarian saat keluar
+        }
     )
 }
 }
