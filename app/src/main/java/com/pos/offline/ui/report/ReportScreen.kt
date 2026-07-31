@@ -170,7 +170,7 @@ fun ReportScreen(
     val productHistoryHierarchy by viewModel.productHistoryHierarchy.collectAsStateWithLifecycle()
     val searchUiState by viewModel.searchUiState.collectAsStateWithLifecycle()
     var showDatePicker by remember { mutableStateOf(false) }
-    var showDirectWarrantyDialog by remember { mutableStateOf(false) }
+    var showDirectWarrantyScreen by remember { mutableStateOf(false) } // Ganti nama variabelnya agar lebih pas
 // PERBAIKAN: Panggil kedua fungsi pencarian saat barcode discan
 val openScanner = rememberBarcodeScanner { scannedCode ->
     viewModel.searchProductHistory(scannedCode)
@@ -218,38 +218,6 @@ val openScanner = rememberBarcodeScanner { scannedCode ->
         }
     }
 
-    // === 2. TAMBAHKAN DIALOG GARANSI DIRECT DI SINI ===
-    if (showDirectWarrantyDialog) {
-        AlertDialog(
-            onDismissRequest = { showDirectWarrantyDialog = false },
-            title = { 
-                Text("Klaim Garansi Direct", fontWeight = FontWeight.Bold, fontSize = 15.sp) 
-            },
-            text = {
-                Text(
-                    "Fitur ini digunakan jika pembeli kehilangan struk. " +
-                    "Sistem akan membuat ID Transaksi Garansi Sintetis " +
-                    "agar stok pengganti terpotong, barang rusak tercatat, dan laci kasir tetap balance.",
-                    fontSize = 12.sp
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showDirectWarrantyDialog = false
-                        // Panggil logika/fitur proses garansi kamu di sini
-                    }
-                ) {
-                    Text("Proses Garansi Direct", fontSize = 13.sp)
-                }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { showDirectWarrantyDialog = false }) {
-                    Text("Batal", fontSize = 13.sp)
-                }
-            }
-        )
-    }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -319,7 +287,7 @@ item(key = "unified_search_actions") {
         CompactSquareIconButton(
             icon = Icons.Rounded.Build,
             contentDescription = "Klaim Garansi Direct",
-            onClick = { showDirectWarrantyDialog = true },
+            onClick = { showDirectWarrantyScreen = true },
             isError = true // Membuat warnanya menjadi merah agar mencolok
         )
     }
@@ -650,6 +618,17 @@ item(key = "sales_report_generator") {
             onDismiss = viewModel::closeReturnDetail,
         )
     }
+}
+// --- LAYAR GARANSI DIRECT (MENUTUPI REPORT SCREEN) ---
+// Pastikan ini di luar Scaffold, tapi masih di dalam ReportScreen
+androidx.compose.animation.AnimatedVisibility(
+    visible = showDirectWarrantyScreen,
+    enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.slideInVertically { it },
+    exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.slideOutVertically { it }
+) {
+    DirectWarrantyScreen(
+        onNavigateBack = { showDirectWarrantyScreen = false }
+    )
 }
 }
 
