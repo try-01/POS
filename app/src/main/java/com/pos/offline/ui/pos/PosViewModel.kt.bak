@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @OptIn(kotlinx.coroutines.FlowPreview::class, ExperimentalCoroutinesApi::class)
@@ -74,6 +75,10 @@ class PosViewModel(
     private val _showStartShiftDialog = MutableStateFlow(false)
     private val _showEndShiftDialog = MutableStateFlow(false)
     private val _showShiftListDialog = MutableStateFlow(false)
+    // Backward-compatible API untuk file lain yang masih membaca "ada shift terbuka atau tidak"
+    val openShift: StateFlow<ShiftEntity?> =
+        shiftRepository.openShift
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     // ─── Intermediate flows (private) ────────────────────────────────────────
 
@@ -116,17 +121,12 @@ class PosViewModel(
         computeTotals(items, discType, discValue, rate)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Totals())
 
-    // ─── Backward-compatible API for MainActivity ────────────────────────────
-
-    val openShift: StateFlow<ShiftEntity?> =
-        shiftRepository.openShift
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
-    // ─── Single public UI State ──────────────────────────────────────────────
+    // ─── Single public UI State ───────────────────────────────────────────────
 
     val uiState: StateFlow<PosUiState> = combine(
+        // Combine 1: catalog
         combine(allProducts, allCategories, _selectedCategory, _searchQuery, cartItems) {
-                products, categories, selectedCategory, searchQuery, cart ->
+            products, categories, selectedCategory, searchQuery, cart ->
             CatalogState(
                 products = products,
                 categories = categories,
@@ -136,6 +136,7 @@ class PosViewModel(
                 stockByProductId = products.associate { it.id to it.stock },
             )
         },
+        // Combine 2: cart
         combine(cartItems, totalsFlow) { items, totals ->
             CartState(
                 items = items,
@@ -143,6 +144,7 @@ class PosViewModel(
                 isEmpty = items.isEmpty(),
             )
         },
+        // Combine 3: payment
         combine(
             _paymentMethod,
             _discountType,
@@ -173,6 +175,7 @@ class PosViewModel(
                 changeGivenInCash = changeInCash,
             )
         },
+        // Combine 4: checkout
         combine(_checkoutFlow, _printUiState, _openDrawerOnPrint) { flow, print, openDrawer ->
             CheckoutState(
                 flow = flow,
@@ -181,6 +184,7 @@ class PosViewModel(
                 isProcessing = flow is CheckoutFlow.Processing,
             )
         },
+        // Combine 5: shift
         combine(
             activeShiftFlow,
             openShiftsFlow,
@@ -223,14 +227,15 @@ class PosViewModel(
         initialValue = PosUiState(),
     )
 
-    // ─── Events ──────────────────────────────────────────────────────────────
+    // ─── Events ───────────────────────────────────────────────────────────────
 
     private val _uiEvents = MutableSharedFlow<PosUiEvent>(extraBufferCapacity = 4)
     val uiEvents: SharedFlow<PosUiEvent> = _uiEvents.asSharedFlow()
 
-    // ─── Init ────────────────────────────────────────────────────────────────
+    // ─── Init ─────────────────────────────────────────────────────────────────
 
     init {
+        // Reset kategori terpilih jika kategori dihapus dari produk
         viewModelScope.launch {
             allCategories.collect { list ->
                 val current = _selectedCategory.value
@@ -239,6 +244,8 @@ class PosViewModel(
                 }
             }
         }
+
+        // Auto-manage activeShiftId saat daftar shift berubah
         viewModelScope.launch {
             openShiftsFlow.collect { shifts ->
                 val currentActiveId = _activeShiftId.value
@@ -258,22 +265,25 @@ class PosViewModel(
         }
     }
 
-    // ─── Single action entry point ───────────────────────────────────────────
+    // ─── Single action entry point ────────────────────────────────────────────
 
     fun onAction(action: PosAction) {
         when (action) {
+            // Catalog
             is PosAction.Search -> _searchQuery.value = action.query
             is PosAction.SelectCategory -> _selectedCategory.value = action.category
             is PosAction.AddToCart -> viewModelScope.launch { tryAddToCart(action.product) }
 
+            // Cart
             is PosAction.IncreaseQty -> increaseQty(action.item)
             is PosAction.DecreaseQty -> decreaseQty(action.item)
             is PosAction.SetQuantity -> setQuantityDirect(action.item, action.qty)
             is PosAction.RemoveFromCart -> viewModelScope.launch {
                 cartRepository.remove(action.item.productId)
             }
-            PosAction.ClearCart -> clearCart()
+            PosAction.ClearCart -> viewModelScope.launch { cartRepository.clear() }
 
+            // Payment
             PosAction.ToggleDiscountType -> {
                 _discountType.value = if (_discountType.value == DiscountType.NOMINAL) {
                     DiscountType.PERCENT
@@ -299,6 +309,7 @@ class PosViewModel(
                 _changeGivenInCash.value = true
             }
 
+            // Checkout
             PosAction.Checkout -> checkout()
             PosAction.ResetCheckout -> {
                 _checkoutFlow.value = CheckoutFlow.Idle
@@ -307,6 +318,7 @@ class PosViewModel(
             is PosAction.PrintReceipt -> printReceipt(action.result)
             is PosAction.ToggleOpenDrawer -> _openDrawerOnPrint.value = action.enabled
 
+            // Shift
             PosAction.OpenStartShiftDialog -> _showStartShiftDialog.value = true
             PosAction.DismissStartShiftDialog -> _showStartShiftDialog.value = false
             PosAction.OpenShiftListDialog -> _showShiftListDialog.value = true
@@ -329,7 +341,7 @@ class PosViewModel(
         }
     }
 
-    // ─── Barcode scanner ─────────────────────────────────────────────────────
+    // ─── Barcode scanner (suspend, dipanggil dari rememberBarcodeScanner) ─────
 
     suspend fun onBarcodeScanned(raw: String): Boolean {
         val barcode = sanitizeScannedCode(raw)
@@ -349,7 +361,7 @@ class PosViewModel(
         return success
     }
 
-    // ─── Private helpers ─────────────────────────────────────────────────────
+    // ─── Private helpers ──────────────────────────────────────────────────────
 
     private fun sanitizeScannedCode(raw: String): String? {
         val cleaned = raw.trim()
@@ -372,26 +384,17 @@ class PosViewModel(
         return true
     }
 
-    /**
-     * Poin 1: Tombol + di cart selalu bisa ditekan.
-     * Tidak ada batasan stok di sini — hanya tampilkan warning jika melebihi.
-     */
     private fun increaseQty(item: CartItemEntity) = viewModelScope.launch {
-        val product = productRepository.getById(item.productId)
-        val stock = product?.stock
-
-        // Selalu naikkan qty tanpa batas
-        cartRepository.changeQuantity(
+        val stock = productRepository.getById(item.productId)?.stock
+        val result = cartRepository.changeQuantity(
             productId = item.productId,
             name = item.name,
             unitPrice = item.unitPrice,
             delta = 1.0,
-            maxStock = null, // tidak ada batas — selalu berhasil
+            maxStock = stock,
         )
-
-        // Tampilkan warning jika setelah kenaikan melampaui stok
-        if (stock != null && (item.quantity + 1.0) > stock) {
-            _stockWarning.value = StockWarningInfo(item.name, stock)
+        if (result.crossedIntoExcess) {
+            _stockWarning.value = StockWarningInfo(item.name, stock ?: 0.0)
         }
     }
 
@@ -417,19 +420,6 @@ class PosViewModel(
             }
             cartRepository.setQuantity(item.productId, newQuantity)
         }
-
-    /**
-     * Poin 2: Clear cart → reset diskon & bayar, PERTAHANKAN pajak
-     */
-    private fun clearCart() = viewModelScope.launch {
-        cartRepository.clear()
-        _discountType.value = DiscountType.NOMINAL
-        _discountValue.value = 0.0
-        _paid.value = 0L
-        _changeGivenOverride.value = null
-        _changeGivenInCash.value = true
-        // _taxRate TIDAK direset
-    }
 
     private fun checkout() = viewModelScope.launch {
         if (_checkoutFlow.value is CheckoutFlow.Processing) return@launch
@@ -466,16 +456,14 @@ class PosViewModel(
                 changeGivenOverride = _changeGivenOverride.value,
                 changeGivenInCash = _changeGivenInCash.value,
             )
-
-            // Poin 2: Reset setelah checkout sukses — PERTAHANKAN pajak
+            // Reset payment fields setelah checkout sukses
             _discountType.value = DiscountType.NOMINAL
             _discountValue.value = 0.0
-            // _taxRate TIDAK direset
+            _taxRate.value = 0.0
             _paid.value = 0L
             _changeGivenOverride.value = null
             _changeGivenInCash.value = true
             _paymentMethod.value = PaymentMethod.CASH
-
             _checkoutFlow.value = CheckoutFlow.Success(result)
         } catch (e: InsufficientStockException) {
             _checkoutFlow.value = CheckoutFlow.Error(
@@ -583,7 +571,7 @@ class PosViewModel(
         }
     }
 
-    // ─── Companion ───────────────────────────────────────────────────────────
+    // ─── Companion ────────────────────────────────────────────────────────────
 
     companion object {
         fun computeTotals(
