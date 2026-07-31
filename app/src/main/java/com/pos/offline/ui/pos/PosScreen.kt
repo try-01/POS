@@ -65,7 +65,7 @@ fun PosScreen(
 
     LaunchedEffect(isCartExpanded) {
         if (localState.isCartExpanded != isCartExpanded) {
-            localState.setCartExpanded(isCartExpanded)
+            localState.updateCartExpanded(isCartExpanded)
         }
     }
 

@@ -7,17 +7,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.pos.offline.data.local.entity.CartItemEntity
 
-/**
- * Menyimpan ephemeral UI state yang hanya relevan di level composable,
- * tidak perlu survive config change, dan tidak perlu dikonsumsi file lain.
- *
- * Dipisah dari [PosUiState] agar ViewModel tetap bersih dari concern UI murni.
- */
 class PosLocalStateHolder {
 
-    // ── Layout ────────────────────────────────────────────────────────────────
-
-    /** Status expand/collapse CartPane di narrow layout */
     var isCartExpanded by mutableStateOf(false)
         private set
 
@@ -25,32 +16,42 @@ class PosLocalStateHolder {
         isCartExpanded = !isCartExpanded
     }
 
-    fun setCartExpanded(expanded: Boolean) {
+    fun updateCartExpanded(expanded: Boolean) {
         isCartExpanded = expanded
     }
 
-    // ── Cart dialogs ──────────────────────────────────────────────────────────
-
-    /** Dialog konfirmasi "Kosongkan Keranjang?" */
     var showClearConfirm by mutableStateOf(false)
         private set
 
-    fun showClearDialog() { showClearConfirm = true }
-    fun dismissClearDialog() { showClearConfirm = false }
+    fun showClearDialog() {
+        showClearConfirm = true
+    }
 
-    /** Item yang sedang diedit jumlahnya */
+    fun dismissClearDialog() {
+        showClearConfirm = false
+    }
+
     var qtyEditItem by mutableStateOf<CartItemEntity?>(null)
         private set
 
-    fun startQtyEdit(item: CartItemEntity) { qtyEditItem = item }
-    fun dismissQtyEdit() { qtyEditItem = null }
+    fun startQtyEdit(item: CartItemEntity) {
+        qtyEditItem = item
+    }
 
-    /** Dialog peringatan pembayaran kurang */
+    fun dismissQtyEdit() {
+        qtyEditItem = null
+    }
+
     var showInsufficientPaymentDialog by mutableStateOf(false)
         private set
 
-    fun showInsufficientPayment() { showInsufficientPaymentDialog = true }
-    fun dismissInsufficientPayment() { showInsufficientPaymentDialog = false }
+    fun showInsufficientPayment() {
+        showInsufficientPaymentDialog = true
+    }
+
+    fun dismissInsufficientPayment() {
+        showInsufficientPaymentDialog = false
+    }
 }
 
 @Composable
