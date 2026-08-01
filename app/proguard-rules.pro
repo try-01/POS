@@ -258,6 +258,7 @@
 -dontwarn org.openxmlformats.schemas.wordprocessingml.**
 -dontwarn org.openxmlformats.schemas.drawingml.**
 -dontwarn org.openxmlformats.schemas.spreadsheetml.**
+-dontwarn org.openxmlformats.schemas.officeDocument.**
 
 # External optional dependencies
 -dontwarn org.w3c.dom.**
