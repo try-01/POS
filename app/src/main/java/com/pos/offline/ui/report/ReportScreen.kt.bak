@@ -584,7 +584,7 @@ androidx.compose.animation.AnimatedVisibility(
             // MENGHUBUNGKAN KE VIEWMODEL:
             onSubmitWarranty = { product, qty, note ->
                 // Panggil fungsi yang ada di ReportViewModel
-                reportViewModel.processDirectWarranty(
+                viewModel.processDirectWarranty(
                     product = product,
                     qty = qty,
                     note = note
@@ -592,7 +592,7 @@ androidx.compose.animation.AnimatedVisibility(
             },
 
             onSubmitExchange = { broken, brokenQty, replace, replaceQty, note ->
-                reportViewModel.prosesTukarGulingGaransi(
+                viewModel.prosesTukarGulingGaransi(
                     barangRusak = broken,
                     qtyRusak = brokenQty,
                     barangPengganti = replace,

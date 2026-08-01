@@ -274,7 +274,6 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             checkSkuConflict = viewModel::checkSkuConflict,
             onDeleteRequest = { viewModel.requestDeleteFromForm(state.id) },
             onScanError = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
-            onReturnDamaged = { qty -> viewModel.returnDamagedItemToSupplier(state.id, qty) } // BARU: Sambungan ke ViewModel
         )
     }
     pendingDelete?.let { target ->
@@ -542,11 +541,6 @@ private fun ProductRow(
                     )
                     Spacer(Modifier.width(8.dp))
                     StockBadge(stock = product.stock)
-                    // BARU: Tampilkan badge khusus jika ada barang rusak
-                    if (product.damagedStock > 0.0) {
-                        Spacer(Modifier.width(6.dp))
-                        DamagedStockBadge(stock = product.damagedStock)
-                    }
                     if (product.cost > 0) {
                         Spacer(Modifier.width(8.dp))
                         Text(
@@ -622,18 +616,6 @@ private fun StockBadge(stock: Double) {
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
             color = color,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
-@Composable
-private fun DamagedStockBadge(stock: Double) {
-    Surface(color = MaterialTheme.colorScheme.error.copy(alpha = 0.16f), shape = RoundedCornerShape(6.dp)) {
-        Text(
-            text = "Rusak ${stock.formatQuantity()}",
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-            color = MaterialTheme.colorScheme.error,
             fontWeight = FontWeight.SemiBold,
         )
     }
@@ -818,7 +800,6 @@ private fun ProductFormDialog(
     checkSkuConflict: suspend (String, Long) -> String?,
     onDeleteRequest: () -> Unit,
     onScanError: (String) -> Unit,
-    onReturnDamaged: (Double) -> Unit, // BARU
 ) {
     var name by remember(state.id) { mutableStateOf(state.name) }
     var sku by remember(state.id) { mutableStateOf(state.sku) }
@@ -837,7 +818,6 @@ private fun ProductFormDialog(
     var skuConflict by remember(state.id) { mutableStateOf<String?>(null) }
     var isCheckingBarcode by remember(state.id) { mutableStateOf(false) }
     var isCheckingSku by remember(state.id) { mutableStateOf(false) }
-    var showReturnDamagedDialog by remember(state.id) { mutableStateOf(false) } // BARU: Mengontrol dialog retur pabrik
     val context = LocalContext.current
     val hasCamera =
         remember {
@@ -992,32 +972,6 @@ private fun ProductFormDialog(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                
-                // BARU: Panel Informasi Stok Rusak (Hanya tampil jika ada stok rusak pada mode edit)
-                if (!state.isNew && state.damagedStock > 0.0) {
-                    Spacer(Modifier.height(4.dp))
-                    Surface(
-                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Stok Rusak/Garansi", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onErrorContainer)
-                                Text("${state.damagedStock.formatQuantity()} item tidak layak jual", fontSize = 11.sp, color = MaterialTheme.colorScheme.onErrorContainer)
-                            }
-                            Button(
-                                onClick = { showReturnDamagedDialog = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                            ) {
-                                Text("Retur Pabrik", fontSize = 11.sp, color = MaterialTheme.colorScheme.onError)
-                            }
-                        }
-                    }
-                }
                 Spacer(Modifier.height(2.dp))
             }
         },
@@ -1074,48 +1028,6 @@ private fun ProductFormDialog(
             }
         },
     )
-    // BARU: Dialog Konfirmasi Retur ke Pabrik yang akan muncul menumpuk jika ditekan
-    if (showReturnDamagedDialog) {
-        var returnQtyStr by remember { mutableStateOf(state.damagedStock.formatQuantity()) }
-        
-        AlertDialog(
-            onDismissRequest = { showReturnDamagedDialog = false },
-            title = { Text("Retur ke Pabrik/Supplier", style = MaterialTheme.typography.titleMedium) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "Berapa banyak stok rusak yang ingin dikembalikan ke pabrik/dibuang?",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    DecimalNumberField(
-                        value = returnQtyStr,
-                        onValueChange = { returnQtyStr = it },
-                        label = "Jumlah Retur",
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val qty = returnQtyStr.toDoubleOrNull() ?: 0.0
-                        if (qty > 0 && qty <= state.damagedStock) {
-                            onReturnDamaged(qty)
-                            showReturnDamagedDialog = false
-                        } else {
-                            onScanError("Jumlah tidak valid. Maksimal ${state.damagedStock.formatQuantity()}") // Memanfaatkan fungsi notif form yang sudah ada
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Konfirmasi Retur")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showReturnDamagedDialog = false }) { Text("Batal") }
-            }
-        )
-    }
 }
 @Composable
 private fun DecimalNumberField(

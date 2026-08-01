@@ -2123,6 +2123,7 @@ private data class ReturnRowState(
     val included: Boolean = false,
     val quantity: Double = maxQuantity,
     val restocked: Boolean = productId != null,
+    val restockToDamaged: Boolean = false, // BARU: Status pilihan masuk ke stok rusak
 )
 
 @Composable
@@ -2234,6 +2235,12 @@ private fun ReturnItemDialog(
                                     it[index] = row.copy(restocked = checked)
                                 }
                         },
+                        onRestockToDamagedChange = { checked ->
+                            rows =
+                                rows.toMutableList().also {
+                                    it[index] = row.copy(restockToDamaged = checked)
+                                }
+                        },
                     )
                     HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 }
@@ -2291,6 +2298,7 @@ private fun ReturnItemDialog(
                                 unitPrice = row.unitPrice,
                                 quantityReturned = row.quantity,
                                 restocked = row.restocked && row.productId != null,
+                                restockToDamaged = row.restockToDamaged && row.restocked && row.productId != null, // BARU
                             )
                         }
                     onSubmit(items, refundAmountText.toLongOrNull() ?: 0L, refundMethod, note.trim())
@@ -2315,6 +2323,7 @@ private fun ReturnItemRow(
     onToggleIncluded: (Boolean) -> Unit,
     onQuantityChange: (Double) -> Unit,
     onRestockedChange: (Boolean) -> Unit,
+    onRestockToDamagedChange: (Boolean) -> Unit, // BARU
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2334,41 +2343,65 @@ private fun ReturnItemRow(
             }
         }
         if (row.included) {
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth().padding(start = 40.dp, top = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                val step = if (row.maxQuantity % 1.0 == 0.0) 1.0 else 0.1
-                MiniStepper(
-                    qty = row.quantity,
-                    canDecrease = row.quantity > step,
-                    canIncrease = row.quantity < row.maxQuantity,
-                    onDecrease = { onQuantityChange((row.quantity - step).coerceAtLeast(step)) },
-                    onIncrease = { onQuantityChange((row.quantity + step).coerceAtMost(row.maxQuantity)) },
-                )
-                Spacer(Modifier.width(12.dp))
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier =
-                        if (row.productId != null) {
-                            Modifier.clickable { onRestockedChange(!row.restocked) }
-                        } else {
-                            Modifier
-                        },
                 ) {
-                    Checkbox(
-                        checked = row.restocked && row.productId != null,
-                        onCheckedChange = if (row.productId != null) onRestockedChange else null,
-                        enabled = row.productId != null,
+                    val step = if (row.maxQuantity % 1.0 == 0.0) 1.0 else 0.1
+                    MiniStepper(
+                        qty = row.quantity,
+                        canDecrease = row.quantity > step,
+                        canIncrease = row.quantity < row.maxQuantity,
+                        onDecrease = { onQuantityChange((row.quantity - step).coerceAtLeast(step)) },
+                        onIncrease = { onQuantityChange((row.quantity + step).coerceAtMost(row.maxQuantity)) },
                     )
-                    Text(
-                        "Kembalikan ke stok?",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color =
-                            MaterialTheme.colorScheme.onSurface.copy(
-                                alpha = if (row.productId != null) 0.8f else 0.4f,
-                            ),
-                    )
+                    Spacer(Modifier.width(12.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier =
+                            if (row.productId != null) {
+                                Modifier.clickable { onRestockedChange(!row.restocked) }
+                            } else {
+                                Modifier
+                            },
+                    ) {
+                        Checkbox(
+                            checked = row.restocked && row.productId != null,
+                            onCheckedChange = if (row.productId != null) onRestockedChange else null,
+                            enabled = row.productId != null,
+                        )
+                        Text(
+                            "Kembalikan ke stok?",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color =
+                                MaterialTheme.colorScheme.onSurface.copy(
+                                    alpha = if (row.productId != null) 0.8f else 0.4f,
+                                ),
+                        )
+                    }
+                }
+                
+                // BARU: Checkbox tambahan jika dikembalikan tapi masuk ke Stok Rusak/Garansi
+                if (row.restocked && row.productId != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { onRestockToDamagedChange(!row.restockToDamaged) }
+                    ) {
+                        Checkbox(
+                            checked = row.restockToDamaged,
+                            onCheckedChange = onRestockToDamagedChange,
+                        )
+                        Text(
+                            "Tandai sebagai Stok Rusak / Garansi",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.error, // Berwarna merah agar kasir tahu ini barang rusak
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }

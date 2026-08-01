@@ -48,7 +48,6 @@ data class ProductFormState(
     val price: Long = 0L,
     val cost: Long = 0L,
     val stock: Double = 0.0,
-    val damagedStock: Double = 0.0, // BARU: Menampung data stok rusak ke form
     val createdAt: Long = System.currentTimeMillis(),
 ) {
     val isNew: Boolean get() = id == 0L
@@ -285,13 +284,7 @@ suspend fun onBarcodeScanned(raw: String?): Boolean {
     }
     fun startEdit(product: ProductEntity) {
         editingProductSnapshot = product
-        _form.value = ProductFormState(
-            id=product.id, name=product.name, sku=product.sku, 
-            barcode=product.barcode ?: "", category=product.category, 
-            price=product.price, cost=product.cost, stock=product.stock, 
-            damagedStock=product.damagedStock, // BARU: Memasukkan nilai dari database ke form
-            createdAt=product.createdAt
-        )
+        _form.value = ProductFormState(id=product.id, name=product.name, sku=product.sku, barcode=product.barcode ?: "", category=product.category, price=product.price, cost=product.cost, stock=product.stock, createdAt=product.createdAt)
     }
     fun dismissForm() { _form.value = null }
     fun save(state: ProductFormState) {
@@ -307,12 +300,7 @@ suspend fun onBarcodeScanned(raw: String?): Boolean {
                 val barcode = state.barcode.trim().ifBlank { null }
                 val category = state.category.trim()
                 val now = System.currentTimeMillis()
-                val entity = ProductEntity(
-                    id=state.id, name=name, sku=sku, barcode=barcode, 
-                    category=category, price=state.price, cost=state.cost, 
-                    stock=state.stock, damagedStock=state.damagedStock, // BARU: Menyimpan ulang stok rusak
-                    active=true, createdAt=if (state.isNew) now else state.createdAt, updatedAt=now
-                )
+                val entity = ProductEntity(id=state.id, name=name, sku=sku, barcode=barcode, category=category, price=state.price, cost=state.cost, stock=state.stock, active=true, createdAt=if (state.isNew) now else state.createdAt, updatedAt=now)
                 productRepository.save(entity)
                 notify(if (state.isNew) "Produk ditambahkan." else "Produk diperbarui.")
                 _form.value = null
@@ -354,18 +342,5 @@ suspend fun onBarcodeScanned(raw: String?): Boolean {
         if (trimmed.isBlank()) return null
         val existing = productRepository.getProductBySku(trimmed)
         return if (existing != null && existing.id != excludeId) existing.name else null
-    }
-
-    // BARU: Fungsi untuk memproses retur barang rusak ke pabrik/supplier
-    fun returnDamagedItemToSupplier(productId: Long, qty: Double) {
-        viewModelScope.launch {
-            try {
-                productRepository.decrementDamagedStock(productId, qty)
-                notify("Berhasil meretur $qty stok rusak ke pabrik/supplier.")
-                _form.value = null // Menutup form otomatis untuk merefresh data inventaris
-            } catch (e: Exception) {
-                notify("Gagal meretur stok rusak: ${e.message}")
-            }
-        }
     }
 }

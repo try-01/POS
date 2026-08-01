@@ -17,6 +17,7 @@ data class ReturnItemInput(
     val unitPrice: Long,
     val quantityReturned: Double,
     val restocked: Boolean,
+    val restockToDamaged: Boolean = false, // BARU: Menandai apakah masuk ke stok rusak/garansi
 )
 data class ReturnDetail(
     val header: ReturnEntity,
@@ -114,7 +115,13 @@ class ReturnRepository(
             returnDao.insertItems(itemEntities)
             itemInputs.forEach { input ->
                 if (input.restocked && input.productId != null) {
-                    productDao.incrementStock(input.productId, input.quantityReturned, now)
+                    if (input.restockToDamaged) {
+                        // Jika dicentang masuk ke stok rusak/garansi
+                        productDao.incrementDamagedStock(input.productId, input.quantityReturned, now)
+                    } else {
+                        // Jika masuk ke stok layak jual biasa
+                        productDao.incrementStock(input.productId, input.quantityReturned, now)
+                    }
                 }
             }
             transactionDao.setReturnId(transactionId, newReturnId)
