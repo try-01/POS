@@ -51,7 +51,6 @@ android {
     packaging {
         resources {
             excludes += setOf(
-                // ===== META-INF =====
                 "/META-INF/{AL2.0,LGPL2.1}",
                 "META-INF/DEPENDENCIES",
                 "META-INF/LICENSE",
@@ -61,49 +60,8 @@ android {
                 "META-INF/NOTICE.txt",
                 "META-INF/notice.txt",
                 "META-INF/ASL2.0",
-                "META-INF/MANIFEST.MF",
                 "META-INF/*.version",
-                "META-INF/INDEX.LIST",
-                "META-INF/maven/**",
-                "META-INF/versions/**",
-                "META-INF/services/javax.xml.stream.*",
-                "META-INF/services/org.apache.poi.sl.*",
-                "META-INF/services/org.apache.poi.extractor.*",
-
-                // ===== POI: POWERPOINT =====
-                "org/apache/poi/xslf/**",
-                "org/apache/poi/sl/**",
-                "org/apache/poi/hslf/**",
-
-                // ===== POI: WORD =====
-                "org/apache/poi/xwpf/**",
-                "org/apache/poi/hwpf/**",
-
-                // ===== POI: VISIO / PUBLISHER / OUTLOOK =====
-                "org/apache/poi/xdgf/**",
-                "org/apache/poi/hpbf/**",
-                "org/apache/poi/hmef/**",
-                "org/apache/poi/hsmf/**",
-
-                // ===== POI: DIAGRAM/CHART/DRAWING =====
-                "org/apache/poi/xddf/**",
-
-                // ===== SCHEMA: POWERPOINT =====
-                "org/openxmlformats/schemas/presentationml/**",
-
-                // ===== SCHEMA: WORD =====
-                "org/openxmlformats/schemas/wordprocessingml/**",
-
-                // ===== SCHEMA: DRAWING =====
-                "org/openxmlformats/schemas/drawingml/**",
-
-                // ===== DOKUMENTASI =====
-                "**/*.md",
-                "**/*.html",
-                "**/*.css",
-                "**/*.dtd",
-                "license/**",
-                "LICENSE/**"
+                "META-INF/INDEX.LIST"
             )
         }
     }
@@ -146,30 +104,10 @@ dependencies {
     // ===== ML KIT BARCODE =====
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
-    // =====================================================
-    //  APACHE POI
-    //
-    //  PENTING: JANGAN exclude log4j!
-    //  SXSSFWorkbook WAJIB butuh log4j saat class loading.
-    //
-    //  Yang AMAN di-exclude:
-    //  - commons-math3 (fungsi matematika lanjutan)
-    //  - bouncycastle (crypto/encryption)
-    //  - santuario (XML digital signature)
-    //  - pdfbox (PDF processing)
-    //  - javaparser (code parsing)
-    //  - poi-scratchpad (old binary formats PPT/Word/Visio)
-    // =====================================================
-    implementation("org.apache.poi:poi:5.5.1")
-    implementation("org.apache.poi:poi-ooxml:5.5.1") {
-        exclude(group = "org.apache.commons", module = "commons-math3")
-        exclude(group = "org.bouncycastle")
-        exclude(group = "org.apache.santuario")
-        exclude(group = "org.apache.pdfbox")
-        exclude(group = "de.rototor.pdfbox")
-        exclude(group = "com.github.javaparser")
-        exclude(group = "org.apache.poi", module = "poi-scratchpad")
-    }
+    // ===== FASTEXCEL (pengganti Apache POI) =====
+    // Export .xlsx: ~300 KB (vs POI ~15 MB)
+    implementation("org.dhatim:fastexcel:0.18.4")
+    implementation("org.dhatim:fastexcel-reader:0.18.4")
 
     // ===== TESTING =====
     androidTestImplementation("androidx.room:room-testing:2.6.1")

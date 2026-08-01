@@ -104,10 +104,9 @@ dependencies {
     // ===== ML KIT BARCODE =====
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
-    // ===== FASTEXCEL (pengganti Apache POI) =====
-    // Export .xlsx: ~300 KB (vs POI ~15 MB)
-    implementation("org.dhatim:fastexcel:0.18.4")
-    implementation("org.dhatim:fastexcel-reader:0.18.4")
+    // ===== FASTEXCEL 0.20.2 =====
+    implementation("org.dhatim:fastexcel:0.20.2")
+    implementation("org.dhatim:fastexcel-reader:0.20.2")
 
     // ===== TESTING =====
     androidTestImplementation("androidx.room:room-testing:2.6.1")

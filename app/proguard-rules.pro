@@ -1,6 +1,7 @@
 # ============================================================
 #  PROGUARD / R8 RULES — POS OFFLINE
-#  Compose + Room + FastExcel + CameraX + ML Kit + ESC/POS
+#  Compose + Room + FastExcel 0.20.2 + CameraX
+#  + ML Kit + ESC/POS Printer
 # ============================================================
 
 
@@ -74,16 +75,14 @@
 
 
 # =========================================================
-# 4. FASTEXCEL + AALTO XML
+# 4. FASTEXCEL 0.20.2 + AALTO XML 1.4.0
 #
-#    FastExcel Writer: menulis XML langsung (tidak butuh Aalto)
-#    FastExcel Reader: parsing XML via Aalto (WAJIB keep)
-#
-#    Aalto menggunakan ServiceLoader + reflection
-#    untuk inisialisasi XMLInputFactory → harus di-keep
+#    Writer: menulis XML langsung (tidak butuh Aalto)
+#    Reader: parsing XML via Aalto (WAJIB keep)
+#    Aalto di-load via ServiceLoader/reflection
 # =========================================================
 
-# Aalto XML parser (WAJIB untuk import/read .xlsx)
+# Aalto XML parser (WAJIB untuk import .xlsx)
 -keep class com.fasterxml.aalto.** { *; }
 -keep class com.fasterxml.core.** { *; }
 
@@ -92,7 +91,7 @@
 -keep class * implements javax.xml.stream.XMLInputFactory { *; }
 -keep class * extends javax.xml.stream.XMLInputFactory { *; }
 
-# FastExcel
+# FastExcel suppress warnings
 -dontwarn org.dhatim.fastexcel.**
 -dontwarn org.dhatim.fastexcel.reader.**
 -dontwarn com.fasterxml.aalto.**
