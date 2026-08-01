@@ -130,7 +130,6 @@
     !static !transient <fields>;
 }
 
-
 # =========================================================
 # 10. DONTWARN
 # =========================================================
@@ -139,3 +138,12 @@
 -dontwarn javax.**
 -dontwarn java.nio.file.**
 -dontwarn java.lang.invoke.**
+
+# FastExcel optional dependencies
+-dontwarn org.tukaani.xz.**
+-dontwarn org.brotli.dec.**
+-dontwarn org.objectweb.asm.**
+-dontwarn com.github.luben.zstd.**
+
+# Java reflection (Android tidak punya AnnotatedType)
+-dontwarn java.lang.reflect.AnnotatedType
