@@ -108,6 +108,8 @@ dependencies {
     implementation("org.dhatim:fastexcel:0.20.2")
     implementation("org.dhatim:fastexcel-reader:0.20.2")
 
+    implementation("com.fasterxml:aalto-xml:1.4.0") 
+
     // ===== TESTING =====
     androidTestImplementation("androidx.room:room-testing:2.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

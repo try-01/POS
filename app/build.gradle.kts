@@ -63,6 +63,15 @@ android {
                 "META-INF/*.version",
                 "META-INF/INDEX.LIST"
             )
+
+            pickFirsts += setOf(
+            "META-INF/services/javax.xml.stream.XMLInputFactory",
+            "META-INF/services/javax.xml.stream.XMLOutputFactory",
+            "META-INF/services/javax.xml.stream.XMLEventFactory",
+            "META-INF/services/org.codehaus.stax2.validation.XMLValidationSchemaFactory.DTD",
+            "META-INF/services/org.codehaus.stax2.validation.XMLValidationSchemaFactory.RELAXNG",
+            "META-INF/services/org.codehaus.stax2.validation.XMLValidationSchemaFactory.W3C"
+            )
         }
     }
 }
@@ -109,6 +118,7 @@ dependencies {
     implementation("org.dhatim:fastexcel-reader:0.20.2")
 
     implementation("com.fasterxml:aalto-xml:1.4.0") 
+    implementation("javax.xml.stream:stax-api:1.0-2")
 
     // ===== TESTING =====
     androidTestImplementation("androidx.room:room-testing:2.6.1")
