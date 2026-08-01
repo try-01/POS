@@ -257,6 +257,7 @@
 -dontwarn org.openxmlformats.schemas.presentationml.**
 -dontwarn org.openxmlformats.schemas.wordprocessingml.**
 -dontwarn org.openxmlformats.schemas.drawingml.**
+-dontwarn org.openxmlformats.schemas.spreadsheetml.**
 
 # External optional dependencies
 -dontwarn org.w3c.dom.**
