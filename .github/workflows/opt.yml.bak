@@ -388,9 +388,7 @@ jobs:
 
           chmod +x ./gradlew
 
-          ./gradlew assembleRelease \
-            --no-daemon \
-            --no-build-cache \
+          ./assembleRelease --parallel --build-cache --configuration-cache --stacktrace
             -Dorg.gradle.jvmargs="-Xmx2g" \
             2>&1 | tail -30
 
@@ -401,6 +399,20 @@ jobs:
             MB=$(echo "scale=2; $SIZE / 1048576" | bc 2>/dev/null || echo "?")
             echo "  📦 $(basename $apk): ${MB} MB ($SIZE bytes)"
           done
+
+      # --- STEP: Menandatangani Release APK ---
+      - name: Sign APK
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app
+        env:
+          BUILD_TOOLS_VERSION: "34.0.0"
+        with:
+          # UBAH: Arahkan ke folder release tempat Release APK berada
+          releaseDirectory: app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
+          alias: ${{ secrets.KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
 
       # ============================================
       #  POST-PROCESS: STATISTIK

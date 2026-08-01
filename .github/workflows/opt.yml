@@ -388,10 +388,8 @@ jobs:
 
           chmod +x ./gradlew
 
-          ./gradlew assembleRelease \
-            --no-daemon \
-            --no-build-cache \
-            -Dorg.gradle.jvmargs="-Xmx2g" \
+          ./assembleRelease --parallel --build-cache --configuration-cache --stacktrace \
+            -Dorg.gradle.daemon=false \
             2>&1 | tail -30
 
           echo ""
