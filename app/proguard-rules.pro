@@ -1,9 +1,6 @@
 # ============================================================
 #  PROGUARD / R8 RULES — POS OFFLINE
-#  Optimized for: Compose + Room + POI (Excel) + CameraX
-#                 + ML Kit Barcode + ESC/POS Printer
-#
-#  Terakhir diupdate: 2025
+#  Compose + Room + POI (Excel) + CameraX + ML Kit + ESC/POS
 # ============================================================
 
 
@@ -29,20 +26,17 @@
 # 2. HAPUS LOG & DEBUG CODE DI RELEASE BUILD
 # =========================================================
 
-# Hapus Log.v, Log.d, Log.i (pertahankan Log.w & Log.e)
 -assumenosideeffects class android.util.Log {
     public static int v(...);
     public static int d(...);
     public static int i(...);
 }
 
-# Hapus println/print (debug statements)
 -assumenosideeffects class java.io.PrintStream {
     public void println(...);
     public void print(...);
 }
 
-# Hapus Kotlin null-check parameter names
 -assumenosideeffects class kotlin.jvm.internal.Intrinsics {
     public static void checkNotNull(...);
     public static void checkNotNullParameter(...);
@@ -52,7 +46,6 @@
     public static void checkReturnedValueIsNotNull(...);
 }
 
-# Hapus Compose source information markers
 -assumenosideeffects class androidx.compose.runtime.ComposerKt {
     void sourceInformation(...);
     void sourceInformationMarkerStart(...);
@@ -64,84 +57,73 @@
 
 # =========================================================
 # 3. ROOM DATABASE
-#    Package: com.pos.offline.data.local
 # =========================================================
 
-# Entity classes
 -keep @androidx.room.Entity class * { *; }
-
-# DAO interfaces
 -keep @androidx.room.Dao interface * { *; }
-
-# Database class
 -keep @androidx.room.Database class * { *; }
 
-# Annotations
 -keepclassmembers class * {
     @androidx.room.* <fields>;
     @androidx.room.* <methods>;
 }
 
-# TypeConverters
 -keep class * {
     @androidx.room.TypeConverter <methods>;
 }
 
-# Keep spesifik: Room entity & enum di project ini
 -keep class com.pos.offline.data.local.entity.** { *; }
 -keep class com.pos.offline.data.local.PosDatabase { *; }
 -keep class com.pos.offline.data.local.PosDatabase_Impl { *; }
 -keep class com.pos.offline.data.local.dao.** { *; }
-
-# Room Migrations
 -keep class com.pos.offline.data.local.Migrations { *; }
 -keep class com.pos.offline.data.local.MigrationsKt { *; }
 
 
 # =========================================================
-# 4. APACHE POI — KHUSUS EXCEL (SPREADSHEET)
+# 4. APACHE POI — EXCEL
 #
-#    ExcelManager.kt menggunakan:
-#    - SXSSFWorkbook (export .xlsx via streaming)
-#    - WorkbookFactory.create() (import, support .xls & .xlsx)
-#    - DataFormatter (format cell values)
-#
-#    WorkbookFactory menggunakan ServiceLoader pattern,
-#    jadi kita perlu keep beberapa service classes.
+#    KRITIS: Log4j HARUS dipertahankan!
+#    SXSSFWorkbook memanggil LogManager.getLogger()
+#    di static initializer. Tanpa log4j → CRASH.
 # =========================================================
 
-# --- 4a. POI Core (ss = spreadsheet interface) ---
+# --- 4a. LOG4J (WAJIB untuk POI) ---
+-keep class org.apache.logging.log4j.** { *; }
+-keep class org.apache.logging.log4j.spi.** { *; }
+-keep class org.apache.logging.log4j.message.** { *; }
+-keep class org.apache.logging.log4j.status.** { *; }
+-keep class org.apache.logging.log4j.simple.** { *; }
+-keep class org.apache.logging.log4j.util.** { *; }
+-dontwarn org.apache.logging.log4j.**
+
+# --- 4b. POI Core ---
 -keep class org.apache.poi.ss.** { *; }
 -keep class org.apache.poi.util.** { *; }
 -keep class org.apache.poi.common.** { *; }
 -keep class org.apache.poi.poifs.** { *; }
 
-# --- 4b. XSSF & SXSSF (.xlsx format) ---
+# --- 4c. XSSF & SXSSF (.xlsx) ---
 -keep class org.apache.poi.xssf.** { *; }
--keep class org.apache.poi.xssf.streaming.** { *; }
 
-# --- 4c. HSSF (.xls format, dibutuhkan oleh WorkbookFactory) ---
-# WorkbookFactory.create() otomatis detect format.
-# Jika user import file .xls, HSSF diperlukan.
+# --- 4d. HSSF (.xls — dibutuhkan WorkbookFactory) ---
 -keep class org.apache.poi.hssf.** { *; }
 
-# --- 4d. OpenXML4J (ZIP/package layer untuk .xlsx) ---
+# --- 4e. OpenXML4J ---
 -keep class org.apache.poi.openxml4j.** { *; }
 -keep class org.apache.poi.ooxml.** { *; }
--keep class org.apache.poi.ooxml.util.** { *; }
 
-# --- 4e. XMLBeans (XML parsing layer) ---
+# --- 4f. XMLBeans ---
 -keep class org.apache.xmlbeans.** { *; }
 
-# --- 4f. Spreadsheet Schemas (WAJIB untuk .xlsx) ---
+# --- 4g. Spreadsheet Schemas ---
 -keep class org.openxmlformats.schemas.spreadsheetml.** { *; }
 -keep class org.openxmlformats.schemas.officeDocument.** { *; }
 
-# --- 4g. Schema support classes ---
+# --- 4h. Schema support ---
 -keep class schemaorg_apache_xmlbeans.** { *; }
 
-# --- 4h. Pertahankan direktori schema (.xsb files) ---
-#     Ini KRITIS: tanpa ini, POI crash saat baca .xlsx
+# --- 4i. Directories (.xsb files) ---
 -keeppackagenames org.apache.poi.**
 -keeppackagenames org.apache.xmlbeans.**
 -keeppackagenames org.openxmlformats.schemas.spreadsheetml.**
@@ -153,7 +135,7 @@
 -keepdirectories org.openxmlformats.**
 -keepdirectories schemaorg_apache_xmlbeans.**
 
-# --- 4i. ServiceLoader (WorkbookFactory discovery) ---
+# --- 4j. ServiceLoader ---
 -keep class * implements org.apache.poi.ss.usermodel.WorkbookProvider { *; }
 -keepnames class * implements org.apache.poi.ss.usermodel.WorkbookProvider
 
@@ -191,8 +173,7 @@
 
 
 # =========================================================
-# 9. ENUM (Semua enum harus dipertahankan)
-#    DiscountType, PaymentMethod, TransactionStatus
+# 9. ENUM
 # =========================================================
 
 -keepclassmembers enum * {
@@ -220,22 +201,19 @@
 # 11. KEEP SPESIFIK PROJECT
 # =========================================================
 
-# Data classes yang dipakai oleh ExcelManager
 -keep class com.pos.offline.util.ImportedProductRow { *; }
 -keep class com.pos.offline.util.ExcelImportResult { *; }
 -keep class com.pos.offline.util.ExcelOutcome { *; }
 -keep class com.pos.offline.util.ExcelOutcome$* { *; }
 -keep class com.pos.offline.util.ExcelManager { *; }
-
-# Backup & Restore (mungkin pakai reflection/file I/O)
 -keep class com.pos.offline.data.backup.** { *; }
 
 
 # =========================================================
-# 12. DONTWARN — SUPPRESS WARNINGS
+# 12. DONTWARN
 # =========================================================
 
-# Java Desktop APIs (tidak ada di Android)
+# Java Desktop APIs
 -dontwarn java.awt.**
 -dontwarn javax.**
 -dontwarn java.nio.file.**
@@ -253,12 +231,13 @@
 -dontwarn org.apache.poi.hsmf.**
 -dontwarn org.apache.poi.xddf.**
 
-# Schema yang tidak dipakai
+# Schema yang tidak dipakai (wildcard — aman)
 -dontwarn org.openxmlformats.schemas.presentationml.**
 -dontwarn org.openxmlformats.schemas.wordprocessingml.**
 -dontwarn org.openxmlformats.schemas.drawingml.**
 -dontwarn org.openxmlformats.schemas.spreadsheetml.**
 -dontwarn org.openxmlformats.schemas.officeDocument.**
+
 
 # External optional dependencies
 -dontwarn org.w3c.dom.**
@@ -283,7 +262,6 @@
 -dontwarn org.apache.batik.**
 -dontwarn org.apache.commons.compress.**
 -dontwarn org.apache.commons.math3.**
--dontwarn org.apache.logging.**
 -dontwarn org.apache.santuario.**
 -dontwarn org.jspecify.annotations.**
 -dontwarn org.osgi.framework.**
