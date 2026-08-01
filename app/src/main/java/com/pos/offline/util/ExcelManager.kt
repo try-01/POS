@@ -506,8 +506,8 @@ object ExcelManager {
     ): Int? {
         if (row.cellCount < REQUIRED_IMPORT_COLUMNS) return null
 
-        fun cell(c: Int): String =
-            row.getCellAsString(c).orElse("").trim().lowercase()
+        fun cell(c: Int): String = 
+            getSafeCellString(row, c).lowercase()
 
         val cell0 = cell(0)
         val cell1 = cell(1)
@@ -544,8 +544,8 @@ object ExcelManager {
         skipOffset: Int,
     ): Pair<ImportedProductRow?, String?>? {
 
-        fun cell(logicalCol: Int): String =
-            row.getCellAsString(logicalCol + skipOffset).orElse("").trim()
+        fun cell(logicalCol: Int): String = 
+            getSafeCellString(row, logicalCol + skipOffset)
 
         val allBlank = (0 until REQUIRED_IMPORT_COLUMNS).all {
             cell(it).isBlank()
@@ -653,6 +653,34 @@ object ExcelManager {
                 ?.use { it.length } ?: -1L
         } catch (_: Exception) {
             -1L
+        }
+    }
+
+    // =================================================================
+    //  FUNGSI PEMBANTU BACA EXCEL YANG AMAN
+    // =================================================================
+    
+    /**
+     * Membaca isi sel Excel dengan aman tanpa mempedulikan tipe datanya 
+     * (Angka maupun Teks tidak akan crash).
+     */
+    private fun getSafeCellString(row: org.dhatim.fastexcel.reader.Row, col: Int): String {
+        // 1. Mencegah error jika kolom yang diminta di luar batas
+        if (col < 0 || col >= row.cellCount) return ""
+        
+        // 2. Ambil sel. Jika kosong, kembalikan teks kosong
+        val cell = row.getCell(col).orElse(null) ?: return ""
+        
+        // 3. Coba ambil teks format asli dari Excel (getText). 
+        // Jika gagal, ambil nilai mentahnya (getValue) lalu ubah ke String.
+        val textValue = cell.text ?: cell.value?.toString() ?: ""
+        
+        // 4. Jika Excel mengubah angka bulat jadi desimal (contoh SKU "1234" dibaca "1234.0"), 
+        // kita buang ".0" di belakangnya agar rapi.
+        return if (textValue.endsWith(".0")) {
+            textValue.dropLast(2).trim()
+        } else {
+            textValue.trim()
         }
     }
 }
