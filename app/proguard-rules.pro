@@ -95,10 +95,6 @@
 -keep interface org.codehaus.stax2.** { *; }
 -keep class * implements javax.xml.stream.XMLInputFactory { *; }
 -keep class * extends javax.xml.stream.XMLInputFactory { *; }
-
-# Keep META-INF Services untuk ServiceLoader
--keepresources META-INF/services/**
-
 # FastExcel & StAX suppress warnings
 -dontwarn org.dhatim.fastexcel.**
 -dontwarn org.dhatim.fastexcel.reader.**

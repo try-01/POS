@@ -84,18 +84,28 @@
 
 # Aalto XML parser (WAJIB untuk import .xlsx)
 -keep class com.fasterxml.aalto.** { *; }
+-keep interface com.fasterxml.aalto.** { *; }
 -keep class com.fasterxml.core.** { *; }
+-keep class org.dhatim.fastexcel.** { *; }
 
-# XMLInputFactory ServiceLoader
--keep class javax.xml.stream.XMLInputFactory { *; }
+# StAX & StAX2 API (Aalto bergantung pada org.codehaus.stax2)
+-keep class javax.xml.stream.** { *; }
+-keep interface javax.xml.stream.** { *; }
+-keep class org.codehaus.stax2.** { *; }
+-keep interface org.codehaus.stax2.** { *; }
 -keep class * implements javax.xml.stream.XMLInputFactory { *; }
 -keep class * extends javax.xml.stream.XMLInputFactory { *; }
 
-# FastExcel suppress warnings
+# Keep META-INF Services untuk ServiceLoader
+-keepresources META-INF/services/**
+
+# FastExcel & StAX suppress warnings
 -dontwarn org.dhatim.fastexcel.**
 -dontwarn org.dhatim.fastexcel.reader.**
 -dontwarn com.fasterxml.aalto.**
 -dontwarn com.fasterxml.core.**
+-dontwarn org.codehaus.stax2.**
+-dontwarn javax.xml.stream.**
 
 
 # =========================================================
