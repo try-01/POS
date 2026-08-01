@@ -268,6 +268,9 @@
 -dontwarn org.apache.jcp.**
 -dontwarn org.apache.jcp.xml.dsig.**
 -dontwarn org.w3.x2000.x09.xmldsig.**
+-dontwarn org.apache.tools.**
+-dontwarn org.apache.maven.**
+-dontwarn com.sun.org.apache.**
 -dontwarn org.etsi.**
 -dontwarn org.ietf.jgss.**
 -dontwarn org.apache.pdfbox.**
