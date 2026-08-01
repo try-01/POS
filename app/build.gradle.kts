@@ -70,44 +70,38 @@ android {
                 "META-INF/services/org.apache.poi.sl.*",
                 "META-INF/services/org.apache.poi.extractor.*",
 
-                // ===== APACHE POI: POWERPOINT (TIDAK DIBUTUHKAN) =====
+                // ===== POI: POWERPOINT =====
                 "org/apache/poi/xslf/**",
                 "org/apache/poi/sl/**",
                 "org/apache/poi/hslf/**",
 
-                // ===== APACHE POI: WORD (TIDAK DIBUTUHKAN) =====
+                // ===== POI: WORD =====
                 "org/apache/poi/xwpf/**",
                 "org/apache/poi/hwpf/**",
 
-                // ===== APACHE POI: VISIO (TIDAK DIBUTUHKAN) =====
+                // ===== POI: VISIO =====
                 "org/apache/poi/xdgf/**",
 
-                // ===== APACHE POI: PUBLISHER (TIDAK DIBUTUHKAN) =====
+                // ===== POI: PUBLISHER =====
                 "org/apache/poi/hpbf/**",
 
-                // ===== APACHE POI: OUTLOOK (TIDAK DIBUTUHKAN) =====
+                // ===== POI: OUTLOOK =====
                 "org/apache/poi/hmef/**",
                 "org/apache/poi/hsmf/**",
 
-                // ===== APACHE POI: DIAGRAM/CHART (TIDAK DIBUTUHKAN) =====
+                // ===== POI: DIAGRAM/CHART/DRAWING =====
                 "org/apache/poi/xddf/**",
 
-                // ===== APACHE POI: DRAWING (TIDAK DIBUTUHKAN) =====
-                "org/apache/poi/xssf/usermodel/XSSFChart*",
-                "org/apache/poi/xssf/usermodel/XSSFDrawing*",
-                "org/apache/poi/xssf/usermodel/XSSFPicture*",
-                "org/apache/poi/xssf/usermodel/XSSFGraphicFrame*",
-
-                // ===== SCHEMA: POWERPOINT (TIDAK DIBUTUHKAN) =====
+                // ===== SCHEMA: POWERPOINT =====
                 "org/openxmlformats/schemas/presentationml/**",
 
-                // ===== SCHEMA: WORD (TIDAK DIBUTUHKAN) =====
+                // ===== SCHEMA: WORD =====
                 "org/openxmlformats/schemas/wordprocessingml/**",
 
-                // ===== SCHEMA: DRAWING (TIDAK DIBUTUHKAN) =====
+                // ===== SCHEMA: DRAWING (besar, tidak dipakai) =====
                 "org/openxmlformats/schemas/drawingml/**",
 
-                // ===== LOG4J (TIDAK BERGUNA DI ANDROID) =====
+                // ===== LOG4J =====
                 "org/apache/logging/**",
                 "log4j2.xml",
                 "Log4j-config.xsd",
@@ -116,15 +110,14 @@ android {
                 "META-INF/services/org.apache.logging.*",
                 "META-INF/log4j-provider.properties",
 
-                // ===== BOUNCY CASTLE (CRYPTO, TIDAK PERLU UNTUK EXCEL BIASA) =====
+                // ===== BOUNCY CASTLE =====
                 "org/bouncycastle/**",
 
-                // ===== COMMONS-MATH3 (TIDAK DIPAKAI) =====
+                // ===== COMMONS-MATH3 =====
                 "org/apache/commons/math3/**",
 
-                // ===== DOKUMENTASI & FILE TIDAK PERLU =====
+                // ===== DOKUMENTASI =====
                 "**/*.md",
-                "**/*.txt",
                 "**/*.html",
                 "**/*.css",
                 "**/*.dtd",
@@ -173,26 +166,19 @@ dependencies {
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     // =====================================================
-    //  APACHE POI - OPTIMASI UNTUK EXCEL SAJA
+    //  APACHE POI — TETAP PAKAI poi-ooxml (full)
+    //  Karena SXSSFWorkbook hanya ada di poi-ooxml
     //
-    //  Perubahan:
-    //  - poi-ooxml → poi-ooxml-lite (hemat ~5-8 MB schema)
-    //  - Exclude dependency yang tidak perlu di Android
-    //
-    //  poi-ooxml-lite HANYA berisi schema spreadsheet
-    //  Tanpa schema PowerPoint, Word, Visio, dll
-    //
-    //  ExcelManager.kt tetap kompatibel karena:
-    //  - SXSSFWorkbook ada di poi-ooxml-lite ✅
-    //  - WorkbookFactory ada di poi-ooxml-lite ✅
-    //  - DataFormatter ada di poi (core) ✅
+    //  Optimasi dilakukan via:
+    //  1. Exclude dependency transitif yang berat
+    //  2. Exclude file via packaging (di atas)
+    //  3. R8 shrinking (ProGuard rules)
     // =====================================================
     implementation("org.apache.poi:poi:5.5.1") {
-        // Exclude yang tidak perlu
         exclude(group = "org.apache.logging.log4j")
         exclude(group = "org.apache.commons", module = "commons-math3")
     }
-    implementation("org.apache.poi:poi-ooxml-lite:5.5.1") {
+    implementation("org.apache.poi:poi-ooxml:5.5.1") {
         exclude(group = "org.apache.logging.log4j")
         exclude(group = "org.apache.commons", module = "commons-math3")
         exclude(group = "org.bouncycastle")
@@ -200,9 +186,10 @@ dependencies {
         exclude(group = "org.apache.pdfbox")
         exclude(group = "de.rototor.pdfbox")
         exclude(group = "com.github.javaparser")
+        exclude(group = "org.apache.poi", module = "poi-scratchpad")
     }
 
-    // Exclude global untuk dependency transitif
+    // Exclude global
     configurations.configureEach {
         exclude(group = "org.apache.logging.log4j")
         exclude(group = "org.apache.commons", module = "commons-math3")
