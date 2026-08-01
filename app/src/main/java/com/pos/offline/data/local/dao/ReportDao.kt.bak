@@ -58,18 +58,11 @@ interface ReportDao {
     """)
     suspend fun getProfitAndItemsSummary(start: Long, end: Long): ProfitAndItemsSummary
     @Query("""
-        SELECT COALESCE(SUM(
-            CASE 
-                WHEN ri.transactionItemId = 0 THEN COALESCE(p.cost, 0)
-                ELSE ti.unitCost 
-            END * ri.quantityReturned
-        ), 0)
+        SELECT COALESCE(SUM(ti.unitCost * ri.quantityReturned), 0)
         FROM return_items ri
-        LEFT JOIN transaction_items ti ON ri.transactionItemId = ti.id
-        LEFT JOIN products p ON ri.productId = p.id
+        INNER JOIN transaction_items ti ON ri.transactionItemId = ti.id
         INNER JOIN returns r ON r.id = ri.returnId
-        WHERE r.returnedAt >= :start AND r.returnedAt < :end 
-          AND (ri.restocked = 1 OR ri.transactionItemId = 0)
+        WHERE r.returnedAt >= :start AND r.returnedAt < :end AND ri.restocked = 1
     """)
     suspend fun getRestockedReturnsCost(start: Long, end: Long): Long
     @Query("""
