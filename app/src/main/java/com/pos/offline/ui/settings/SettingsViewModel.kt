@@ -60,17 +60,16 @@ class SettingsViewModel(
     val soundDurationMs: StateFlow<Int> = scanPreferencesRepository.soundDurationMs
 
     val isVibrationEnabled: StateFlow<Boolean> = scanPreferencesRepository.isVibrationEnabled
-    
-    // PERBAIKAN: Mengonversi nilai int/string intensity menjadi VibrationLevel Enum
-    val vibrationLevel: StateFlow<VibrationLevel> = scanPreferencesRepository.vibrationIntensity
-        .map { intensity ->
-            when {
-                intensity <= 35 -> VibrationLevel.HALUS
-                intensity <= 70 -> VibrationLevel.SEDANG
-                else -> VibrationLevel.KUAT
-            }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), VibrationLevel.SEDANG)
+
+    val vibrationLevel: StateFlow<VibrationLevel> =
+        scanPreferencesRepository.vibrationIntensity
+            .map { intensity ->
+                when {
+                    intensity <= 35 -> VibrationLevel.HALUS
+                    intensity <= 70 -> VibrationLevel.SEDANG
+                    else -> VibrationLevel.KUAT
+                }
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), VibrationLevel.SEDANG)
 
     val vibrationDurationMs: StateFlow<Int> = scanPreferencesRepository.vibrationDurationMs
 
@@ -96,13 +95,13 @@ class SettingsViewModel(
         if (enabled) testVibrationPreview()
     }
 
-    // PERBAIKAN: Fungsi penentuan level getaran menerima Enum VibrationLevel
     fun setVibrationLevel(level: VibrationLevel) {
-        val intensityValue = when (level) {
-            VibrationLevel.HALUS -> 30
-            VibrationLevel.SEDANG -> 65
-            VibrationLevel.KUAT -> 100
-        }
+        val intensityValue =
+            when (level) {
+                VibrationLevel.HALUS -> 30
+                VibrationLevel.SEDANG -> 65
+                VibrationLevel.KUAT -> 100
+            }
         scanPreferencesRepository.setVibrationIntensity(intensityValue)
     }
 
@@ -110,7 +109,6 @@ class SettingsViewModel(
         scanPreferencesRepository.setVibrationDurationMs(duration)
     }
 
-    // PERBAIKAN: Mengirimkan Enum VibrationLevel ke ScanFeedbackManager
     fun testVibrationPreview() {
         feedbackManager.playVibration(vibrationLevel.value, vibrationDurationMs.value)
     }
@@ -144,6 +142,7 @@ class SettingsViewModel(
                     is ShareOutcome.Success -> {
                         _shareIntent.emit(BackupManager.buildShareIntent(appContext, result.file))
                     }
+
                     is ShareOutcome.Error -> {
                         _messages.emit("Gagal menyiapkan cadangan untuk dibagikan: ${result.throwable.message}")
                     }
@@ -172,11 +171,13 @@ class SettingsViewModel(
                     is RestoreOutcome.Success -> {
                         onRestartRequired()
                     }
+
                     is RestoreOutcome.InvalidFile -> {
                         RestoreGuard.end()
                         _messages.emit("File tidak valid: ${result.reason}")
                         _uiState.value = _uiState.value.copy(isImporting = false)
                     }
+
                     is RestoreOutcome.Error -> {
                         _messages.emit("Gagal memulihkan: ${result.throwable.message}")
                         if (result.requiresRestart) {

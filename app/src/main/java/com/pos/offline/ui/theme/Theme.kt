@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+
 private val DarkColors =
     darkColorScheme(
         primary = Color(0xFF6FCF97),
@@ -39,6 +40,7 @@ private val AppTypography =
         bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
         labelLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
     )
+
 @Composable
 fun PosTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),

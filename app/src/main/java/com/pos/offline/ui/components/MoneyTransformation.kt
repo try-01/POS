@@ -3,6 +3,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
+
 object ThousandsSeparatorTransformation : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val original = text.text
@@ -28,6 +29,7 @@ object ThousandsSeparatorTransformation : VisualTransformation {
         val offsetMapping =
             object : OffsetMapping {
                 override fun originalToTransformed(offset: Int): Int = orig2Trans[offset.coerceIn(0, n)]
+
                 override fun transformedToOriginal(offset: Int): Int = trans2Orig[offset.coerceIn(0, formatted.length)]
             }
         return TransformedText(AnnotatedString(formatted), offsetMapping)

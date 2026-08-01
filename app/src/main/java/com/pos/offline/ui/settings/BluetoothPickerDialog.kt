@@ -47,6 +47,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.pos.offline.util.BluetoothDeviceInfo
 import com.pos.offline.util.PermissionUtils
+
 @Composable
 fun BluetoothPickerDialog(
     viewModel: PrinterViewModel,
@@ -137,6 +138,7 @@ fun BluetoothPickerDialog(
                             Text("Buka Pengaturan Aplikasi", fontSize = 13.sp)
                         }
                     }
+
                     PermissionUtils.BluetoothPermissionState.CanRequest -> {
                         Text(
                             "Aplikasi memerlukan izin Bluetooth untuk mencari & " +
@@ -151,6 +153,7 @@ fun BluetoothPickerDialog(
                             Text("Izinkan Akses Bluetooth", fontSize = 13.sp)
                         }
                     }
+
                     PermissionUtils.BluetoothPermissionState.Granted -> {
                         if (!btEnabled) {
                             Text(
@@ -229,6 +232,7 @@ fun BluetoothPickerDialog(
         )
     }
 }
+
 @Composable
 private fun DeviceRow(
     device: BluetoothDeviceInfo,
@@ -253,6 +257,7 @@ private fun DeviceRow(
         }
     }
 }
+
 @Composable
 private fun BluetoothPinDialog(
     device: BluetoothDeviceInfo,

@@ -7,7 +7,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.pos.offline.data.backup.BackupManager
 import com.pos.offline.data.backup.RestoreGuard
 import com.pos.offline.data.local.PosDatabase
-import com.pos.offline.data.local.dao.ReportDao // PERBAIKAN 1: Import ReportDao
+import com.pos.offline.data.local.dao.ReportDao
 import com.pos.offline.data.repository.CartRepository
 import com.pos.offline.data.repository.CashierRepository
 import com.pos.offline.data.repository.PrinterRepository
@@ -124,7 +124,6 @@ object ServiceLocator {
 
     fun inventoryViewModelFactory(): ViewModelProvider.Factory = InventoryViewModelFactory(appContext, productRepository, reportRepository)
 
-    // PERBAIKAN 2: Mempassing productRepository & db.reportDao() ke Factory
     fun reportViewModelFactory(): ViewModelProvider.Factory =
         ReportViewModelFactory(
             transactionRepository,
@@ -146,12 +145,19 @@ object ServiceLocator {
     fun storeProfileViewModelFactory(): ViewModelProvider.Factory = StoreProfileViewModelFactory(storeProfileRepository, logoImageProcessor)
 
     fun transactionRepository(): TransactionRepository = transactionRepository
+
     fun productRepository(): ProductRepository = productRepository
+
     fun cashierRepository(): CashierRepository = cashierRepository
+
     fun shiftRepository(): ShiftRepository = shiftRepository
+
     fun returnRepository(): ReturnRepository = returnRepository
+
     fun printerRepository(): PrinterRepository = printerRepository
+
     fun storeProfileRepository(): StoreProfileRepository = storeProfileRepository
+
     fun printCoordinator(): PrintCoordinator = printCoordinator
 }
 
@@ -190,7 +196,6 @@ class InventoryViewModelFactory(
     override fun <T : ViewModel> create(modelClass: Class<T>): T = InventoryViewModel(appContext, productRepository, reportRepository) as T
 }
 
-// PERBAIKAN 3: Menambahkan parameter productRepository dan reportDao ke ReportViewModelFactory
 class ReportViewModelFactory(
     private val transactionRepository: TransactionRepository,
     private val shiftRepository: ShiftRepository,

@@ -75,15 +75,16 @@ fun PosScreen(
         }
     }
 
-    // ── Snackbar event handler ────────────────────────────────────────────────
     LaunchedEffect(viewModel, lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             viewModel.uiEvents.collect { event ->
                 when (event) {
-                    is PosUiEvent.ShowMessage -> snackbarHostState.showSnackbar(
-                        message = event.message,
-                        duration = SnackbarDuration.Short,
-                    )
+                    is PosUiEvent.ShowMessage -> {
+                        snackbarHostState.showSnackbar(
+                            message = event.message,
+                            duration = SnackbarDuration.Short,
+                        )
+                    }
                 }
             }
         }
@@ -103,10 +104,11 @@ fun PosScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { inner ->
         androidx.compose.foundation.layout.BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
         ) {
             val isWide = forceWideLayout || maxWidth >= 840.dp
             val maxH = maxHeight
@@ -114,21 +116,22 @@ fun PosScreen(
             val imeVisible = WindowInsets.ime.getBottom(density) > 0
 
             if (isWide) {
-                // Wide layout: product + cart side by side
                 Row(Modifier.fillMaxSize()) {
                     ProductPane(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
                         products = uiState.catalog.products,
                         cartQtyByProductId = uiState.catalog.cartQtyByProductId,
                         onAdd = { viewModel.onAction(PosAction.AddToCart(it)) },
                     )
                     Spacer(Modifier.width(12.dp))
                     CartPaneContent(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .widthIn(min = 320.dp, max = 420.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxHeight()
+                                .widthIn(min = 320.dp, max = 420.dp),
                         cart = uiState.cart,
                         payment = uiState.payment,
                         catalog = uiState.catalog,
@@ -139,7 +142,6 @@ fun PosScreen(
                     )
                 }
             } else {
-                // Narrow layout: product behind, cart collapsible at bottom
                 Box(Modifier.fillMaxSize()) {
                     ProductPane(
                         modifier = Modifier.fillMaxSize(),
@@ -148,17 +150,18 @@ fun PosScreen(
                         onAdd = { viewModel.onAction(PosAction.AddToCart(it)) },
                     )
                     CartPaneContent(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .wrapContentHeight()
-                            .let { base ->
-                                when {
-                                    !localState.isCartExpanded -> base
-                                    imeVisible -> base
-                                    else -> base.heightIn(max = maxH * 0.65f)
-                                }
-                            },
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .wrapContentHeight()
+                                .let { base ->
+                                    when {
+                                        !localState.isCartExpanded -> base
+                                        imeVisible -> base
+                                        else -> base.heightIn(max = maxH * 0.65f)
+                                    }
+                                },
                         cart = uiState.cart,
                         payment = uiState.payment,
                         catalog = uiState.catalog,
@@ -172,7 +175,6 @@ fun PosScreen(
         }
     }
 
-    // ── All dialogs managed here ──────────────────────────────────────────────
     PosDialogManager(
         uiState = uiState,
         localState = localState,
@@ -182,8 +184,6 @@ fun PosScreen(
         onNavigateToSettings = onNavigateToSettings,
     )
 }
-
-// ─── Top bar (extracted untuk keterbacaan) ────────────────────────────────────
 
 @Composable
 private fun PosTopBar(
@@ -195,11 +195,12 @@ private fun PosTopBar(
     val catalog = uiState.catalog
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 12.dp)
-            .padding(top = 4.dp, bottom = 6.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 12.dp)
+                .padding(top = 4.dp, bottom = 6.dp),
     ) {
         ShiftIndicatorBar(
             openShift = shift.activeShift,
@@ -207,12 +208,17 @@ private fun PosTopBar(
             onClick = {
                 val currentActiveShift = shift.activeShift
                 when {
-                    currentActiveShift != null ->
+                    currentActiveShift != null -> {
                         onAction(PosAction.OpenEndShiftDialog(currentActiveShift))
-                    shift.openShifts.isEmpty() ->
+                    }
+
+                    shift.openShifts.isEmpty() -> {
                         onAction(PosAction.OpenStartShiftDialog)
-                    else ->
+                    }
+
+                    else -> {
                         onAction(PosAction.OpenShiftListDialog)
+                    }
                 }
             },
             onManageClick = { onAction(PosAction.OpenShiftListDialog) },
@@ -226,9 +232,10 @@ private fun PosTopBar(
             CompactSearchBar(
                 query = catalog.searchQuery,
                 onQueryChange = { onAction(PosAction.Search(it)) },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(36.dp),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(36.dp),
             )
             Spacer(Modifier.width(8.dp))
             OutlinedButton(

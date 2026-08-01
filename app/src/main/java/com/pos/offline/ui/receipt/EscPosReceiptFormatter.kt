@@ -13,16 +13,21 @@ import com.pos.offline.util.toRupiah
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
 object EscPosReceiptFormatter {
     private const val MAX_IMAGE_HEIGHT_PX = 256
     private val RESERVED_CHARS_REGEX = Regex("[\\[\\]<>]")
+
     private fun sanitize(text: String): String = text.replace(RESERVED_CHARS_REGEX, "")
+
     private val dateFormatterPattern = "dd/MM/yyyy HH:mm"
+
     fun build(
         printer: EscPosPrinter,
         checkoutResult: CheckoutResult,
         storeProfile: StoreProfileEntity,
     ): List<String> = build(printer, checkoutResult.transaction, checkoutResult.items, storeProfile)
+
     fun build(
         printer: EscPosPrinter,
         transaction: TransactionEntity,
@@ -93,7 +98,7 @@ object EscPosReceiptFormatter {
                     .append("\n")
             }
         }
-        sb.append("\n") 
+        sb.append("\n")
         sb.append("[C]<b><font size='wide'>TOTAL: ").append(transaction.total.toRupiah()).append("</font></b>\n")
         sb.append(divider(charsPerLine))
         val gridItems = mutableListOf<Pair<String, String>>()
@@ -140,10 +145,12 @@ object EscPosReceiptFormatter {
         sb.append("[L]\n")
         return listOfNotNull(logoMarkup, sb.toString())
     }
+
     private fun divider(charsPerLine: Int): String {
         val safeLength = charsPerLine.coerceAtLeast(1)
         return "[C]" + "-".repeat(safeLength) + "\n"
     }
+
     private fun appendCenteredMultiline(
         sb: StringBuilder,
         rawText: String,
@@ -156,6 +163,7 @@ object EscPosReceiptFormatter {
             }
         }
     }
+
     private fun buildLogoHex(
         printer: EscPosPrinter,
         logoBytes: ByteArray?,

@@ -24,20 +24,22 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
 data class PrinterFormState(
-    val id: Long? = null, 
+    val id: Long? = null,
     val label: String = "",
     val connectionType: PrinterConnectionType = PrinterConnectionType.WIFI,
     val paperWidth: PaperWidth = PaperWidth.MM_80,
     val charPerLine: String = PaperWidth.MM_80.defaultCharPerLine().toString(),
     val wifiIpAddress: String = "",
-    val wifiPort: String = "9100", 
+    val wifiPort: String = "9100",
     val bluetoothMacAddress: String = "",
     val usbVendorId: Int? = null,
     val usbProductId: Int? = null,
     val supportsStatusQuery: Boolean = false,
     val autoDisabledDueToNoResponse: Boolean = false,
 )
+
 data class PrinterUiState(
     val showFormDialog: Boolean = false,
     val formState: PrinterFormState = PrinterFormState(),
@@ -46,6 +48,7 @@ data class PrinterUiState(
     val testingPrinterIds: Set<Long> = emptySet(),
     val isReordering: Boolean = false,
 )
+
 data class BluetoothUiState(
     val bondedDevices: List<BluetoothDeviceInfo> = emptyList(),
     val discoveredDevices: List<BluetoothDeviceInfo> = emptyList(),
@@ -53,10 +56,12 @@ data class BluetoothUiState(
     val pairingTarget: BluetoothDeviceInfo? = null,
     val isPairing: Boolean = false,
 )
+
 data class UsbUiState(
     val devices: List<UsbDeviceInfo> = emptyList(),
     val isRequestingPermission: Boolean = false,
 )
+
 class PrinterViewModel(
     private val printerRepository: PrinterRepository,
     private val bluetoothHelper: BluetoothPrinterHelper,
@@ -81,6 +86,7 @@ class PrinterViewModel(
     private var discoveryJob: Job? = null
     private var discoveryTimeoutJob: Job? = null
     private var usbAttachmentJob: Job? = null
+
     fun openAddDialog() {
         _uiState.value =
             _uiState.value.copy(
@@ -88,6 +94,7 @@ class PrinterViewModel(
                 formState = PrinterFormState(),
             )
     }
+
     fun openEditDialog(printer: PrinterEntity) {
         _uiState.value =
             _uiState.value.copy(
@@ -109,25 +116,36 @@ class PrinterViewModel(
                     ),
             )
     }
+
     fun closeFormDialog() {
         _uiState.value = _uiState.value.copy(showFormDialog = false)
     }
+
     fun updateFormLabel(value: String) = updateForm { it.copy(label = value) }
+
     fun updateFormConnectionType(type: PrinterConnectionType) = updateForm { it.copy(connectionType = type) }
+
     fun updateFormPaperWidth(width: PaperWidth) =
         updateForm { it.copy(paperWidth = width, charPerLine = width.defaultCharPerLine().toString()) }
+
     fun updateFormCharPerLine(value: String) = updateForm { it.copy(charPerLine = value.filter { c -> c.isDigit() }) }
+
     fun updateFormWifiIp(value: String) = updateForm { it.copy(wifiIpAddress = value) }
+
     fun updateFormWifiPort(value: String) = updateForm { it.copy(wifiPort = value.filter { c -> c.isDigit() }) }
-    fun updateFormSupportsStatusQuery(value: Boolean) = updateForm {
-        it.copy(
-            supportsStatusQuery = value,
-            autoDisabledDueToNoResponse = if (value) false else it.autoDisabledDueToNoResponse
-        )
-    }
+
+    fun updateFormSupportsStatusQuery(value: Boolean) =
+        updateForm {
+            it.copy(
+                supportsStatusQuery = value,
+                autoDisabledDueToNoResponse = if (value) false else it.autoDisabledDueToNoResponse,
+            )
+        }
+
     private inline fun updateForm(block: (PrinterFormState) -> PrinterFormState) {
         _uiState.value = _uiState.value.copy(formState = block(_uiState.value.formState))
     }
+
     fun saveForm() {
         if (_uiState.value.isSaving) return
         val form = _uiState.value.formState
@@ -156,6 +174,7 @@ class PrinterViewModel(
                 wifiIp = ip
                 wifiPort = port
             }
+
             PrinterConnectionType.BLUETOOTH -> {
                 if (form.bluetoothMacAddress.isBlank()) {
                     emitMessage("Pilih perangkat Bluetooth terlebih dahulu.")
@@ -163,6 +182,7 @@ class PrinterViewModel(
                 }
                 btAddress = form.bluetoothMacAddress
             }
+
             PrinterConnectionType.USB -> {
                 val vendorId = form.usbVendorId
                 val productId = form.usbProductId
@@ -229,14 +249,18 @@ class PrinterViewModel(
             _uiState.value = _uiState.value.copy(isSaving = false, showFormDialog = false)
         }
     }
+
     fun setAsDefault(printer: PrinterEntity) {
         viewModelScope.launch {
             printerRepository.setAsDefault(printer)
             emitMessage("\"${printer.label}\" dijadikan printer utama.")
         }
     }
+
     fun movePriorityUp(printer: PrinterEntity) = swapPriority(printer, moveUp = true)
+
     fun movePriorityDown(printer: PrinterEntity) = swapPriority(printer, moveUp = false)
+
     private fun swapPriority(
         printer: PrinterEntity,
         moveUp: Boolean,
@@ -259,12 +283,15 @@ class PrinterViewModel(
             }
         }
     }
+
     fun requestDelete(id: Long) {
         _uiState.value = _uiState.value.copy(pendingDeleteId = id)
     }
+
     fun cancelDelete() {
         _uiState.value = _uiState.value.copy(pendingDeleteId = null)
     }
+
     fun confirmDelete() {
         val id = _uiState.value.pendingDeleteId ?: return
         viewModelScope.launch {
@@ -280,8 +307,9 @@ class PrinterViewModel(
             _uiState.value = _uiState.value.copy(pendingDeleteId = null)
         }
     }
+
     fun testPrint(printer: PrinterEntity) {
-        if (_uiState.value.testingPrinterIds.contains(printer.id)) return 
+        if (_uiState.value.testingPrinterIds.contains(printer.id)) return
         viewModelScope.launch {
             _uiState.value =
                 _uiState.value.copy(
@@ -303,14 +331,18 @@ class PrinterViewModel(
                 )
         }
     }
+
     fun hasBluetoothPermissions(): Boolean = bluetoothHelper.hasPermissions()
+
     fun isBluetoothEnabled(): Boolean = bluetoothHelper.isAdapterEnabled()
+
     fun refreshBondedDevices() {
         _bluetoothUiState.value =
             _bluetoothUiState.value.copy(
                 bondedDevices = bluetoothHelper.getBondedDevices(),
             )
     }
+
     fun startDiscovery() {
         if (discoveryJob?.isActive == true) return
         _bluetoothUiState.value = _bluetoothUiState.value.copy(isScanning = true, discoveredDevices = emptyList())
@@ -329,6 +361,7 @@ class PrinterViewModel(
                 stopDiscovery()
             }
     }
+
     fun stopDiscovery() {
         discoveryTimeoutJob?.cancel()
         discoveryTimeoutJob = null
@@ -337,12 +370,15 @@ class PrinterViewModel(
         bluetoothHelper.cancelDiscovery()
         _bluetoothUiState.value = _bluetoothUiState.value.copy(isScanning = false)
     }
+
     fun requestPairing(device: BluetoothDeviceInfo) {
         _bluetoothUiState.value = _bluetoothUiState.value.copy(pairingTarget = device)
     }
+
     fun cancelPairing() {
         _bluetoothUiState.value = _bluetoothUiState.value.copy(pairingTarget = null)
     }
+
     fun confirmPairing(pin: String) {
         val target = _bluetoothUiState.value.pairingTarget ?: return
         viewModelScope.launch {
@@ -354,6 +390,7 @@ class PrinterViewModel(
                     _bluetoothUiState.value = BluetoothUiState()
                     _pairingSuccess.emit(target)
                 }
+
                 BondResult.Failed -> {
                     emitMessage(
                         "Gagal memasangkan perangkat. Periksa PIN & coba lagi, " +
@@ -364,13 +401,16 @@ class PrinterViewModel(
             }
         }
     }
+
     fun selectBondedDevice(device: BluetoothDeviceInfo) {
         selectBluetoothDevice(device)
     }
+
     fun resetBluetoothPicker() {
         stopDiscovery()
         _bluetoothUiState.value = BluetoothUiState()
     }
+
     private fun selectBluetoothDevice(device: BluetoothDeviceInfo) {
         updateForm {
             it.copy(
@@ -379,9 +419,11 @@ class PrinterViewModel(
             )
         }
     }
+
     fun refreshUsbDevices() {
         _usbUiState.value = _usbUiState.value.copy(devices = usbHelper.getDeviceList())
     }
+
     fun startObservingUsbAttachment() {
         if (usbAttachmentJob?.isActive == true) return
         usbAttachmentJob =
@@ -391,10 +433,12 @@ class PrinterViewModel(
                 }
             }
     }
+
     fun stopObservingUsbAttachment() {
         usbAttachmentJob?.cancel()
         usbAttachmentJob = null
     }
+
     fun selectUsbDevice(device: UsbDeviceInfo) {
         viewModelScope.launch {
             _usbUiState.value = _usbUiState.value.copy(isRequestingPermission = true)
@@ -417,6 +461,7 @@ class PrinterViewModel(
                     _usbUiState.value = UsbUiState()
                     _usbSelectionSuccess.emit(device)
                 }
+
                 UsbPermissionResult.Denied -> {
                     emitMessage("Izin akses USB ditolak. Tidak bisa menggunakan perangkat ini.")
                     _usbUiState.value = _usbUiState.value.copy(isRequestingPermission = false)
@@ -424,23 +469,28 @@ class PrinterViewModel(
             }
         }
     }
+
     fun resetUsbPicker() {
         stopObservingUsbAttachment()
         _usbUiState.value = UsbUiState()
     }
+
     override fun onCleared() {
         super.onCleared()
         bluetoothHelper.cancelDiscovery()
         usbAttachmentJob?.cancel()
     }
+
     private fun emitMessage(message: String) {
         viewModelScope.launch { _messages.emit(message) }
     }
+
     companion object {
         private val IPV4_REGEX =
             Regex(
                 "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$",
             )
+
         private fun isValidIpv4(ip: String): Boolean = IPV4_REGEX.matches(ip)
     }
 }

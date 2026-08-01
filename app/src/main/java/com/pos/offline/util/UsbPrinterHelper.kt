@@ -12,28 +12,37 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+
 data class UsbDeviceInfo(
     val deviceName: String,
     val label: String,
     val vendorId: Int,
     val productId: Int,
 )
+
 sealed class UsbPermissionResult {
     object Granted : UsbPermissionResult()
+
     object Denied : UsbPermissionResult()
 }
+
 class UsbPrinterHelper(
     private val appContext: Context,
 ) {
     private val usbManager: UsbManager?
         get() = appContext.getSystemService(Context.USB_SERVICE) as? UsbManager
+
     fun isUsbSupported(): Boolean = usbManager != null
+
     fun getDeviceList(): List<UsbDeviceInfo> {
         val manager = usbManager ?: return emptyList()
         return manager.deviceList.values.map { it.toInfo() }
     }
+
     fun hasPermission(device: UsbDevice): Boolean = usbManager?.hasPermission(device) == true
+
     fun findDeviceByName(deviceName: String): UsbDevice? = usbManager?.deviceList?.get(deviceName)
+
     fun findDeviceByVendorProduct(
         vendorId: Int,
         productId: Int,
@@ -41,7 +50,9 @@ class UsbPrinterHelper(
         usbManager?.deviceList?.values?.firstOrNull {
             it.vendorId == vendorId && it.productId == productId
         }
+
     fun getSystemUsbManager(): UsbManager? = usbManager
+
     fun observeAttachDetach(): Flow<Unit> =
         callbackFlow {
             val receiver =
@@ -67,6 +78,7 @@ class UsbPrinterHelper(
                 runCatching { appContext.unregisterReceiver(receiver) }
             }
         }
+
     suspend fun requestPermission(device: UsbDevice): UsbPermissionResult {
         val manager = usbManager ?: return UsbPermissionResult.Denied
         if (manager.hasPermission(device)) return UsbPermissionResult.Granted
@@ -118,6 +130,7 @@ class UsbPrinterHelper(
             manager.requestPermission(device, permissionIntent)
         }
     }
+
     @Suppress("DEPRECATION")
     private inline fun <reified T : android.os.Parcelable> Intent.getParcelableExtraCompat(key: String): T? =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -125,6 +138,7 @@ class UsbPrinterHelper(
         } else {
             getParcelableExtra(key)
         }
+
     private fun UsbDevice.toInfo(): UsbDeviceInfo {
         val name =
             productName?.takeIf { it.isNotBlank() }

@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pos.offline.util.UsbDeviceInfo
+
 @Composable
 fun UsbPickerDialog(
     viewModel: PrinterViewModel,
@@ -94,6 +95,7 @@ fun UsbPickerDialog(
         },
     )
 }
+
 @Composable
 private fun UsbDeviceRow(
     device: UsbDeviceInfo,

@@ -1,11 +1,15 @@
 package com.pos.offline.ui.pos
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -18,17 +22,13 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AttachMoney
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
@@ -84,12 +84,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// ─── Entry point: semua dialog POS dikelola di sini ──────────────────────────
-
-/**
- * Menampilkan semua dialog yang dibutuhkan POS screen.
- * Dipanggil sekali dari [PosScreen], menerima state dan action handler.
- */
 @Composable
 fun PosDialogManager(
     uiState: PosUiState,
@@ -102,7 +96,6 @@ fun PosDialogManager(
     val shift = uiState.shift
     val checkout = uiState.checkout
 
-    // ── Stock warning ─────────────────────────────────────────────────────────
     val stockWarning = shift.stockWarning
     if (stockWarning != null &&
         checkout.flow !is CheckoutFlow.Success &&
@@ -135,31 +128,37 @@ fun PosDialogManager(
         )
     }
 
-    // ── Checkout result ───────────────────────────────────────────────────────
     when (val flow = checkout.flow) {
-        is CheckoutFlow.Success -> SuccessDialog(
-            result = flow.result,
-            printUiState = checkout.printUiState.forTransaction(flow.result.transaction.id),
-            openDrawerOnPrint = checkout.openDrawerOnPrint,
-            onToggleOpenDrawer = { onAction(PosAction.ToggleOpenDrawer(it)) },
-            onPrint = { onAction(PosAction.PrintReceipt(flow.result)) },
-            onExport = { onExportPdf(flow.result) },
-            onSharePdfFile = onSharePdfFile,
-            onNavigateToSettings = onNavigateToSettings,
-            onDismiss = { onAction(PosAction.ResetCheckout) },
-        )
-        is CheckoutFlow.Error -> AlertDialog(
-            onDismissRequest = { onAction(PosAction.ResetCheckout) },
-            confirmButton = {
-                TextButton(onClick = { onAction(PosAction.ResetCheckout) }) { Text("Tutup") }
-            },
-            title = { Text("Transaksi Gagal") },
-            text = { Text(flow.message) },
-        )
-        else -> Unit
+        is CheckoutFlow.Success -> {
+            SuccessDialog(
+                result = flow.result,
+                printUiState = checkout.printUiState.forTransaction(flow.result.transaction.id),
+                openDrawerOnPrint = checkout.openDrawerOnPrint,
+                onToggleOpenDrawer = { onAction(PosAction.ToggleOpenDrawer(it)) },
+                onPrint = { onAction(PosAction.PrintReceipt(flow.result)) },
+                onExport = { onExportPdf(flow.result) },
+                onSharePdfFile = onSharePdfFile,
+                onNavigateToSettings = onNavigateToSettings,
+                onDismiss = { onAction(PosAction.ResetCheckout) },
+            )
+        }
+
+        is CheckoutFlow.Error -> {
+            AlertDialog(
+                onDismissRequest = { onAction(PosAction.ResetCheckout) },
+                confirmButton = {
+                    TextButton(onClick = { onAction(PosAction.ResetCheckout) }) { Text("Tutup") }
+                },
+                title = { Text("Transaksi Gagal") },
+                text = { Text(flow.message) },
+            )
+        }
+
+        else -> {
+            Unit
+        }
     }
 
-    // ── Cart: clear confirm ───────────────────────────────────────────────────
     if (localState.showClearConfirm) {
         AlertDialog(
             onDismissRequest = localState::dismissClearDialog,
@@ -184,7 +183,6 @@ fun PosDialogManager(
         )
     }
 
-    // ── Cart: quantity edit ───────────────────────────────────────────────────
     localState.qtyEditItem?.let { item ->
         QuantityEditDialog(
             item = item,
@@ -197,7 +195,6 @@ fun PosDialogManager(
         )
     }
 
-    // ── Insufficient payment ──────────────────────────────────────────────────
     if (localState.showInsufficientPaymentDialog) {
         InsufficientPaymentDialog(
             paid = uiState.payment.paid,
@@ -210,7 +207,6 @@ fun PosDialogManager(
         )
     }
 
-    // ── Shift: start ──────────────────────────────────────────────────────────
     if (shift.showStartShiftDialog) {
         StartShiftDialog(
             cashiers = shift.activeCashiers,
@@ -222,7 +218,6 @@ fun PosDialogManager(
         )
     }
 
-    // ── Shift: end ────────────────────────────────────────────────────────────
     shift.shiftSummary?.let { summary ->
         if (shift.showEndShiftDialog) {
             EndShiftDialog(
@@ -234,7 +229,6 @@ fun PosDialogManager(
         }
     }
 
-    // ── Shift: manage list ────────────────────────────────────────────────────
     if (shift.showShiftListDialog) {
         ManageShiftsDialog(
             shifts = shift.openShifts,
@@ -255,8 +249,6 @@ fun PosDialogManager(
         )
     }
 }
-
-// ─── Shift dialogs ────────────────────────────────────────────────────────────
 
 private val shiftDateFmt = SimpleDateFormat("dd/MM HH:mm", Locale.forLanguageTag("id-ID"))
 
@@ -282,10 +274,11 @@ internal fun ManageShiftsDialog(
         title = { Text("Kelola Shift") },
         text = {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 380.dp)
-                    .verticalScroll(rememberScrollState()),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 380.dp)
+                        .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (shifts.isEmpty()) {
@@ -450,9 +443,10 @@ internal fun StartShiftDialog(
                         label = "Kas Awal",
                         value = startingCash,
                         onValueChange = { startingCash = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(44.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(44.dp),
                     )
                 }
             }
@@ -546,23 +540,26 @@ internal fun EndShiftDialog(
                         actualCash = it
                         hasBeenEdited = true
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(44.dp),
                 )
                 if (hasInput) {
                     Spacer(Modifier.height(10.dp))
                     val diffAbs = kotlin.math.abs(difference)
-                    val diffColor = if (difference < 0L) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    }
-                    val diffLabel = when {
-                        difference == 0L -> "Pas ✓"
-                        difference < 0L -> "-${diffAbs.toRupiah()} (Uang Kurang)"
-                        else -> "+${diffAbs.toRupiah()} (Uang Lebih)"
-                    }
+                    val diffColor =
+                        if (difference < 0L) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        }
+                    val diffLabel =
+                        when {
+                            difference == 0L -> "Pas ✓"
+                            difference < 0L -> "-${diffAbs.toRupiah()} (Uang Kurang)"
+                            else -> "+${diffAbs.toRupiah()} (Uang Lebih)"
+                        }
                     Text(
                         "💡 Hasil",
                         style = MaterialTheme.typography.labelMedium,
@@ -590,8 +587,6 @@ internal fun EndShiftDialog(
     )
 }
 
-// ─── Checkout dialogs ─────────────────────────────────────────────────────────
-
 @Composable
 internal fun SuccessDialog(
     result: CheckoutResult,
@@ -612,7 +607,6 @@ internal fun SuccessDialog(
         title = { Text("Transaksi Berhasil ✓") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                // Transaction summary
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("No. Struk: ${result.transaction.id}")
                     Text(
@@ -630,19 +624,26 @@ internal fun SuccessDialog(
 
                     val txChange = result.transaction.change
                     val txChangeGiven = result.transaction.changeGiven
-                    val isQrisCashOut = result.transaction.paymentMethod == PaymentMethod.QRIS.name &&
-                        result.transaction.changeGivenInCash
+                    val isQrisCashOut =
+                        result.transaction.paymentMethod == PaymentMethod.QRIS.name &&
+                            result.transaction.changeGivenInCash
 
                     when {
-                        txChange < 0L -> Text(
-                            "Kurang Bayar: ${kotlin.math.abs(txChange).toRupiah()}",
-                            color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        txChange == 0L -> Text(
-                            "Kembali: ${txChange.toRupiah()}",
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                        txChange < 0L -> {
+                            Text(
+                                "Kurang Bayar: ${kotlin.math.abs(txChange).toRupiah()}",
+                                color = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+
+                        txChange == 0L -> {
+                            Text(
+                                "Kembali: ${txChange.toRupiah()}",
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+
                         else -> {
                             Text(
                                 if (isQrisCashOut) {
@@ -650,11 +651,12 @@ internal fun SuccessDialog(
                                 } else {
                                     "Kembali Diberikan: ${txChangeGiven.toRupiah()}"
                                 },
-                                color = if (isQrisCashOut) {
-                                    MaterialTheme.colorScheme.tertiary
-                                } else {
-                                    MaterialTheme.colorScheme.primary
-                                },
+                                color =
+                                    if (isQrisCashOut) {
+                                        MaterialTheme.colorScheme.tertiary
+                                    } else {
+                                        MaterialTheme.colorScheme.primary
+                                    },
                                 fontWeight = if (isQrisCashOut) FontWeight.SemiBold else FontWeight.Normal,
                             )
                             val tip = (txChange - txChangeGiven).coerceAtLeast(0L)
@@ -671,14 +673,14 @@ internal fun SuccessDialog(
 
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
-                // Print controls
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onToggleOpenDrawer(!openDrawerOnPrint) }
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onToggleOpenDrawer(!openDrawerOnPrint) }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(
@@ -734,52 +736,66 @@ private fun PrintResultBanner(
     val state = printUiState as? PrintUiState.Result ?: return
     val outcome = state.outcome
 
-    val (message, isError) = when (outcome) {
-        is ReceiptPrintOutcome.Success ->
-            "Struk terkirim ke \"${outcome.printer.label}\"." to false
-        is ReceiptPrintOutcome.SuccessWithNotice ->
-            "Struk terkirim ke \"${outcome.printer.label}\".\n⚠ ${outcome.notice}" to false
-        is ReceiptPrintOutcome.Failed -> {
-            val printerCount = outcome.attempts.size
-            val reason = outcome.attempts.firstOrNull()?.message ?: ""
-            if (reason.contains("terhubung", ignoreCase = true)) {
-                if (printerCount > 1) {
-                    "Gagal mencetak ke semua printer. Mohon hubungkan ke perangkat" to true
+    val (message, isError) =
+        when (outcome) {
+            is ReceiptPrintOutcome.Success -> {
+                "Struk terkirim ke \"${outcome.printer.label}\"." to false
+            }
+
+            is ReceiptPrintOutcome.SuccessWithNotice -> {
+                "Struk terkirim ke \"${outcome.printer.label}\".\n⚠ ${outcome.notice}" to false
+            }
+
+            is ReceiptPrintOutcome.Failed -> {
+                val printerCount = outcome.attempts.size
+                val reason = outcome.attempts.firstOrNull()?.message ?: ""
+                if (reason.contains("terhubung", ignoreCase = true)) {
+                    if (printerCount > 1) {
+                        "Gagal mencetak ke semua printer. Mohon hubungkan ke perangkat" to true
+                    } else {
+                        "Gagal mencetak ke printer. Mohon hubungkan ke perangkat" to true
+                    }
                 } else {
-                    "Gagal mencetak ke printer. Mohon hubungkan ke perangkat" to true
+                    val title =
+                        if (printerCount > 1) {
+                            "Gagal mencetak ke semua printer."
+                        } else {
+                            "Gagal mencetak ke printer."
+                        }
+                    "$title\nAlasan: $reason" to true
                 }
-            } else {
-                val title = if (printerCount > 1) {
-                    "Gagal mencetak ke semua printer."
-                } else {
-                    "Gagal mencetak ke printer."
-                }
-                "$title\nAlasan: $reason" to true
+            }
+
+            ReceiptPrintOutcome.NoPrinterConfigured -> {
+                "Printer belum diatur." to true
+            }
+
+            ReceiptPrintOutcome.AlreadyInProgress -> {
+                "Sedang mencetak, mohon tunggu..." to false
             }
         }
-        ReceiptPrintOutcome.NoPrinterConfigured -> "Printer belum diatur." to true
-        ReceiptPrintOutcome.AlreadyInProgress -> "Sedang mencetak, mohon tunggu..." to false
-    }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(8.dp),
-            color = if (isError) {
-                MaterialTheme.colorScheme.errorContainer
-            } else {
-                MaterialTheme.colorScheme.primaryContainer
-            },
+            color =
+                if (isError) {
+                    MaterialTheme.colorScheme.errorContainer
+                } else {
+                    MaterialTheme.colorScheme.primaryContainer
+                },
         ) {
             Text(
                 message,
                 modifier = Modifier.padding(10.dp),
                 style = MaterialTheme.typography.bodySmall,
-                color = if (isError) {
-                    MaterialTheme.colorScheme.onErrorContainer
-                } else {
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                },
+                color =
+                    if (isError) {
+                        MaterialTheme.colorScheme.onErrorContainer
+                    } else {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    },
             )
         }
         if (outcome is ReceiptPrintOutcome.Failed && outcome.fallbackPdf != null) {
@@ -834,9 +850,10 @@ internal fun InsufficientPaymentDialog(
         confirmButton = {
             Button(
                 onClick = onConfirm,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                ),
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                    ),
             ) {
                 Text("Tetap Lanjutkan")
             }
@@ -886,39 +903,47 @@ internal fun QuantityEditDialog(
                 BasicTextField(
                     value = fieldValue,
                     onValueChange = { newValue ->
-                        val cleaned = buildString {
-                            var dotSeen = false
-                            for (c in newValue.text) {
-                                when {
-                                    c.isDigit() -> append(c)
-                                    c == '.' && !dotSeen -> {
-                                        append(c)
-                                        dotSeen = true
+                        val cleaned =
+                            buildString {
+                                var dotSeen = false
+                                for (c in newValue.text) {
+                                    when {
+                                        c.isDigit() -> {
+                                            append(c)
+                                        }
+
+                                        c == '.' && !dotSeen -> {
+                                            append(c)
+                                            dotSeen = true
+                                        }
                                     }
                                 }
-                            }
-                        }.take(8)
+                            }.take(8)
                         fieldValue = newValue.copy(text = cleaned)
                     },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Decimal,
-                        imeAction = ImeAction.Done,
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            confirmWith(fieldValue.text.toDoubleOrNull() ?: item.quantity)
-                        },
-                    ),
+                    keyboardOptions =
+                        KeyboardOptions(
+                            keyboardType = KeyboardType.Decimal,
+                            imeAction = ImeAction.Done,
+                        ),
+                    keyboardActions =
+                        KeyboardActions(
+                            onDone = {
+                                confirmWith(fieldValue.text.toDoubleOrNull() ?: item.quantity)
+                            },
+                        ),
                     singleLine = true,
-                    textStyle = MaterialTheme.typography.headlineSmall.copy(
-                        color = MaterialTheme.colorScheme.onSurface,
-                        textAlign = TextAlign.Center,
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester)
-                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
-                        .padding(vertical = 14.dp),
+                    textStyle =
+                        MaterialTheme.typography.headlineSmall.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center,
+                        ),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                            .padding(vertical = 14.dp),
                     decorationBox = { innerTextField ->
                         androidx.compose.foundation.layout.Box(
                             Modifier.fillMaxWidth(),
@@ -963,8 +988,6 @@ internal fun QuantityEditDialog(
     )
 }
 
-// ─── Shared form fields (dipakai oleh dialog) ─────────────────────────────────
-
 @Composable
 internal fun CashierDropdownField(
     cashiers: List<CashierEntity>,
@@ -974,26 +997,27 @@ internal fun CashierDropdownField(
     var expanded by remember { mutableStateOf(false) }
     androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .border(
-                    1.dp,
-                    MaterialTheme.colorScheme.outlineVariant,
-                    RoundedCornerShape(10.dp),
-                )
-                .clickable { expanded = true }
-                .padding(horizontal = 12.dp, vertical = 14.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant,
+                        RoundedCornerShape(10.dp),
+                    ).clickable { expanded = true }
+                    .padding(horizontal = 12.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = selected?.name ?: "Pilih kasir",
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (selected != null) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                },
+                color =
+                    if (selected != null) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    },
                 modifier = Modifier.weight(1f),
             )
             Icon(

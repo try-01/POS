@@ -1,6 +1,7 @@
 package com.pos.offline.data.local
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+
 object Migrations {
     val MIGRATION_1_2 =
         object : Migration(1, 2) {
@@ -210,7 +211,7 @@ object Migrations {
                 )
             }
         }
-        val MIGRATION_10_11 =
+    val MIGRATION_10_11 =
         object : Migration(10, 11) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -221,7 +222,7 @@ object Migrations {
                 )
             }
         }
-        val MIGRATION_11_12 =
+    val MIGRATION_11_12 =
         object : Migration(11, 12) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_createdAt` ON `transactions` (`createdAt`)")
@@ -255,119 +256,118 @@ object Migrations {
     val MIGRATION_14_15 =
         object : Migration(14, 15) {
             override fun migrate(db: SupportSQLiteDatabase) {
-            try {
-                // 1. Migrasi tabel anak (cart_items) terlebih dahulu agar Foreign Key ke products dilepas sebelum products dihapus
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS `cart_items_new` (
-                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                        `productId` INTEGER NOT NULL,
-                        `name` TEXT NOT NULL,
-                        `unitPrice` INTEGER NOT NULL,
-                        `quantity` REAL NOT NULL DEFAULT 1
+                try {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `cart_items_new` (
+                            `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            `productId` INTEGER NOT NULL,
+                            `name` TEXT NOT NULL,
+                            `unitPrice` INTEGER NOT NULL,
+                            `quantity` REAL NOT NULL DEFAULT 1
+                        )
+                        """.trimIndent(),
                     )
-                    """.trimIndent(),
-                )
-                db.execSQL(
-                    """
-                    INSERT INTO `cart_items_new` (`id`, `productId`, `name`, `unitPrice`, `quantity`)
-                    SELECT `id`, `productId`, `name`, `unitPrice`, CAST(`quantity` AS REAL)
-                    FROM `cart_items`
-                    """.trimIndent(),
-                )
-                db.execSQL("DROP TABLE `cart_items`")
+                    db.execSQL(
+                        """
+                        INSERT INTO `cart_items_new` (`id`, `productId`, `name`, `unitPrice`, `quantity`)
+                        SELECT `id`, `productId`, `name`, `unitPrice`, CAST(`quantity` AS REAL)
+                        FROM `cart_items`
+                        """.trimIndent(),
+                    )
+                    db.execSQL("DROP TABLE `cart_items`")
 
-                // 2. Migrasi tabel induk (products)
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS `products_new` (
-                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                        `name` TEXT NOT NULL,
-                        `sku` TEXT NOT NULL,
-                        `barcode` TEXT,
-                        `price` INTEGER NOT NULL,
-                        `cost` INTEGER NOT NULL DEFAULT 0,
-                        `stock` REAL NOT NULL,
-                        `active` INTEGER NOT NULL,
-                        `createdAt` INTEGER NOT NULL,
-                        `updatedAt` INTEGER NOT NULL,
-                        `category` TEXT NOT NULL DEFAULT ''
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `products_new` (
+                            `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            `name` TEXT NOT NULL,
+                            `sku` TEXT NOT NULL,
+                            `barcode` TEXT,
+                            `price` INTEGER NOT NULL,
+                            `cost` INTEGER NOT NULL DEFAULT 0,
+                            `stock` REAL NOT NULL,
+                            `active` INTEGER NOT NULL,
+                            `createdAt` INTEGER NOT NULL,
+                            `updatedAt` INTEGER NOT NULL,
+                            `category` TEXT NOT NULL DEFAULT ''
+                        )
+                        """.trimIndent(),
                     )
-                    """.trimIndent(),
-                )
-                db.execSQL(
-                    """
-                    INSERT INTO `products_new` (`id`, `name`, `sku`, `barcode`, `price`, `cost`, `stock`, `active`, `createdAt`, `updatedAt`, `category`)
-                    SELECT `id`, `name`, `sku`, `barcode`, `price`, `cost`, CAST(`stock` AS REAL), `active`, `createdAt`, `updatedAt`, `category`
-                    FROM `products`
-                    """.trimIndent(),
-                )
-                db.execSQL("DROP TABLE `products`")
-                db.execSQL("ALTER TABLE `products_new` RENAME TO `products`")
-                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_products_sku` ON `products` (`sku`)")
-                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_products_barcode` ON `products` (`barcode`)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_products_name` ON `products` (`name`)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_products_category` ON `products` (`category`)")
+                    db.execSQL(
+                        """
+                        INSERT INTO `products_new` (`id`, `name`, `sku`, `barcode`, `price`, `cost`, `stock`, `active`, `createdAt`, `updatedAt`, `category`)
+                        SELECT `id`, `name`, `sku`, `barcode`, `price`, `cost`, CAST(`stock` AS REAL), `active`, `createdAt`, `updatedAt`, `category`
+                        FROM `products`
+                        """.trimIndent(),
+                    )
+                    db.execSQL("DROP TABLE `products`")
+                    db.execSQL("ALTER TABLE `products_new` RENAME TO `products`")
+                    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_products_sku` ON `products` (`sku`)")
+                    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_products_barcode` ON `products` (`barcode`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_products_name` ON `products` (`name`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_products_category` ON `products` (`category`)")
 
-                // 3. Terapkan kembali Foreign Key constraint pada cart_items
-                db.execSQL("ALTER TABLE `cart_items_new` RENAME TO `cart_items`")
-                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_cart_items_productId` ON `cart_items` (`productId`)")
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS `transaction_items_new` (
-                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                        `transactionId` TEXT NOT NULL,
-                        `productName` TEXT NOT NULL,
-                        `unitPrice` INTEGER NOT NULL,
-                        `quantity` REAL NOT NULL,
-                        `lineTotal` INTEGER NOT NULL,
-                        `unitCost` INTEGER NOT NULL DEFAULT 0,
-                        `productId` INTEGER
+                    db.execSQL("ALTER TABLE `cart_items_new` RENAME TO `cart_items`")
+                    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_cart_items_productId` ON `cart_items` (`productId`)")
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `transaction_items_new` (
+                            `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            `transactionId` TEXT NOT NULL,
+                            `productName` TEXT NOT NULL,
+                            `unitPrice` INTEGER NOT NULL,
+                            `quantity` REAL NOT NULL,
+                            `lineTotal` INTEGER NOT NULL,
+                            `unitCost` INTEGER NOT NULL DEFAULT 0,
+                            `productId` INTEGER
+                        )
+                        """.trimIndent(),
                     )
-                    """.trimIndent(),
-                )
-                db.execSQL(
-                    """
-                    INSERT INTO `transaction_items_new` (`id`, `transactionId`, `productName`, `unitPrice`, `quantity`, `lineTotal`, `unitCost`, `productId`)
-                    SELECT `id`, `transactionId`, `productName`, `unitPrice`, CAST(`quantity` AS REAL), `lineTotal`, `unitCost`, `productId`
-                    FROM `transaction_items`
-                    """.trimIndent(),
-                )
-                db.execSQL("DROP TABLE `transaction_items`")
-                db.execSQL("ALTER TABLE `transaction_items_new` RENAME TO `transaction_items`")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transaction_items_transactionId` ON `transaction_items` (`transactionId`)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transaction_items_productId` ON `transaction_items` (`productId`)")
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS `return_items_new` (
-                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                        `returnId` INTEGER NOT NULL,
-                        `transactionItemId` INTEGER NOT NULL,
-                        `productId` INTEGER,
-                        `productName` TEXT NOT NULL,
-                        `unitPrice` INTEGER NOT NULL,
-                        `quantityReturned` REAL NOT NULL,
-                        `restocked` INTEGER NOT NULL
+                    db.execSQL(
+                        """
+                        INSERT INTO `transaction_items_new` (`id`, `transactionId`, `productName`, `unitPrice`, `quantity`, `lineTotal`, `unitCost`, `productId`)
+                        SELECT `id`, `transactionId`, `productName`, `unitPrice`, CAST(`quantity` AS REAL), `lineTotal`, `unitCost`, `productId`
+                        FROM `transaction_items`
+                        """.trimIndent(),
                     )
-                    """.trimIndent(),
-                )
-                db.execSQL(
-                    """
-                    INSERT INTO `return_items_new` (`id`, `returnId`, `transactionItemId`, `productId`, `productName`, `unitPrice`, `quantityReturned`, `restocked`)
-                    SELECT `id`, `returnId`, `transactionItemId`, `productId`, `productName`, `unitPrice`, CAST(`quantityReturned` AS REAL), `restocked`
-                    FROM `return_items`
-                    """.trimIndent(),
-                )
-                db.execSQL("DROP TABLE `return_items`")
-                db.execSQL("ALTER TABLE `return_items_new` RENAME TO `return_items`")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_return_items_returnId` ON `return_items` (`returnId`)")
-            } finally {
-                db.execSQL("PRAGMA foreign_keys = ON;")
+                    db.execSQL("DROP TABLE `transaction_items`")
+                    db.execSQL("ALTER TABLE `transaction_items_new` RENAME TO `transaction_items`")
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS `index_transaction_items_transactionId` ON `transaction_items` (`transactionId`)",
+                    )
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_transaction_items_productId` ON `transaction_items` (`productId`)")
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `return_items_new` (
+                            `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            `returnId` INTEGER NOT NULL,
+                            `transactionItemId` INTEGER NOT NULL,
+                            `productId` INTEGER,
+                            `productName` TEXT NOT NULL,
+                            `unitPrice` INTEGER NOT NULL,
+                            `quantityReturned` REAL NOT NULL,
+                            `restocked` INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        """
+                        INSERT INTO `return_items_new` (`id`, `returnId`, `transactionItemId`, `productId`, `productName`, `unitPrice`, `quantityReturned`, `restocked`)
+                        SELECT `id`, `returnId`, `transactionItemId`, `productId`, `productName`, `unitPrice`, CAST(`quantityReturned` AS REAL), `restocked`
+                        FROM `return_items`
+                        """.trimIndent(),
+                    )
+                    db.execSQL("DROP TABLE `return_items`")
+                    db.execSQL("ALTER TABLE `return_items_new` RENAME TO `return_items`")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_return_items_returnId` ON `return_items` (`returnId`)")
+                } finally {
+                    db.execSQL("PRAGMA foreign_keys = ON;")
                 }
             }
         }
 
-        val MIGRATION_15_16 =
+    val MIGRATION_15_16 =
         object : Migration(15, 16) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE products ADD COLUMN damagedStock REAL NOT NULL DEFAULT 0.0")

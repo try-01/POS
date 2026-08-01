@@ -8,6 +8,7 @@ import com.pos.offline.data.local.dao.CartDao
 import com.pos.offline.data.local.dao.CashierDao
 import com.pos.offline.data.local.dao.PrinterDao
 import com.pos.offline.data.local.dao.ProductDao
+import com.pos.offline.data.local.dao.ReportDao
 import com.pos.offline.data.local.dao.ReturnDao
 import com.pos.offline.data.local.dao.ShiftDao
 import com.pos.offline.data.local.dao.StoreProfileDao
@@ -22,13 +23,14 @@ import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.local.entity.StoreProfileEntity
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.TransactionItemEntity
-import com.pos.offline.data.local.dao.ReportDao
+
 private data class SeedProduct(
     val name: String,
     val sku: String,
     val price: Long,
     val cost: Long,
 )
+
 @Database(
     entities = [
         ProductEntity::class,
@@ -47,17 +49,27 @@ private data class SeedProduct(
 )
 abstract class PosDatabase : RoomDatabase() {
     abstract fun productDao(): ProductDao
+
     abstract fun cartDao(): CartDao
+
     abstract fun transactionDao(): TransactionDao
+
     abstract fun cashierDao(): CashierDao
+
     abstract fun shiftDao(): ShiftDao
+
     abstract fun returnDao(): ReturnDao
+
     abstract fun printerDao(): PrinterDao
+
     abstract fun reportDao(): ReportDao
+
     abstract fun storeProfileDao(): StoreProfileDao
+
     companion object {
         @Volatile
         private var INSTANCE: PosDatabase? = null
+
         fun getInstance(context: Context): PosDatabase =
             INSTANCE ?: synchronized(this) {
                 if (com.pos.offline.data.backup.RestoreGuard.isInProgress) {
@@ -73,12 +85,14 @@ abstract class PosDatabase : RoomDatabase() {
                     .build()
                     .also { INSTANCE = it }
             }
+
         fun closeActiveInstance() {
             synchronized(this) {
                 INSTANCE?.close()
                 INSTANCE = null
             }
         }
+
         private val SEED_CALLBACK =
             object : RoomDatabase.Callback() {
                 override fun onCreate(db: SupportSQLiteDatabase) {

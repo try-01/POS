@@ -206,23 +206,23 @@ fun SettingsScreen(
         ) {
             Spacer(Modifier.height(4.dp))
             SectionLabel("Umpan Balik Pemindai (Scanner Feedback)")
-            // UBAH BAGIAN PEMANGGILAN INI:
-FuturisticFeedbackControls(
-    isSoundEnabled = isSoundEnabled,
-    soundVolume = soundVolume,
-    soundDurationMs = soundDurationMs,
-    isVibrationEnabled = isVibrationEnabled,
-    vibrationLevel = vibrationLevel, // Menggunakan vibrationLevel
-    vibrationDurationMs = vibrationDurationMs,
-    onSoundToggle = { viewModel.setSoundEnabled(it) },
-    onSoundVolumeChange = { viewModel.setSoundVolume(it) },
-    onSoundDurationChange = { viewModel.setSoundDurationMs(it) },
-    onTestSound = { viewModel.testSoundPreview() },
-    onVibrationToggle = { viewModel.setVibrationEnabled(it) },
-    onVibrationLevelChange = { viewModel.setVibrationLevel(it) }, // Menggunakan setVibrationLevel
-    onVibrationDurationChange = { viewModel.setVibrationDurationMs(it) },
-    onTestVibration = { viewModel.testVibrationPreview() },
-)
+
+            FuturisticFeedbackControls(
+                isSoundEnabled = isSoundEnabled,
+                soundVolume = soundVolume,
+                soundDurationMs = soundDurationMs,
+                isVibrationEnabled = isVibrationEnabled,
+                vibrationLevel = vibrationLevel,
+                vibrationDurationMs = vibrationDurationMs,
+                onSoundToggle = { viewModel.setSoundEnabled(it) },
+                onSoundVolumeChange = { viewModel.setSoundVolume(it) },
+                onSoundDurationChange = { viewModel.setSoundDurationMs(it) },
+                onTestSound = { viewModel.testSoundPreview() },
+                onVibrationToggle = { viewModel.setVibrationEnabled(it) },
+                onVibrationLevelChange = { viewModel.setVibrationLevel(it) },
+                onVibrationDurationChange = { viewModel.setVibrationDurationMs(it) },
+                onTestVibration = { viewModel.testVibrationPreview() },
+            )
             SectionLabel("Cadangkan & Pulihkan")
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -447,6 +447,7 @@ FuturisticFeedbackControls(
         }
     }
 }
+
 @Composable
 private fun FuturisticFeedbackControls(
     isSoundEnabled: Boolean,
@@ -474,13 +475,13 @@ private fun FuturisticFeedbackControls(
                     Icons.Rounded.QrCodeScanner,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "Respon Scan Real-Time",
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
             }
             FeedbackSectionCard(
@@ -494,40 +495,44 @@ private fun FuturisticFeedbackControls(
                     Text(
                         text = "Volume Suara: $soundVolume%",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
                     )
                     Slider(
                         value = soundVolume.toFloat(),
                         onValueChange = { onSoundVolumeChange(it.toInt()) },
                         onValueChangeFinished = onTestSound,
                         valueRange = 0f..100f,
-                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
+                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary),
                     )
                     Text(
                         text = "Durasi Beep: $soundDurationMs ms (Aman 50-300 ms)",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
                     )
                     Slider(
                         value = soundDurationMs.toFloat(),
                         onValueChange = { onSoundDurationChange(it.toInt()) },
                         onValueChangeFinished = onTestSound,
                         valueRange = 50f..300f,
-                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
+                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary),
                     )
                 }
             }
             FeedbackSectionCard(
                 icon = Icons.Rounded.Vibration,
                 title = "Getaran Haptic",
-                subtitle = if (isVibrationEnabled) {
-                    val label = when (vibrationLevel) {
-                        VibrationLevel.HALUS -> "Halus"
-                        VibrationLevel.SEDANG -> "Sedang"
-                        VibrationLevel.KUAT -> "Kuat"
-                    }
-                    "Aktif ($label - $vibrationDurationMs ms)"
-                } else "Nonaktif (OFF)",
+                subtitle =
+                    if (isVibrationEnabled) {
+                        val label =
+                            when (vibrationLevel) {
+                                VibrationLevel.HALUS -> "Halus"
+                                VibrationLevel.SEDANG -> "Sedang"
+                                VibrationLevel.KUAT -> "Kuat"
+                            }
+                        "Aktif ($label - $vibrationDurationMs ms)"
+                    } else {
+                        "Nonaktif (OFF)"
+                    },
                 isEnabled = isVibrationEnabled,
                 onToggle = onVibrationToggle,
             ) {
@@ -535,17 +540,18 @@ private fun FuturisticFeedbackControls(
                     Text(
                         text = "Kekuatan Getar",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        val options = listOf(
-                            "Halus" to VibrationLevel.HALUS,
-                            "Sedang" to VibrationLevel.SEDANG,
-                            "Kuat" to VibrationLevel.KUAT
-                        )
+                        val options =
+                            listOf(
+                                "Halus" to VibrationLevel.HALUS,
+                                "Sedang" to VibrationLevel.SEDANG,
+                                "Kuat" to VibrationLevel.KUAT,
+                            )
                         options.forEach { (label, level) ->
                             val isSelected = vibrationLevel == level
                             if (isSelected) {
@@ -555,7 +561,7 @@ private fun FuturisticFeedbackControls(
                                         onTestVibration()
                                     },
                                     modifier = Modifier.weight(1f),
-                                    contentPadding = PaddingValues(vertical = 8.dp)
+                                    contentPadding = PaddingValues(vertical = 8.dp),
                                 ) {
                                     Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
@@ -566,7 +572,7 @@ private fun FuturisticFeedbackControls(
                                         onTestVibration()
                                     },
                                     modifier = Modifier.weight(1f),
-                                    contentPadding = PaddingValues(vertical = 8.dp)
+                                    contentPadding = PaddingValues(vertical = 8.dp),
                                 ) {
                                     Text(label, fontSize = 12.sp)
                                 }
@@ -577,20 +583,21 @@ private fun FuturisticFeedbackControls(
                     Text(
                         text = "Durasi Getar: $vibrationDurationMs ms",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
                     )
                     Slider(
                         value = vibrationDurationMs.toFloat(),
                         onValueChange = { onVibrationDurationChange(it.toInt()) },
                         onValueChangeFinished = onTestVibration,
                         valueRange = 20f..200f,
-                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
+                        colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary),
                     )
                 }
             }
         }
     }
 }
+
 @Composable
 private fun FeedbackSectionCard(
     icon: ImageVector,
@@ -598,36 +605,38 @@ private fun FeedbackSectionCard(
     subtitle: String,
     isEnabled: Boolean,
     onToggle: (Boolean) -> Unit,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     val activeColor = MaterialTheme.colorScheme.primary
     val accentColor by animateColorAsState(
         targetValue = if (isEnabled) activeColor else MaterialTheme.colorScheme.onSurfaceVariant,
-        label = "accentColor"
+        label = "accentColor",
     )
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-            .padding(12.dp)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                .padding(12.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         ) {
             Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(accentColor.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(accentColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     icon,
                     contentDescription = title,
                     tint = accentColor,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(18.dp),
                 )
             }
             Spacer(Modifier.width(10.dp))
@@ -635,21 +644,22 @@ private fun FeedbackSectionCard(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
                 )
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Switch(
                 checked = isEnabled,
                 onCheckedChange = onToggle,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                    checkedTrackColor = activeColor
-                )
+                colors =
+                    SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedTrackColor = activeColor,
+                    ),
             )
         }
         if (isEnabled) {
@@ -658,6 +668,7 @@ private fun FeedbackSectionCard(
         }
     }
 }
+
 @Composable
 private fun CashierRow(
     cashier: CashierEntity,
@@ -699,6 +710,7 @@ private fun CashierRow(
         )
     }
 }
+
 @Composable
 private fun AddCashierDialog(
     onDismiss: () -> Unit,
@@ -729,6 +741,7 @@ private fun AddCashierDialog(
         },
     )
 }
+
 @Composable
 private fun SectionLabel(text: String) {
     Text(
@@ -739,6 +752,7 @@ private fun SectionLabel(text: String) {
         modifier = Modifier.padding(start = 2.dp),
     )
 }
+
 @Composable
 private fun RestoreConfirmDialog(
     onDismiss: () -> Unit,

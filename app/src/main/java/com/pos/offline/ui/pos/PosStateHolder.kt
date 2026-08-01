@@ -8,7 +8,6 @@ import androidx.compose.runtime.setValue
 import com.pos.offline.data.local.entity.CartItemEntity
 
 class PosLocalStateHolder {
-
     var isCartExpanded by mutableStateOf(false)
         private set
 

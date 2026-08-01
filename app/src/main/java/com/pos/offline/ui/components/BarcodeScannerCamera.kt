@@ -67,7 +67,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
-import androidx.compose.ui.geometry.Size as GeometrySize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
@@ -88,12 +87,13 @@ import com.google.mlkit.vision.common.InputImage
 import com.pos.offline.util.CameraPermissionState
 import com.pos.offline.util.ScanFeedbackManager
 import com.pos.offline.util.ScanPreferencesRepository
-import com.pos.offline.util.VibrationLevel // IMPOR BARU: Enum tingkat getaran
+import com.pos.offline.util.VibrationLevel
 import com.pos.offline.util.openAppSettings
 import com.pos.offline.util.rememberCameraPermissionState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
+import androidx.compose.ui.geometry.Size as GeometrySize
 
 @Composable
 fun BarcodeScannerCamera(
@@ -104,18 +104,20 @@ fun BarcodeScannerCamera(
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
     val executor = remember { Executors.newSingleThreadExecutor() }
-    val scanner = remember {
-        BarcodeScanning.getClient(
-            BarcodeScannerOptions.Builder()
-                .setBarcodeFormats(
-                    Barcode.FORMAT_EAN_13,
-                    Barcode.FORMAT_EAN_8,
-                    Barcode.FORMAT_UPC_A,
-                    Barcode.FORMAT_UPC_E,
-                    Barcode.FORMAT_CODE_128,
-                ).build()
-        )
-    }
+    val scanner =
+        remember {
+            BarcodeScanning.getClient(
+                BarcodeScannerOptions
+                    .Builder()
+                    .setBarcodeFormats(
+                        Barcode.FORMAT_EAN_13,
+                        Barcode.FORMAT_EAN_8,
+                        Barcode.FORMAT_UPC_A,
+                        Barcode.FORMAT_UPC_E,
+                        Barcode.FORMAT_CODE_128,
+                    ).build(),
+            )
+        }
     var lastScannedCode by remember { mutableStateOf<String?>(null) }
     var lastScannedTime by remember { mutableLongStateOf(0L) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
@@ -127,23 +129,30 @@ fun BarcodeScannerCamera(
         val previewView = previewViewRef ?: return
         try {
             if (executor.isShutdown) return
-            val resolutionStrategy = ResolutionStrategy(
-                Size(720, 1280),
-                ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
-            )
-            val resolutionSelector = ResolutionSelector.Builder()
-                .setResolutionStrategy(resolutionStrategy)
-                .build()
-            val preview = Preview.Builder()
-                .setResolutionSelector(resolutionSelector)
-                .build()
-                .also {
-                    it.setSurfaceProvider(previewView.surfaceProvider)
-                }
-            val analysis = ImageAnalysis.Builder()
-                .setResolutionSelector(resolutionSelector)
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
+            val resolutionStrategy =
+                ResolutionStrategy(
+                    Size(720, 1280),
+                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
+                )
+            val resolutionSelector =
+                ResolutionSelector
+                    .Builder()
+                    .setResolutionStrategy(resolutionStrategy)
+                    .build()
+            val preview =
+                Preview
+                    .Builder()
+                    .setResolutionSelector(resolutionSelector)
+                    .build()
+                    .also {
+                        it.setSurfaceProvider(previewView.surfaceProvider)
+                    }
+            val analysis =
+                ImageAnalysis
+                    .Builder()
+                    .setResolutionSelector(resolutionSelector)
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
             analysis.setAnalyzer(executor) { proxy ->
                 val mediaImage = proxy.image
                 if (mediaImage == null) {
@@ -153,22 +162,24 @@ fun BarcodeScannerCamera(
                 try {
                     val rotationDegrees = proxy.imageInfo.rotationDegrees
                     val input = InputImage.fromMediaImage(mediaImage, rotationDegrees)
-                    scanner.process(input)
+                    scanner
+                        .process(input)
                         .addOnSuccessListener { barcodes ->
                             val isRotated = rotationDegrees == 90 || rotationDegrees == 270
                             val imgW = if (isRotated) proxy.height.toFloat() else proxy.width.toFloat()
                             val imgH = if (isRotated) proxy.width.toFloat() else proxy.height.toFloat()
-                            val targetBarcode = barcodes.firstOrNull { barcode ->
-                                val raw = barcode.rawValue
-                                if (raw.isNullOrBlank()) return@firstOrNull false
-                                val rect = barcode.boundingBox ?: return@firstOrNull false
-                                val normLeft = rect.left / imgW
-                                val normRight = rect.right / imgW
-                                val normTop = rect.top / imgH
-                                val normBottom = rect.bottom / imgH
-                                normLeft >= 0.125f && normRight <= 0.875f &&
+                            val targetBarcode =
+                                barcodes.firstOrNull { barcode ->
+                                    val raw = barcode.rawValue
+                                    if (raw.isNullOrBlank()) return@firstOrNull false
+                                    val rect = barcode.boundingBox ?: return@firstOrNull false
+                                    val normLeft = rect.left / imgW
+                                    val normRight = rect.right / imgW
+                                    val normTop = rect.top / imgH
+                                    val normBottom = rect.bottom / imgH
+                                    normLeft >= 0.125f && normRight <= 0.875f &&
                                         normTop >= 0.325f && normBottom <= 0.675f
-                            }
+                                }
                             targetBarcode?.rawValue?.let { code ->
                                 val currentTime = System.currentTimeMillis()
                                 val isSameCode = (code == lastScannedCode)
@@ -181,8 +192,7 @@ fun BarcodeScannerCamera(
                                     }
                                 }
                             }
-                        }
-                        .addOnCompleteListener {
+                        }.addOnCompleteListener {
                             proxy.close()
                         }
                 } catch (e: Exception) {
@@ -218,9 +228,10 @@ fun BarcodeScannerCamera(
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { c: Context ->
-                val previewView = PreviewView(c).apply {
-                    implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-                }
+                val previewView =
+                    PreviewView(c).apply {
+                        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                    }
                 previewViewRef = previewView
                 val providerFuture = ProcessCameraProvider.getInstance(c)
                 providerFuture.addListener({
@@ -237,9 +248,10 @@ fun BarcodeScannerCamera(
         ScannerViewfinder(modifier = Modifier.fillMaxSize())
         cameraError?.let { message ->
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.85f)),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.85f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -269,14 +281,14 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
     val vibrationIntensity by prefsRepository.vibrationIntensity.collectAsStateWithLifecycle()
     val vibrationDurationMs by prefsRepository.vibrationDurationMs.collectAsStateWithLifecycle()
 
-    // KONVERSI: Mengonversi intensitas getaran menjadi Enum VibrationLevel
-    val vibrationLevel = remember(vibrationIntensity) {
-        when {
-            vibrationIntensity <= 35 -> VibrationLevel.HALUS
-            vibrationIntensity <= 70 -> VibrationLevel.SEDANG
-            else -> VibrationLevel.KUAT
+    val vibrationLevel =
+        remember(vibrationIntensity) {
+            when {
+                vibrationIntensity <= 35 -> VibrationLevel.HALUS
+                vibrationIntensity <= 70 -> VibrationLevel.SEDANG
+                else -> VibrationLevel.KUAT
+            }
         }
-    }
 
     val (permState, requestPermission) = rememberCameraPermissionState()
     var showScanner by remember { mutableStateOf(false) }
@@ -316,11 +328,15 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                     showScanner = true
                     pendingOpen = false
                 }
+
                 CameraPermissionState.PERMANENTLY_DENIED -> {
                     showDeniedDialog = true
                     pendingOpen = false
                 }
-                else -> Unit
+
+                else -> {
+                    Unit
+                }
             }
         }
     }
@@ -363,9 +379,10 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
     if (showScanner) {
         BackHandler { showScanner = false }
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black),
         ) {
             BarcodeScannerCamera(
                 isMultiScanMode = isMultiScanMode,
@@ -373,14 +390,14 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                     val isSuccess = onScannedState.value(code)
                     if (isSuccess) {
                         scanErrorMessage = null
-                        // PEMBAHARUAN: Mengirim vibrationLevel Enum
+
                         feedbackManager.triggerSuccessFeedback(
                             soundEnabled = isSoundEnabled,
                             soundVolume = soundVolume,
                             soundDurationMs = soundDurationMs,
                             vibrationEnabled = isVibrationEnabled,
                             vibrationLevel = vibrationLevel,
-                            vibrationDurationMs = vibrationDurationMs
+                            vibrationDurationMs = vibrationDurationMs,
                         )
                         scannedCountBatch++
                         lastScannedCodeText = code
@@ -389,12 +406,12 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                         }
                     } else {
                         scanErrorMessage = "Produk tidak ditemukan ($code)"
-                        // PEMBAHARUAN: Mengirim vibrationLevel Enum
+
                         feedbackManager.triggerFailureFeedback(
                             soundEnabled = isSoundEnabled,
                             soundVolume = soundVolume,
                             vibrationEnabled = isVibrationEnabled,
-                            vibrationLevel = vibrationLevel
+                            vibrationLevel = vibrationLevel,
                         )
                     }
                     isSuccess
@@ -405,32 +422,33 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                 visible = scannedCountBatch > 0 && scanErrorMessage == null,
                 enter = fadeIn() + slideInVertically(),
                 exit = fadeOut() + slideOutVertically(),
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .statusBarsPadding()
-                    .padding(start = 16.dp, top = 12.dp)
+                modifier =
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .statusBarsPadding()
+                        .padding(start = 16.dp, top = 12.dp),
             ) {
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = MaterialTheme.colorScheme.primary,
-                    tonalElevation = 6.dp
+                    tonalElevation = 6.dp,
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
                             Icons.Rounded.Check,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = "$scannedCountBatch Item Masuk Keranjang",
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                             color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
                         )
                     }
                 }
@@ -439,25 +457,26 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                 visible = scanErrorMessage != null,
                 enter = fadeIn() + slideInVertically(),
                 exit = fadeOut() + slideOutVertically(),
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .statusBarsPadding()
-                    .padding(start = 16.dp, top = 12.dp, end = 60.dp)
+                modifier =
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .statusBarsPadding()
+                        .padding(start = 16.dp, top = 12.dp, end = 60.dp),
             ) {
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = MaterialTheme.colorScheme.errorContainer,
-                    tonalElevation = 8.dp
+                    tonalElevation = 8.dp,
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
                             Icons.Rounded.Warning,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
@@ -465,47 +484,50 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             fontWeight = FontWeight.Bold,
-                            maxLines = 1
+                            maxLines = 1,
                         )
                     }
                 }
             }
             IconButton(
                 onClick = { showScanner = false },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .statusBarsPadding()
-                    .padding(16.dp),
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(16.dp),
             ) {
                 Icon(Icons.Rounded.Close, contentDescription = "Tutup", tint = Color.White)
             }
             Card(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .navigationBarsPadding()
-                    .padding(bottom = 12.dp, top = 4.dp),
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .navigationBarsPadding()
+                        .padding(bottom = 12.dp, top = 4.dp),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color.Black.copy(alpha = 0.85f)
-                )
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor = Color.Black.copy(alpha = 0.85f),
+                    ),
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 Icons.Rounded.Repeat,
                                 contentDescription = null,
                                 tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(20.dp),
                             )
                             Spacer(Modifier.width(8.dp))
                             Column {
@@ -513,38 +535,40 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                                     text = "Mode Multi-Scan (Beruntun)",
                                     color = Color.White,
                                     fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
                                 )
                                 Text(
                                     text = if (isMultiScanMode) "Kamera tetap terbuka setelah scan" else "Kamera otomatis tutup 1x scan",
                                     color = Color.White.copy(alpha = 0.7f),
-                                    fontSize = 10.sp
+                                    fontSize = 10.sp,
                                 )
                             }
                         }
                         Switch(
                             checked = isMultiScanMode,
                             onCheckedChange = { isMultiScanMode = it },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary
-                            )
+                            colors =
+                                SwitchDefaults.colors(
+                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                ),
                         )
                     }
                     AnimatedVisibility(visible = lastScannedCodeText.isNotEmpty()) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
                                 Icons.Rounded.QrCodeScanner,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(18.dp),
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
@@ -553,21 +577,21 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
                             )
                         }
                     }
                     Button(
                         onClick = { showScanner = false },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
                     ) {
                         Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = if (scannedCountBatch > 0) "Selesai ($scannedCountBatch Item Dipindai)" else "Selesai",
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
                         )
                     }
                 }
@@ -576,8 +600,14 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
     }
     return {
         when (permState) {
-            CameraPermissionState.GRANTED -> showScanner = true
-            CameraPermissionState.SHOW_RATIONALE, CameraPermissionState.PERMANENTLY_DENIED -> showDeniedDialog = true
+            CameraPermissionState.GRANTED -> {
+                showScanner = true
+            }
+
+            CameraPermissionState.SHOW_RATIONALE, CameraPermissionState.PERMANENTLY_DENIED -> {
+                showDeniedDialog = true
+            }
+
             else -> {
                 pendingOpen = true
                 requestPermission()
@@ -589,41 +619,44 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
 @Composable
 private fun ScannerViewfinder(modifier: Modifier = Modifier) {
     Box(
-        modifier = modifier.drawWithCache {
-            val boxWidth = size.width * 0.75f
-            val boxHeight = size.height * 0.35f
-            val left = (size.width - boxWidth) / 2f
-            val top = (size.height - boxHeight) / 2f
-            val right = left + boxWidth
-            val bottom = top + boxHeight
-            val cornerRadiusPx = 16.dp.toPx()
-            val strokeWidthPx = 3.dp.toPx()
-            val outerRect = Rect(0f, 0f, size.width, size.height)
-            val boxRect = RoundRect(
-                rect = Rect(left, top, right, bottom),
-                cornerRadius = CornerRadius(cornerRadiusPx)
-            )
-            val overlayPath = Path().apply { addRect(outerRect) }
-            val cutoutPath = Path().apply { addRoundRect(boxRect) }
-            val dimmedPath = Path.combine(
-                operation = PathOperation.Difference,
-                path1 = overlayPath,
-                path2 = cutoutPath
-            )
-            val boxOffset = Offset(left, top)
-            val boxSize = GeometrySize(boxWidth, boxHeight)
-            val strokeStyle = Stroke(width = strokeWidthPx)
-            onDrawWithContent {
-                drawContent()
-                drawPath(dimmedPath, Color.Black.copy(alpha = 0.55f))
-                drawRoundRect(
-                    color = Color.White,
-                    topLeft = boxOffset,
-                    size = boxSize,
-                    cornerRadius = CornerRadius(cornerRadiusPx),
-                    style = strokeStyle
-                )
-            }
-        }
+        modifier =
+            modifier.drawWithCache {
+                val boxWidth = size.width * 0.75f
+                val boxHeight = size.height * 0.35f
+                val left = (size.width - boxWidth) / 2f
+                val top = (size.height - boxHeight) / 2f
+                val right = left + boxWidth
+                val bottom = top + boxHeight
+                val cornerRadiusPx = 16.dp.toPx()
+                val strokeWidthPx = 3.dp.toPx()
+                val outerRect = Rect(0f, 0f, size.width, size.height)
+                val boxRect =
+                    RoundRect(
+                        rect = Rect(left, top, right, bottom),
+                        cornerRadius = CornerRadius(cornerRadiusPx),
+                    )
+                val overlayPath = Path().apply { addRect(outerRect) }
+                val cutoutPath = Path().apply { addRoundRect(boxRect) }
+                val dimmedPath =
+                    Path.combine(
+                        operation = PathOperation.Difference,
+                        path1 = overlayPath,
+                        path2 = cutoutPath,
+                    )
+                val boxOffset = Offset(left, top)
+                val boxSize = GeometrySize(boxWidth, boxHeight)
+                val strokeStyle = Stroke(width = strokeWidthPx)
+                onDrawWithContent {
+                    drawContent()
+                    drawPath(dimmedPath, Color.Black.copy(alpha = 0.55f))
+                    drawRoundRect(
+                        color = Color.White,
+                        topLeft = boxOffset,
+                        size = boxSize,
+                        cornerRadius = CornerRadius(cornerRadiusPx),
+                        style = strokeStyle,
+                    )
+                }
+            },
     )
 }

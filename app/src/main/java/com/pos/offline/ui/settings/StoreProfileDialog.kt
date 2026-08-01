@@ -53,6 +53,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
 @Composable
 fun StoreProfileDialog(
     viewModel: StoreProfileViewModel,
@@ -228,6 +229,7 @@ fun StoreProfileDialog(
         }
     }
 }
+
 @Composable
 fun LogoPreview(
     logoBytes: ByteArray?,
@@ -247,7 +249,7 @@ fun LogoPreview(
     }
     bitmap?.let { nonNullBitmap ->
         Image(
-            bitmap = nonNullBitmap, 
+            bitmap = nonNullBitmap,
             contentDescription = "Logo toko",
             contentScale = ContentScale.Crop,
             modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),

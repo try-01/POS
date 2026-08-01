@@ -10,6 +10,7 @@ import com.pos.offline.data.local.entity.ReturnItemEntity
 import com.pos.offline.data.local.entity.hasReturn
 import com.pos.offline.data.local.entity.isVoid
 import kotlinx.coroutines.flow.Flow
+
 data class ReturnItemInput(
     val transactionItemId: Long,
     val productId: Long?,
@@ -17,27 +18,36 @@ data class ReturnItemInput(
     val unitPrice: Long,
     val quantityReturned: Double,
     val restocked: Boolean,
-    val restockToDamaged: Boolean = false, // BARU: Menandai apakah masuk ke stok rusak/garansi
+    val restockToDamaged: Boolean = false,
 )
+
 data class ReturnDetail(
     val header: ReturnEntity,
     val items: List<ReturnItemEntity>,
 )
+
 sealed class ReturnOutcome {
     data class Success(
         val returnId: Long,
     ) : ReturnOutcome()
+
     data object TransactionNotFound : ReturnOutcome()
+
     data object TransactionVoided : ReturnOutcome()
+
     data object AlreadyReturned : ReturnOutcome()
+
     data object NoItemsSelected : ReturnOutcome()
+
     data class InvalidQuantity(
         val productName: String,
     ) : ReturnOutcome()
+
     data class InvalidRefundAmount(
         val maxAllowed: Long,
     ) : ReturnOutcome()
 }
+
 class ReturnRepository(
     private val database: PosDatabase,
     private val returnDao: ReturnDao,
@@ -48,14 +58,17 @@ class ReturnRepository(
         start: Long,
         end: Long,
     ): Flow<List<ReturnEntity>> = returnDao.observeReturnsBetween(start, end)
+
     suspend fun getDetail(returnId: Long): ReturnDetail? {
         val header = returnDao.getById(returnId) ?: return null
         return ReturnDetail(header, returnDao.getItems(returnId))
     }
+
     suspend fun getDetailByTransactionId(transactionId: String): ReturnDetail? {
         val header = returnDao.getByTransactionId(transactionId) ?: return null
         return ReturnDetail(header, returnDao.getItems(header.id))
     }
+
     suspend fun processReturn(
         transactionId: String,
         itemInputs: List<ReturnItemInput>,
@@ -116,10 +129,8 @@ class ReturnRepository(
             itemInputs.forEach { input ->
                 if (input.restocked && input.productId != null) {
                     if (input.restockToDamaged) {
-                        // Jika dicentang masuk ke stok rusak/garansi
                         productDao.incrementDamagedStock(input.productId, input.quantityReturned, now)
                     } else {
-                        // Jika masuk ke stok layak jual biasa
                         productDao.incrementStock(input.productId, input.quantityReturned, now)
                     }
                 }
@@ -128,142 +139,139 @@ class ReturnRepository(
         }
         return ReturnOutcome.Success(newReturnId)
     }
-// Di ReturnRepository.kt
-// Di ReturnRepository.kt
-suspend fun processManualWarrantyClaim(
-    productName: String,
-    productId: Long?,
-    quantity: Double,
-    refundAmount: Long,
-    refundMethod: PaymentMethod,
-    shiftId: Long?,
-    cashierId: Long?,
-    cashierName: String,
-    note: String
-): ReturnOutcome {
-    val now = System.currentTimeMillis()
-    val syntheticTxId = "GARANSI-MANUAL-$now"
-    
-    val header = ReturnEntity(
-        transactionId = syntheticTxId,
-        returnedAt = now,
-        shiftId = shiftId,
-        cashierId = cashierId,
-        cashierName = cashierName,
-        refundAmount = refundAmount,
-        refundMethod = refundMethod.name,
-        note = "Garansi Tanpa Struk: $note"
-    )
-    
-    database.withTransaction {
-        val newReturnId = returnDao.insertReturn(header)
-        val itemEntity = ReturnItemEntity(
-            returnId = newReturnId,
-            transactionItemId = 0L,
-            productId = productId,
-            productName = productName,
-            unitPrice = 0L,
-            quantityReturned = quantity,
-            restocked = false 
-        )
-        returnDao.insertItems(listOf(itemEntity))
-        
-        // Tambahkan stok ke damagedStock (stok rusak) jika ID produk tersedia
-        if (productId != null) {
-            productDao.incrementDamagedStock(productId, quantity, now)
+
+    suspend fun processManualWarrantyClaim(
+        productName: String,
+        productId: Long?,
+        quantity: Double,
+        refundAmount: Long,
+        refundMethod: PaymentMethod,
+        shiftId: Long?,
+        cashierId: Long?,
+        cashierName: String,
+        note: String,
+    ): ReturnOutcome {
+        val now = System.currentTimeMillis()
+        val syntheticTxId = "GARANSI-MANUAL-$now"
+
+        val header =
+            ReturnEntity(
+                transactionId = syntheticTxId,
+                returnedAt = now,
+                shiftId = shiftId,
+                cashierId = cashierId,
+                cashierName = cashierName,
+                refundAmount = refundAmount,
+                refundMethod = refundMethod.name,
+                note = "Garansi Tanpa Struk: $note",
+            )
+
+        database.withTransaction {
+            val newReturnId = returnDao.insertReturn(header)
+            val itemEntity =
+                ReturnItemEntity(
+                    returnId = newReturnId,
+                    transactionItemId = 0L,
+                    productId = productId,
+                    productName = productName,
+                    unitPrice = 0L,
+                    quantityReturned = quantity,
+                    restocked = false,
+                )
+            returnDao.insertItems(listOf(itemEntity))
+
+            if (productId != null) {
+                productDao.incrementDamagedStock(productId, quantity, now)
+            }
         }
+        return ReturnOutcome.Success(0L)
     }
-    return ReturnOutcome.Success(0L)
-}
 
-suspend fun processDirectExchangeWarranty(
-    brokenProduct: com.pos.offline.data.local.entity.ProductEntity,
-    brokenQty: Double,
-    replacementProduct: com.pos.offline.data.local.entity.ProductEntity,
-    replacementQty: Double,
-    shiftId: Long?,
-    cashierId: Long?,
-    cashierName: String,
-    note: String
-): ReturnOutcome {
-    val now = System.currentTimeMillis()
-    
-    // Perhitungan matematika total harga masing-masing item
-    val totalBroken = (brokenProduct.price * brokenQty).toLong()
-    val totalReplacement = (replacementProduct.price * replacementQty).toLong()
+    suspend fun processDirectExchangeWarranty(
+        brokenProduct: com.pos.offline.data.local.entity.ProductEntity,
+        brokenQty: Double,
+        replacementProduct: com.pos.offline.data.local.entity.ProductEntity,
+        replacementQty: Double,
+        shiftId: Long?,
+        cashierId: Long?,
+        cashierName: String,
+        note: String,
+    ): ReturnOutcome {
+        val now = System.currentTimeMillis()
 
-    val syntheticReturnId = "EXC-RET-$now"
-    val syntheticInvoiceId = "EXC-INV-$now"
+        val totalBroken = (brokenProduct.price * brokenQty).toLong()
+        val totalReplacement = (replacementProduct.price * replacementQty).toLong()
 
-    // 1. Siapkan Laporan Retur untuk Barang yang Rusak (Barang A)
-    val returnHeader = ReturnEntity(
-        transactionId = syntheticReturnId,
-        returnedAt = now,
-        shiftId = shiftId,
-        cashierId = cashierId,
-        cashierName = cashierName,
-        refundAmount = totalBroken, // Mensimulasikan pengeluaran uang seharga Barang A
-        refundMethod = PaymentMethod.CASH.name,
-        note = "Tukar Guling Garansi (Rusak): $note"
-    )
+        val syntheticReturnId = "EXC-RET-$now"
+        val syntheticInvoiceId = "EXC-INV-$now"
 
-    // 2. Siapkan Laporan Penjualan untuk Barang Pengganti (Barang B)
-    val transactionHeader = com.pos.offline.data.local.entity.TransactionEntity(
-        id = syntheticInvoiceId,
-        createdAt = now,
-        subtotal = totalReplacement,
-        discount = 0L,
-        tax = 0L,
-        total = totalReplacement,
-        paidAmount = totalReplacement, // Mensimulasikan pemasukan uang seharga Barang B
-        change = 0L,
-        changeGiven = 0L,
-        changeGivenInCash = true,
-        paymentMethod = PaymentMethod.CASH.name,
-        cashierId = cashierId,
-        cashierName = cashierName,
-        shiftId = shiftId,
-        discountType = com.pos.offline.data.local.entity.DiscountType.NOMINAL.name,
-        discountValue = 0.0,
-        status = com.pos.offline.data.local.entity.TransactionStatus.COMPLETED.name
-    )
+        val returnHeader =
+            ReturnEntity(
+                transactionId = syntheticReturnId,
+                returnedAt = now,
+                shiftId = shiftId,
+                cashierId = cashierId,
+                cashierName = cashierName,
+                refundAmount = totalBroken,
+                refundMethod = PaymentMethod.CASH.name,
+                note = "Tukar Guling Garansi (Rusak): $note",
+            )
 
-    val transactionItem = com.pos.offline.data.local.entity.TransactionItemEntity(
-        transactionId = syntheticInvoiceId,
-        productName = replacementProduct.name,
-        unitPrice = replacementProduct.price,
-        quantity = replacementQty,
-        lineTotal = totalReplacement,
-        unitCost = replacementProduct.cost,
-        productId = replacementProduct.id
-    )
+        val transactionHeader =
+            com.pos.offline.data.local.entity.TransactionEntity(
+                id = syntheticInvoiceId,
+                createdAt = now,
+                subtotal = totalReplacement,
+                discount = 0L,
+                tax = 0L,
+                total = totalReplacement,
+                paidAmount = totalReplacement,
+                change = 0L,
+                changeGiven = 0L,
+                changeGivenInCash = true,
+                paymentMethod = PaymentMethod.CASH.name,
+                cashierId = cashierId,
+                cashierName = cashierName,
+                shiftId = shiftId,
+                discountType = com.pos.offline.data.local.entity.DiscountType.NOMINAL.name,
+                discountValue = 0.0,
+                status = com.pos.offline.data.local.entity.TransactionStatus.COMPLETED.name,
+            )
 
-    // Eksekusi semua perubahan ke database secara bersamaan dan aman
-    database.withTransaction {
-        // A. Masukkan barang rusak ke laporan retur dan tambahkan ke stok rusak
-        val newReturnId = returnDao.insertReturn(returnHeader)
-        val returnItem = ReturnItemEntity(
-            returnId = newReturnId,
-            transactionItemId = 0L,
-            productId = brokenProduct.id,
-            productName = brokenProduct.name,
-            unitPrice = brokenProduct.price,
-            quantityReturned = brokenQty,
-            restocked = false
-        )
-        returnDao.insertItems(listOf(returnItem))
-        productDao.incrementDamagedStock(brokenProduct.id, brokenQty, now)
+        val transactionItem =
+            com.pos.offline.data.local.entity.TransactionItemEntity(
+                transactionId = syntheticInvoiceId,
+                productName = replacementProduct.name,
+                unitPrice = replacementProduct.price,
+                quantity = replacementQty,
+                lineTotal = totalReplacement,
+                unitCost = replacementProduct.cost,
+                productId = replacementProduct.id,
+            )
 
-        // B. Masukkan barang pengganti sebagai transaksi baru dan potong stok utamanya
-        transactionDao.checkout(transactionHeader, listOf(transactionItem))
-        val affected = productDao.decrementStock(replacementProduct.id, replacementQty, now)
-        
-        // Mencegah stok menjadi minus jika barang pengganti habis
-        if (affected == 0) {
-            throw RuntimeException("Stok ${replacementProduct.name} tidak mencukupi untuk penukaran.")
+        database.withTransaction {
+            val newReturnId = returnDao.insertReturn(returnHeader)
+            val returnItem =
+                ReturnItemEntity(
+                    returnId = newReturnId,
+                    transactionItemId = 0L,
+                    productId = brokenProduct.id,
+                    productName = brokenProduct.name,
+                    unitPrice = brokenProduct.price,
+                    quantityReturned = brokenQty,
+                    restocked = false,
+                )
+            returnDao.insertItems(listOf(returnItem))
+            productDao.incrementDamagedStock(brokenProduct.id, brokenQty, now)
+
+            transactionDao.checkout(transactionHeader, listOf(transactionItem))
+            val affected = productDao.decrementStock(replacementProduct.id, replacementQty, now)
+
+            if (affected == 0) {
+                throw RuntimeException("Stok ${replacementProduct.name} tidak mencukupi untuk penukaran.")
+            }
         }
+
+        return ReturnOutcome.Success(0L)
     }
-    
-    return ReturnOutcome.Success(0L)
-}
 }

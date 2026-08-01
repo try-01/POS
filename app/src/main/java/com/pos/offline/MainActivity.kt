@@ -72,8 +72,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pos.offline.data.di.ServiceLocator
 import com.pos.offline.ui.inventory.InventoryScreen
 import com.pos.offline.ui.inventory.InventoryViewModel
@@ -89,6 +89,7 @@ import com.pos.offline.ui.settings.StoreProfileViewModel
 import com.pos.offline.ui.theme.PosTheme
 import com.pos.offline.util.HardwareScannerInterceptor
 import kotlinx.coroutines.launch
+
 private enum class Dest(
     val label: String,
 ) {
@@ -97,6 +98,7 @@ private enum class Dest(
     REPORT("Laporan"),
     SETTINGS("Pengaturan"),
 }
+
 class MainActivity : ComponentActivity() {
     private val posViewModel: PosViewModel by viewModels {
         ServiceLocator.posViewModelFactory()
@@ -107,6 +109,7 @@ class MainActivity : ComponentActivity() {
                 posViewModel.onBarcodeScanned(barcode)
             }
         }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -116,11 +119,13 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (scannerInterceptor.onKeyEvent(event)) return true
         return super.dispatchKeyEvent(event)
     }
 }
+
 @Composable
 private fun AppRoot() {
     val posViewModel: PosViewModel = viewModel(factory = ServiceLocator.posViewModelFactory())
@@ -143,6 +148,7 @@ private fun AppRoot() {
     val isRestoringDatabase = settingsUiState.isImporting
     val pageAlpha = remember { Animatable(1f) }
     var isJumping by remember { mutableStateOf(false) }
+
     fun goTo(dest: Dest) {
         val target = dest.ordinal
         if (pagerState.currentPage == target) return
@@ -156,8 +162,8 @@ private fun AppRoot() {
     }
     val openShift by posViewModel.openShift.collectAsStateWithLifecycle()
     var showExitDialog by rememberSaveable { mutableStateOf(false) }
-    BackHandler(enabled = isRestoringDatabase) {  }
-    BackHandler(enabled = showExitDialog) { showExitDialog = false } 
+    BackHandler(enabled = isRestoringDatabase) { }
+    BackHandler(enabled = showExitDialog) { showExitDialog = false }
     BackHandler(enabled = currentDest != Dest.POS && !isRestoringDatabase && !showExitDialog) { goTo(Dest.POS) }
     BackHandler(enabled = currentDest == Dest.POS && !showExitDialog && !isRestoringDatabase) { showExitDialog = true }
     if (showExitDialog) {
@@ -287,9 +293,11 @@ private fun AppRoot() {
                         onCartExpandedChange = if (isLandscape) ({}) else ({ v: Boolean -> isCartExpanded = v }),
                     )
                 }
+
                 Dest.INVENTORY -> {
                     InventoryScreen(viewModel = inventoryViewModel)
                 }
+
                 Dest.REPORT -> {
                     ReportScreen(
                         viewModel = reportViewModel,
@@ -309,6 +317,7 @@ private fun AppRoot() {
                         },
                     )
                 }
+
                 Dest.SETTINGS -> {
                     SettingsScreen(
                         viewModel = settingsViewModel,
@@ -370,7 +379,7 @@ private fun AppRoot() {
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                        ) {  },
+                        ) { },
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -393,6 +402,7 @@ private fun AppRoot() {
         }
     }
 }
+
 @Composable
 private fun ExpandableMenuFab(
     expanded: Boolean,
@@ -439,6 +449,7 @@ private fun ExpandableMenuFab(
         }
     }
 }
+
 @Composable
 private fun MiniMenuItem(
     dest: Dest,
@@ -461,6 +472,7 @@ private fun MiniMenuItem(
         }
     }
 }
+
 private fun Dest.icon() =
     when (this) {
         Dest.POS -> Icons.Rounded.ShoppingCart

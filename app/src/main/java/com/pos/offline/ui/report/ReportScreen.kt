@@ -1,13 +1,13 @@
 package com.pos.offline.ui.report
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -43,6 +43,7 @@ import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AttachMoney
+import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -58,13 +59,11 @@ import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Today
-import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import com.pos.offline.ui.components.rememberBarcodeScanner
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
@@ -124,6 +123,7 @@ import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 import com.pos.offline.ui.components.discountRowLabel
 import com.pos.offline.ui.components.paymentMethodLabel
+import com.pos.offline.ui.components.rememberBarcodeScanner
 import com.pos.offline.ui.inventory.InventoryViewModel
 import com.pos.offline.ui.receipt.PrintUiState
 import com.pos.offline.ui.receipt.ReceiptManager
@@ -173,20 +173,20 @@ fun ReportScreen(
     val searchUiState by viewModel.searchUiState.collectAsStateWithLifecycle()
     var showDatePicker by remember { mutableStateOf(false) }
     var showDirectWarrantyScreen by remember { mutableStateOf(false) }
-    var warrantySearchQuery by remember { mutableStateOf("") } // Menyimpan teks pencarian garansi
+    var warrantySearchQuery by remember { mutableStateOf("") }
 
-    // Mesin scanner diletakkan di luar animasi agar sistem Android meresponsnya dengan baik
-    val warrantyScanner = rememberBarcodeScanner { scannedCode ->
-        warrantySearchQuery = scannedCode // Masukkan hasil scan ke kolom pencarian
-        true 
-    }
+    val warrantyScanner =
+        rememberBarcodeScanner { scannedCode ->
+            warrantySearchQuery = scannedCode
+            true
+        }
 
-// PERBAIKAN: Panggil kedua fungsi pencarian saat barcode discan
-val openScanner = rememberBarcodeScanner { scannedCode ->
-    viewModel.searchProductHistory(scannedCode)
-    viewModel.searchInvoice(scannedCode)
-    true // Mengembalikan true agar scanner memicu umpan balik (beep & getar) sukses
-}
+    val openScanner =
+        rememberBarcodeScanner { scannedCode ->
+            viewModel.searchProductHistory(scannedCode)
+            viewModel.searchInvoice(scannedCode)
+            true
+        }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg ->
@@ -204,9 +204,10 @@ val openScanner = rememberBarcodeScanner { scannedCode ->
         }
     }
     if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        )
+        val datePickerState =
+            rememberDatePickerState(
+                initialSelectedDateMillis = selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
@@ -217,392 +218,387 @@ val openScanner = rememberBarcodeScanner { scannedCode ->
                             viewModel.selectExactDate(localDate)
                         }
                         showDatePicker = false
-                    }
+                    },
                 ) { Text("Pilih") }
             },
             dismissButton = {
                 TextButton(onClick = { showDatePicker = false }) { Text("Batal") }
-            }
+            },
         ) {
             DatePicker(state = datePickerState)
         }
     }
     Box(modifier = Modifier.fillMaxSize()) {
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 12.dp),
-            ) {
-                Row(
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            topBar = {
+                Column(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .padding(top = 4.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                            .statusBarsPadding()
+                            .padding(horizontal = 12.dp),
                 ) {
-                    Icon(
-                        Icons.AutoMirrored.Rounded.ReceiptLong,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "Laporan Harian",
-                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f),
-                    )
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.ReceiptLong,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Laporan Harian",
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
-            }
-        },
-        contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars),
-    ) { inner ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(inner).imePadding(),
-            contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-// === ITEM 1: BAR PENCARIAN UNIFIKASI & ACTION BUTTONS ===
-item(key = "unified_search_actions") {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Search Bar dengan tinggi 34.dp (Sama seperti di Inventory)
-        CompactReportSearchBar(
-            query = productHistoryQuery,
-            onQueryChange = { query ->
-                viewModel.searchProductHistory(query)
-                viewModel.searchInvoice(query)
             },
-            modifier = Modifier.weight(1f).height(34.dp)
-        )
-        Spacer(Modifier.width(6.dp))
-        
-        // Tombol Scan Barcode
-        CompactSquareIconButton(
-            icon = Icons.Rounded.QrCodeScanner,
-            contentDescription = "Scan Barcode",
-            onClick = { openScanner() }
-        )
-        Spacer(Modifier.width(6.dp))
-        
-        // Tombol Klaim Garansi Direct (Menggunakan Icon Build/Kunci Inggris)
-        CompactSquareIconButton(
-            icon = Icons.Rounded.Build,
-            contentDescription = "Klaim Garansi Direct",
-            onClick = { showDirectWarrantyScreen = true },
-            isError = true // Membuat warnanya menjadi merah agar mencolok
-        )
-    }
-}
-
-// === RENDER EKSKLUSIF MENGGUNAKAN SEALED STATE ===
-when (val state = searchUiState) {
-    is SearchUiState.ProductHistoryResults -> {
-        item(key = "product_history_header") {
-            Text(
-                "Hasil Pencarian Produk Lintas 1 Tahun",
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-        items(
-            items = state.hierarchy,
-            key = { "month_${it.yearMonth}" }
-        ) { monthGroup ->
-            MonthGroupCard(
-                monthGroup = monthGroup,
-                onTransactionClick = { txId -> viewModel.openTransactionDetail(txId) }
-            )
-        }
-    }
-
-    is SearchUiState.InvoiceResults -> {
-        item(key = "invoice_search_header") {
-            Text(
-                "Hasil Pencarian Struk (${state.transactions.size})",
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-        items(
-            items = state.transactions,
-            key = { "invoice_${it.id}" }
-        ) { tx ->
-            TransactionRow(
-                tx = tx,
-                onClick = { viewModel.openTransactionDetail(tx.id) }
-            )
-        }
-    }
-
-    is SearchUiState.Empty -> {
-        item(key = "search_empty_state") {
-            Text(
-                "Data \"${state.query}\" tidak ditemukan dalam 365 hari terakhir.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                modifier = Modifier.padding(vertical = 12.dp)
-            )
-        }
-    }
-
-    SearchUiState.Loading -> {
-        item(key = "search_loading") {
-            Box(
-                modifier = Modifier.fillMaxWidth().padding(24.dp),
-                contentAlignment = Alignment.Center
+            contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars),
+        ) { inner ->
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(inner).imePadding(),
+                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-            }
-        }
-    }
+                item(key = "unified_search_actions") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CompactReportSearchBar(
+                            query = productHistoryQuery,
+                            onQueryChange = { query ->
+                                viewModel.searchProductHistory(query)
+                                viewModel.searchInvoice(query)
+                            },
+                            modifier = Modifier.weight(1f).height(34.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
 
-    SearchUiState.Idle -> {
-        // TAMPILAN LAPORAN HARIAN NORMAL (Tampil saat tidak ada pencarian)
-        item(key = "date_navigator") {
-            DateNavigator(
-                label = selectedDate.format(ReportViewModel.dateFmt),
-                isToday = isToday,
-                onPrevious = viewModel::previousDay,
-                onNext = viewModel::nextDay,
-                onToday = viewModel::goToday,
-                onCalendarClick = { showDatePicker = true }
-            )
-        }
+                        CompactSquareIconButton(
+                            icon = Icons.Rounded.QrCodeScanner,
+                            contentDescription = "Scan Barcode",
+                            onClick = { openScanner() },
+                        )
+                        Spacer(Modifier.width(6.dp))
 
-item(key = "sales_report_generator") {
-            val periodType by viewModel.selectedPeriodType.collectAsStateWithLifecycle()
-            val includeSalesSummary by viewModel.includeSalesSummary.collectAsStateWithLifecycle()
-            val includeProductsSold by viewModel.includeProductsSold.collectAsStateWithLifecycle()
-            val includeDeadStock by viewModel.includeDeadStock.collectAsStateWithLifecycle()
-            val salesReportState by viewModel.salesReportUiState.collectAsStateWithLifecycle()
-            val scope = rememberCoroutineScope()
-            val context = LocalContext.current
+                        CompactSquareIconButton(
+                            icon = Icons.Rounded.Build,
+                            contentDescription = "Klaim Garansi Direct",
+                            onClick = { showDirectWarrantyScreen = true },
+                            isError = true,
+                        )
+                    }
+                }
 
-            GlassCard(
-                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-                 .animateContentSize(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessLow // Membuat animasi sedikit lebih lambat dan halus
-                    )
-                 ),
-            contentPadding = PaddingValues(12.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "Generator Laporan Penjualan",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    ReportPeriodToggleRow(
-                        selected = periodType,
-                        enabled = true,
-                        onSelect = viewModel::toggleReportPeriod
-                    )
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = includeSalesSummary,
-                                onCheckedChange = viewModel::toggleIncludeSalesSummary
+                when (val state = searchUiState) {
+                    is SearchUiState.ProductHistoryResults -> {
+                        item(key = "product_history_header") {
+                            Text(
+                                "Hasil Pencarian Produk Lintas 1 Tahun",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
                             )
-                            Text("Ringkasan Penjualan & Keuangan", fontSize = 12.sp)
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = includeProductsSold,
-                                onCheckedChange = viewModel::toggleIncludeProductsSold
+                        items(
+                            items = state.hierarchy,
+                            key = { "month_${it.yearMonth}" },
+                        ) { monthGroup ->
+                            MonthGroupCard(
+                                monthGroup = monthGroup,
+                                onTransactionClick = { txId -> viewModel.openTransactionDetail(txId) },
                             )
-                            Text("Daftar Produk Terjual", fontSize = 12.sp)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = includeDeadStock,
-                                onCheckedChange = viewModel::toggleIncludeDeadStock
-                            )
-                            Text("Daftar Produk Tidak Laku (Dead Stock)", fontSize = 12.sp)
                         }
                     }
-                    if (periodType != null) {
-                        SalesReportResultCard(
-                            uiState = salesReportState,
-                            onPrint = viewModel::printSalesReport,
-                            onExportPdf = {
-                                viewModel.buildCurrentReportLinesForExportAsync { lines ->
-                                    if (lines != null) {
-                                        scope.launch {
-                                            val file = ReceiptManager.exportPdfFromLines(
-                                                context,
-                                                lines,
-                                                "Laporan_${periodType?.name}_${selectedDate}"
+
+                    is SearchUiState.InvoiceResults -> {
+                        item(key = "invoice_search_header") {
+                            Text(
+                                "Hasil Pencarian Struk (${state.transactions.size})",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        items(
+                            items = state.transactions,
+                            key = { "invoice_${it.id}" },
+                        ) { tx ->
+                            TransactionRow(
+                                tx = tx,
+                                onClick = { viewModel.openTransactionDetail(tx.id) },
+                            )
+                        }
+                    }
+
+                    is SearchUiState.Empty -> {
+                        item(key = "search_empty_state") {
+                            Text(
+                                "Data \"${state.query}\" tidak ditemukan dalam 365 hari terakhir.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                modifier = Modifier.padding(vertical = 12.dp),
+                            )
+                        }
+                    }
+
+                    SearchUiState.Loading -> {
+                        item(key = "search_loading") {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            }
+                        }
+                    }
+
+                    SearchUiState.Idle -> {
+                        item(key = "date_navigator") {
+                            DateNavigator(
+                                label = selectedDate.format(ReportViewModel.dateFmt),
+                                isToday = isToday,
+                                onPrevious = viewModel::previousDay,
+                                onNext = viewModel::nextDay,
+                                onToday = viewModel::goToday,
+                                onCalendarClick = { showDatePicker = true },
+                            )
+                        }
+
+                        item(key = "sales_report_generator") {
+                            val periodType by viewModel.selectedPeriodType.collectAsStateWithLifecycle()
+                            val includeSalesSummary by viewModel.includeSalesSummary.collectAsStateWithLifecycle()
+                            val includeProductsSold by viewModel.includeProductsSold.collectAsStateWithLifecycle()
+                            val includeDeadStock by viewModel.includeDeadStock.collectAsStateWithLifecycle()
+                            val salesReportState by viewModel.salesReportUiState.collectAsStateWithLifecycle()
+                            val scope = rememberCoroutineScope()
+                            val context = LocalContext.current
+
+                            GlassCard(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                        .animateContentSize(
+                                            animationSpec =
+                                                spring(
+                                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                                    stiffness = Spring.StiffnessLow,
+                                                ),
+                                        ),
+                                contentPadding = PaddingValues(12.dp),
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        "Generator Laporan Penjualan",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    ReportPeriodToggleRow(
+                                        selected = periodType,
+                                        enabled = true,
+                                        onSelect = viewModel::toggleReportPeriod,
+                                    )
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Checkbox(
+                                                checked = includeSalesSummary,
+                                                onCheckedChange = viewModel::toggleIncludeSalesSummary,
                                             )
-                                            viewModel.notifyPdfExported()
-                                            onSharePdfFile(file)
+                                            Text("Ringkasan Penjualan & Keuangan", fontSize = 12.sp)
                                         }
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Checkbox(
+                                                checked = includeProductsSold,
+                                                onCheckedChange = viewModel::toggleIncludeProductsSold,
+                                            )
+                                            Text("Daftar Produk Terjual", fontSize = 12.sp)
+                                        }
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Checkbox(
+                                                checked = includeDeadStock,
+                                                onCheckedChange = viewModel::toggleIncludeDeadStock,
+                                            )
+                                            Text("Daftar Produk Tidak Laku (Dead Stock)", fontSize = 12.sp)
+                                        }
+                                    }
+                                    if (periodType != null) {
+                                        SalesReportResultCard(
+                                            uiState = salesReportState,
+                                            onPrint = viewModel::printSalesReport,
+                                            onExportPdf = {
+                                                viewModel.buildCurrentReportLinesForExportAsync { lines ->
+                                                    if (lines != null) {
+                                                        scope.launch {
+                                                            val file =
+                                                                ReceiptManager.exportPdfFromLines(
+                                                                    context,
+                                                                    lines,
+                                                                    "Laporan_${periodType?.name}_$selectedDate",
+                                                                )
+                                                            viewModel.notifyPdfExported()
+                                                            onSharePdfFile(file)
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                        )
                                     }
                                 }
                             }
-                        )
+                        }
+
+                        item(key = "summary") { SummarySection(report = report) }
+
+                        if (report.transactionCount > 0) {
+                            item(key = "revenue_trend_chart") {
+                                RevenueTrendChart(
+                                    date = report.date,
+                                    transactions = report.transactions.filterNot { it.isVoid },
+                                    totalRevenue = report.totalRevenue,
+                                    hourly = report.hourlyRevenue,
+                                )
+                            }
+                        }
+
+                        item(key = "tab_switcher") {
+                            ReportTabSwitcher(selected = selectedTab, onSelect = viewModel::selectTab)
+                        }
+
+                        when (selectedTab) {
+                            ReportTab.TRANSACTIONS -> {
+                                item(key = "list_header") {
+                                    Text(
+                                        "Daftar Transaksi (${report.transactions.size})",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(top = 2.dp),
+                                    )
+                                }
+                                if (report.transactions.isEmpty()) {
+                                    item(key = "empty") { EmptyReport() }
+                                } else {
+                                    items(
+                                        items = report.transactions,
+                                        key = { it.id },
+                                        contentType = { "transaction" },
+                                    ) { tx ->
+                                        TransactionRow(
+                                            tx = tx,
+                                            onClick = { viewModel.openTransactionDetail(tx.id) },
+                                        )
+                                    }
+                                }
+                            }
+
+                            ReportTab.SHIFTS -> {
+                                item(key = "payment_breakdown") {
+                                    PaymentBreakdownSection(
+                                        cashRevenue = report.cashRevenue,
+                                        qrisRevenue = report.qrisRevenue,
+                                    )
+                                }
+                                item(key = "return_summary") {
+                                    ReturnSummarySection(
+                                        cashRefundTotal = returnSummary.cashRefundTotal,
+                                        qrisRefundTotal = returnSummary.qrisRefundTotal,
+                                    )
+                                }
+                                item(key = "returns_header") {
+                                    Text(
+                                        "Daftar Retur (${returnSummary.returns.size})",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(top = 2.dp),
+                                    )
+                                }
+                                if (returnSummary.returns.isEmpty()) {
+                                    item(key = "empty_returns") { EmptyReturns() }
+                                } else {
+                                    items(
+                                        items = returnSummary.returns,
+                                        key = { "return_${it.id}" },
+                                        contentType = { "return" },
+                                    ) { ret ->
+                                        ReturnRow(
+                                            ret = ret,
+                                            onClick = { viewModel.openReturnDetail(ret.id) },
+                                        )
+                                    }
+                                }
+                                item(key = "closed_shifts_header") {
+                                    Text(
+                                        "Riwayat Tutup Shift (${closedShifts.size})",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(top = 2.dp),
+                                    )
+                                }
+                                if (closedShifts.isEmpty()) {
+                                    item(key = "empty_shifts") { EmptyClosedShifts() }
+                                } else {
+                                    items(
+                                        items = closedShifts,
+                                        key = { it.id },
+                                        contentType = { "closed_shift" },
+                                    ) { shift ->
+                                        ClosedShiftRow(
+                                            shift = shift,
+                                            onClick = { viewModel.openShiftDetail(shift) },
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
-        item(key = "summary") { SummarySection(report = report) }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showDirectWarrantyScreen,
+            enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.slideInVertically { it },
+            exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.slideOutVertically { it },
+        ) {
+            DirectWarrantyScreen(
+                inventoryViewModel = inventoryViewModel,
+                searchQuery = warrantySearchQuery,
+                onQueryChange = { warrantySearchQuery = it },
+                onScanClick = { warrantyScanner() },
+                onNavigateBack = {
+                    showDirectWarrantyScreen = false
+                    warrantySearchQuery = ""
+                },
+                onSubmitWarranty = { product, qty, note ->
 
-        if (report.transactionCount > 0) {
-            item(key = "revenue_trend_chart") {
-                RevenueTrendChart(
-                    date = report.date,
-                    transactions = report.transactions.filterNot { it.isVoid },
-                    totalRevenue = report.totalRevenue,
-                    hourly = report.hourlyRevenue,
-                )
-            }
-        }
-
-        item(key = "tab_switcher") {
-            ReportTabSwitcher(selected = selectedTab, onSelect = viewModel::selectTab)
-        }
-
-        when (selectedTab) {
-            ReportTab.TRANSACTIONS -> {
-                item(key = "list_header") {
-                    Text(
-                        "Daftar Transaksi (${report.transactions.size})",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(top = 2.dp),
+                    viewModel.processDirectWarranty(
+                        product = product,
+                        qty = qty,
+                        note = note,
                     )
-                }
-                if (report.transactions.isEmpty()) {
-                    item(key = "empty") { EmptyReport() }
-                } else {
-                    items(
-                        items = report.transactions,
-                        key = { it.id },
-                        contentType = { "transaction" },
-                    ) { tx ->
-                        TransactionRow(
-                            tx = tx,
-                            onClick = { viewModel.openTransactionDetail(tx.id) },
-                        )
-                    }
-                }
-            }
-                    ReportTab.SHIFTS -> {
-                        item(key = "payment_breakdown") {
-                            PaymentBreakdownSection(
-                                cashRevenue = report.cashRevenue,
-                                qrisRevenue = report.qrisRevenue,
-                            )
-                        }
-                        item(key = "return_summary") {
-                            ReturnSummarySection(
-                                cashRefundTotal = returnSummary.cashRefundTotal,
-                                qrisRefundTotal = returnSummary.qrisRefundTotal,
-                            )
-                        }
-                        item(key = "returns_header") {
-                            Text(
-                                "Daftar Retur (${returnSummary.returns.size})",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(top = 2.dp),
-                            )
-                        }
-                        if (returnSummary.returns.isEmpty()) {
-                            item(key = "empty_returns") { EmptyReturns() }
-                        } else {
-                            items(
-                                items = returnSummary.returns,
-                                key = { "return_${it.id}" },
-                                contentType = { "return" },
-                            ) { ret ->
-                                ReturnRow(
-                                    ret = ret,
-                                    onClick = { viewModel.openReturnDetail(ret.id) },
-                                )
-                            }
-                        }
-                        item(key = "closed_shifts_header") {
-                            Text(
-                                "Riwayat Tutup Shift (${closedShifts.size})",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(top = 2.dp),
-                            )
-                        }
-                        if (closedShifts.isEmpty()) {
-                            item(key = "empty_shifts") { EmptyClosedShifts() }
-                        } else {
-                            items(
-                                items = closedShifts,
-                                key = { it.id },
-                                contentType = { "closed_shift" },
-                            ) { shift ->
-                                ClosedShiftRow(
-                                    shift = shift,
-                                    onClick = { viewModel.openShiftDetail(shift) },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+                },
+                onSubmitExchange = { broken, brokenQty, replace, replaceQty, note ->
+                    viewModel.prosesTukarGulingGaransi(
+                        barangRusak = broken,
+                        qtyRusak = brokenQty,
+                        barangPengganti = replace,
+                        qtyPengganti = replaceQty,
+                        catatan = note,
+                    )
+                },
+            )
         }
     }
-    }
-// --- LAYAR GARANSI DIRECT (MENUTUPI REPORT SCREEN) ---
-// Pastikan ini di luar Scaffold, tapi masih di dalam ReportScreen
-androidx.compose.animation.AnimatedVisibility(
-    visible = showDirectWarrantyScreen,
-    enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.slideInVertically { it },
-    exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.slideOutVertically { it }
-) {
-        DirectWarrantyScreen(
-            inventoryViewModel = inventoryViewModel,
-            searchQuery = warrantySearchQuery,
-            onQueryChange = { warrantySearchQuery = it },
-            onScanClick = { warrantyScanner() },
-            onNavigateBack = { 
-                showDirectWarrantyScreen = false 
-                warrantySearchQuery = "" 
-            },
-            // MENGHUBUNGKAN KE VIEWMODEL:
-            onSubmitWarranty = { product, qty, note ->
-                // Panggil fungsi yang ada di ReportViewModel
-                viewModel.processDirectWarranty(
-                    product = product,
-                    qty = qty,
-                    note = note
-                )
-            },
-
-            onSubmitExchange = { broken, brokenQty, replace, replaceQty, note ->
-                viewModel.prosesTukarGulingGaransi(
-                    barangRusak = broken,
-                    qtyRusak = brokenQty,
-                    barangPengganti = replace,
-                    qtyPengganti = replaceQty,
-                    catatan = note
-                )
-            }
-        )
-    }
-}
     if (selectedTransaction != null && !pendingVoidConfirm && !showReturnDialog && pendingPrintTarget == null) {
         val current = selectedTransaction!!
         TransactionDetailDialog(
@@ -739,15 +735,17 @@ private fun SalesReportResultCard(
     onExportPdf: () -> Unit,
 ) {
     GlassCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 4.dp)
-            .animateContentSize(
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessLow
-                )
-            ),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp)
+                .animateContentSize(
+                    animationSpec =
+                        spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessLow,
+                        ),
+                ),
         contentPadding = PaddingValues(12.dp),
     ) {
         when (uiState) {
@@ -762,6 +760,7 @@ private fun SalesReportResultCard(
                     Text("Memuat laporan...", style = MaterialTheme.typography.bodySmall)
                 }
             }
+
             is SalesReportUiState.Loaded -> {
                 val data = uiState.data
                 val periodLabel = if (uiState.periodType == ReportPeriodType.MONTHLY) "Bulanan" else "Harian"
@@ -778,7 +777,10 @@ private fun SalesReportResultCard(
                     }
                 }
             }
-            SalesReportUiState.Hidden -> Unit
+
+            SalesReportUiState.Hidden -> {
+                Unit
+            }
         }
     }
 }
@@ -806,7 +808,7 @@ private fun DateNavigator(
                 )
                 Column(
                     modifier = Modifier.weight(1f).clickable(onClick = onCalendarClick),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -861,12 +863,12 @@ fun ProductHistorySearchSection(
     onQueryChange: (String) -> Unit,
     onScanClick: () -> Unit,
     onTransactionClick: (String) -> Unit,
-    onDirectWarrantyClick: () -> Unit
+    onDirectWarrantyClick: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             OutlinedTextField(
                 value = query,
@@ -883,16 +885,17 @@ fun ProductHistorySearchSection(
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
                 shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.weight(1f).height(46.dp)
+                modifier = Modifier.weight(1f).height(46.dp),
             )
             Spacer(Modifier.width(6.dp))
             Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                    .clickable(onClick = onScanClick),
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .size(46.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
+                        .clickable(onClick = onScanClick),
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Rounded.QrCodeScanner, contentDescription = "Scan", tint = MaterialTheme.colorScheme.primary)
             }
@@ -905,7 +908,7 @@ fun ProductHistorySearchSection(
                         Text(
                             "Tidak ada riwayat penjualan 1 tahun terakhir untuk \"$query\".",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         )
                         Spacer(Modifier.height(8.dp))
                         OutlinedButton(onClick = onDirectWarrantyClick) {
@@ -920,19 +923,19 @@ fun ProductHistorySearchSection(
                     "Riwayat Penjualan 1 Tahun Terakhir:",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
-                
+
                 monthGroups.forEach { monthGroup ->
                     MonthExpandableCard(
                         monthGroup = monthGroup,
-                        onTransactionClick = onTransactionClick
+                        onTransactionClick = onTransactionClick,
                     )
                 }
 
                 TextButton(
                     onClick = onDirectWarrantyClick,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
                 ) {
                     Text("Nota tidak sesuai? Gunakan Garansi Direct (Tanpa Struk)", fontSize = 11.sp)
                 }
@@ -944,30 +947,41 @@ fun ProductHistorySearchSection(
 @Composable
 private fun MonthExpandableCard(
     monthGroup: MonthSalesGroup,
-    onTransactionClick: (String) -> Unit
+    onTransactionClick: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val monthLabel = monthGroup.yearMonth.format(
-        DateTimeFormatter.ofPattern("MMMM yyyy", Locale.forLanguageTag("id-ID"))
-    )
+    val monthLabel =
+        monthGroup.yearMonth.format(
+            DateTimeFormatter.ofPattern("MMMM yyyy", Locale.forLanguageTag("id-ID")),
+        )
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 12.dp,
-        contentPadding = PaddingValues(10.dp)
+        contentPadding = PaddingValues(10.dp),
     ) {
         Column {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded },
-                verticalAlignment = Alignment.CenterVertically
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Rounded.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Icon(
+                    Icons.Rounded.CalendarMonth,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
                 Spacer(Modifier.width(8.dp))
                 Text(monthLabel, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(12.dp)) {
-                    Text("${monthGroup.totalTransactions} Transaksi", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp))
+                    Text(
+                        "${monthGroup.totalTransactions} Transaksi",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    )
                 }
                 Spacer(Modifier.width(4.dp))
                 Icon(if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown, contentDescription = null)
@@ -978,7 +992,7 @@ private fun MonthExpandableCard(
                     monthGroup.days.forEach { dayGroup ->
                         DayExpandableSection(
                             dayGroup = dayGroup,
-                            onTransactionClick = onTransactionClick
+                            onTransactionClick = onTransactionClick,
                         )
                     }
                 }
@@ -990,27 +1004,37 @@ private fun MonthExpandableCard(
 @Composable
 private fun DayExpandableSection(
     dayGroup: DaySalesGroup,
-    onTransactionClick: (String) -> Unit
+    onTransactionClick: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val dateLabel = dayGroup.date.format(
-        DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy", Locale.forLanguageTag("id-ID"))
-    )
+    val dateLabel =
+        dayGroup.date.format(
+            DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy", Locale.forLanguageTag("id-ID")),
+        )
 
     Column(modifier = Modifier.fillMaxWidth().padding(start = 8.dp)) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                .clickable { expanded = !expanded }
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(dateLabel, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            Text("${dayGroup.transactions.size} Nota", style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "${dayGroup.transactions.size} Nota",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.width(4.dp))
-            Icon(if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(16.dp))
+            Icon(
+                if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+            )
         }
 
         AnimatedVisibility(visible = expanded) {
@@ -1018,7 +1042,7 @@ private fun DayExpandableSection(
                 dayGroup.transactions.forEach { tx ->
                     TransactionRow(
                         tx = tx,
-                        onClick = { onTransactionClick(tx.id) }
+                        onClick = { onTransactionClick(tx.id) },
                     )
                 }
             }
@@ -1229,16 +1253,16 @@ private fun RevenueTrendChart(
         }
     val labelStyle = remember(axisTextColor) { TextStyle(color = axisTextColor, fontSize = 9.sp) }
 
-    // PERBAIKAN: Perhitungan label sumbu Y dilakukan di luar Canvas DrawScope
     val maxRevenue = totalRevenue.coerceAtLeast(1L)
     val ySteps = 4
-    val yAxisLabels = remember(maxRevenue, labelStyle) {
-        (0..ySteps).map { i ->
-            val ratio = i / ySteps.toFloat()
-            val labelStr = (maxRevenue * ratio).toLong().toCompactRupiah()
-            textMeasurer.measure(labelStr, labelStyle)
+    val yAxisLabels =
+        remember(maxRevenue, labelStyle) {
+            (0..ySteps).map { i ->
+                val ratio = i / ySteps.toFloat()
+                val labelStr = (maxRevenue * ratio).toLong().toCompactRupiah()
+                textMeasurer.measure(labelStr, labelStyle)
+            }
         }
-    }
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
@@ -1288,21 +1312,30 @@ private fun RevenueTrendChart(
                     val ratio = (time - dayStartMillis).toFloat() / (dayEndMillis - dayStartMillis).toFloat()
                     return plotLeft + ratio.coerceIn(0f, 1f) * plotWidth
                 }
+
                 fun yFor(value: Long): Float {
                     val ratio = value.toFloat() / maxRevenue.toFloat()
                     return plotBottom - ratio.coerceIn(0f, 1f) * plotHeight
                 }
 
-                // PERBAIKAN: Menggambar garis dan teks sumbu Y dengan sintaksis valid
                 for (i in 0..ySteps) {
                     val ratio = i / ySteps.toFloat()
                     val y = plotBottom - ratio * plotHeight
                     drawLine(gridColor, Offset(plotLeft, y), Offset(plotRight, y), strokeWidth = 1.dp.toPx())
                     val measured = yAxisLabels.getOrElse(i) { textMeasurer.measure("0", labelStyle) }
-                    drawText(textLayoutResult = measured, topLeft = Offset(0f, (y - measured.size.height / 2f).coerceIn(0f, plotBottom - measured.size.height)))
+                    drawText(
+                        textLayoutResult = measured,
+                        topLeft =
+                            Offset(
+                                0f,
+                                (y - measured.size.height / 2f).coerceIn(
+                                    0f,
+                                    plotBottom - measured.size.height,
+                                ),
+                            ),
+                    )
                 }
 
-                // Sumbu X
                 listOf(0, 6, 12, 18, 24).forEach { hour ->
                     val time = (dayStartMillis + hour.toLong() * 3_600_000L).coerceAtMost(dayEndMillis)
                     val x = xFor(time)
@@ -1333,8 +1366,8 @@ private fun RevenueTrendChart(
                             areaPath.lineTo(x, y)
                         } else {
                             val prevY = yFor(points[index - 1].second)
-                            linePath.lineTo(x, prevY) 
-                            linePath.lineTo(x, y) 
+                            linePath.lineTo(x, prevY)
+                            linePath.lineTo(x, y)
                             areaPath.lineTo(x, prevY)
                             areaPath.lineTo(x, y)
                         }
@@ -1598,7 +1631,11 @@ private fun ReturnDetailDialog(
                 SummaryLine("Kasir", header.cashierName.ifBlank { "Tanpa kasir" })
                 SummaryLine("Shift", header.shiftId?.let { "#$it" } ?: "Tanpa shift")
                 Spacer(Modifier.height(10.dp))
-                Text("Item Diretur (${totalQty.formatQuantity()})", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "Item Diretur (${totalQty.formatQuantity()})",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                )
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 items.forEach { item ->
                     ReturnDetailItemRow(item)
@@ -1645,7 +1682,10 @@ private fun ReturnDetailItemRow(item: ReturnItemEntity) {
                 )
             }
             Text(
-                kotlin.math.round(item.unitPrice * item.quantityReturned).toLong().toRupiah(),
+                kotlin.math
+                    .round(item.unitPrice * item.quantityReturned)
+                    .toLong()
+                    .toRupiah(),
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                 fontWeight = FontWeight.SemiBold,
             )
@@ -1993,9 +2033,11 @@ private fun TransactionDetailDialog(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
+
                     tx.change == 0L -> {
                         SummaryLine("Kembali", tx.change.toRupiah(), color = MaterialTheme.colorScheme.primary)
                     }
+
                     else -> {
                         val isQrisCashOut = tx.paymentMethod == PaymentMethod.QRIS.name && tx.changeGivenInCash
                         SummaryLine(
@@ -2034,8 +2076,14 @@ private fun ReprintResultBanner(
     val outcome = state.outcome
     val (message, isError) =
         when (outcome) {
-            is ReceiptPrintOutcome.Success -> "Struk terkirim ke \"${outcome.printer.label}\"." to false
-            is ReceiptPrintOutcome.SuccessWithNotice -> "Struk terkirim ke \"${outcome.printer.label}\".\n⚠ ${outcome.notice}" to false
+            is ReceiptPrintOutcome.Success -> {
+                "Struk terkirim ke \"${outcome.printer.label}\"." to false
+            }
+
+            is ReceiptPrintOutcome.SuccessWithNotice -> {
+                "Struk terkirim ke \"${outcome.printer.label}\".\n⚠ ${outcome.notice}" to false
+            }
+
             is ReceiptPrintOutcome.Failed -> {
                 val printerCount = outcome.attempts.size
                 val reason = outcome.attempts.firstOrNull()?.message ?: ""
@@ -2050,8 +2098,14 @@ private fun ReprintResultBanner(
                     "$title\nAlasan: $reason" to true
                 }
             }
-            ReceiptPrintOutcome.NoPrinterConfigured -> "Printer belum diatur." to true
-            ReceiptPrintOutcome.AlreadyInProgress -> "Sedang mencetak, mohon tunggu..." to false
+
+            ReceiptPrintOutcome.NoPrinterConfigured -> {
+                "Printer belum diatur." to true
+            }
+
+            ReceiptPrintOutcome.AlreadyInProgress -> {
+                "Sedang mencetak, mohon tunggu..." to false
+            }
         }
     Spacer(Modifier.height(6.dp))
     Surface(
@@ -2123,7 +2177,7 @@ private data class ReturnRowState(
     val included: Boolean = false,
     val quantity: Double = maxQuantity,
     val restocked: Boolean = productId != null,
-    val restockToDamaged: Boolean = false, // BARU: Status pilihan masuk ke stok rusak
+    val restockToDamaged: Boolean = false,
 )
 
 @Composable
@@ -2298,7 +2352,7 @@ private fun ReturnItemDialog(
                                 unitPrice = row.unitPrice,
                                 quantityReturned = row.quantity,
                                 restocked = row.restocked && row.productId != null,
-                                restockToDamaged = row.restockToDamaged && row.restocked && row.productId != null, // BARU
+                                restockToDamaged = row.restockToDamaged && row.restocked && row.productId != null,
                             )
                         }
                     onSubmit(items, refundAmountText.toLongOrNull() ?: 0L, refundMethod, note.trim())
@@ -2323,7 +2377,7 @@ private fun ReturnItemRow(
     onToggleIncluded: (Boolean) -> Unit,
     onQuantityChange: (Double) -> Unit,
     onRestockedChange: (Boolean) -> Unit,
-    onRestockToDamagedChange: (Boolean) -> Unit, // BARU
+    onRestockToDamagedChange: (Boolean) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2345,7 +2399,7 @@ private fun ReturnItemRow(
         if (row.included) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(start = 40.dp, top = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -2384,12 +2438,11 @@ private fun ReturnItemRow(
                         )
                     }
                 }
-                
-                // BARU: Checkbox tambahan jika dikembalikan tapi masuk ke Stok Rusak/Garansi
+
                 if (row.restocked && row.productId != null) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { onRestockToDamagedChange(!row.restockToDamaged) }
+                        modifier = Modifier.clickable { onRestockToDamagedChange(!row.restockToDamaged) },
                     ) {
                         Checkbox(
                             checked = row.restockToDamaged,
@@ -2398,8 +2451,8 @@ private fun ReturnItemRow(
                         Text(
                             "Tandai sebagai Stok Rusak / Garansi",
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            color = MaterialTheme.colorScheme.error, // Berwarna merah agar kasir tahu ini barang rusak
-                            fontWeight = FontWeight.SemiBold
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.SemiBold,
                         )
                     }
                 }
@@ -2774,71 +2827,73 @@ private fun EmptyReport() {
 @Composable
 private fun MonthGroupCard(
     monthGroup: MonthSalesGroup,
-    onTransactionClick: (String) -> Unit
+    onTransactionClick: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(true) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-        )
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+            ),
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
-            // Level 1: Bulan
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded }
-                    .padding(vertical = 2.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { expanded = !expanded }
+                        .padding(vertical = 2.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = "📅 ${monthGroup.yearMonth}",
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
                 Text(
                     text = "${monthGroup.totalTransactions} Transaksi >",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
 
-            // Level 2 & 3: Tanggal & Transaksi
             if (expanded) {
                 Spacer(Modifier.height(6.dp))
                 monthGroup.days.forEach { dayGroup ->
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 8.dp, top = 4.dp)
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(start = 8.dp, top = 4.dp),
                     ) {
                         Text(
                             text = "📌 Tanggal ${dayGroup.date}",
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.secondary
+                            color = MaterialTheme.colorScheme.secondary,
                         )
 
                         dayGroup.transactions.forEach { tx ->
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onTransactionClick(tx.id) }
-                                    .padding(vertical = 4.dp, horizontal = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onTransactionClick(tx.id) }
+                                        .padding(vertical = 4.dp, horizontal = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Text(
                                     text = "Struk #${tx.id.takeLast(6)}",
-                                    fontSize = 11.sp
+                                    fontSize = 11.sp,
                                 )
                                 Text(
                                     text = tx.total.toRupiah(),
                                     fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
                                 )
                             }
                         }
@@ -2859,18 +2914,20 @@ private fun CompactReportSearchBar(
         value = query,
         onValueChange = onQueryChange,
         singleLine = true,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 13.sp,
-        ),
+        textStyle =
+            MaterialTheme.typography.bodyMedium.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 13.sp,
+            ),
         modifier = modifier,
         decorationBox = { innerTextField ->
             Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(10.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
-                    .padding(horizontal = 10.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -2887,17 +2944,18 @@ private fun CompactReportSearchBar(
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                     innerTextField()
                 }
                 if (query.isNotEmpty()) {
                     Box(
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clip(CircleShape)
-                            .clickable { onQueryChange("") },
+                        modifier =
+                            Modifier
+                                .size(18.dp)
+                                .clip(CircleShape)
+                                .clickable { onQueryChange("") },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -2918,18 +2976,18 @@ private fun CompactSquareIconButton(
     icon: ImageVector,
     contentDescription: String?,
     onClick: () -> Unit,
-    isError: Boolean = false
+    isError: Boolean = false,
 ) {
-    // Jika isError true, icon akan berwarna merah (untuk garansi). Jika tidak, warna primary.
     val color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     val borderColor = if (isError) MaterialTheme.colorScheme.error.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant
-    
+
     Box(
-        modifier = Modifier
-            .size(34.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .border(1.dp, borderColor, RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick),
+        modifier =
+            Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, borderColor, RoundedCornerShape(10.dp))
+                .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(

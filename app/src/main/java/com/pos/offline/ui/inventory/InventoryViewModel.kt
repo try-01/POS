@@ -12,33 +12,34 @@ import com.pos.offline.util.ExcelManager
 import com.pos.offline.util.ExcelOutcome
 import com.pos.offline.util.ImportedProductRow
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.withContext 
-import kotlinx.coroutines.flow.asFlow 
-import kotlinx.coroutines.flow.flatMapMerge 
-import kotlinx.coroutines.flow.flow 
-import kotlinx.coroutines.flow.toList 
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flatMapMerge
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.ZoneId
+
 data class ProductFormState(
     val id: Long = 0L,
     val name: String = "",
@@ -48,12 +49,15 @@ data class ProductFormState(
     val price: Long = 0L,
     val cost: Long = 0L,
     val stock: Double = 0.0,
-    val damagedStock: Double = 0.0, // BARU: Menampung data stok rusak ke form
+    val damagedStock: Double = 0.0,
     val createdAt: Long = System.currentTimeMillis(),
 ) {
     val isNew: Boolean get() = id == 0L
 }
-enum class ProductSortOption(val label: String) {
+
+enum class ProductSortOption(
+    val label: String,
+) {
     NAME_ASC("Nama (A-Z)"),
     NAME_DESC("Nama (Z-A)"),
     RECENTLY_EDITED("Terakhir Diedit"),
@@ -61,25 +65,32 @@ enum class ProductSortOption(val label: String) {
     STOCK_LOW_FIRST("Stok Terendah"),
     TERLARIS("Terlaris"),
     ;
+
     val comparator: Comparator<ProductEntity>
-        get() = when (this) {
-            NAME_ASC -> compareBy { it.name.lowercase() }
-            NAME_DESC -> compareByDescending { it.name.lowercase() }
-            RECENTLY_EDITED -> compareByDescending { it.updatedAt }
-            RECENTLY_ADDED -> compareByDescending { it.createdAt }
-            STOCK_LOW_FIRST -> compareBy { it.stock }
-            TERLARIS -> compareBy { it.id } 
-        }
+        get() =
+            when (this) {
+                NAME_ASC -> compareBy { it.name.lowercase() }
+                NAME_DESC -> compareByDescending { it.name.lowercase() }
+                RECENTLY_EDITED -> compareByDescending { it.updatedAt }
+                RECENTLY_ADDED -> compareByDescending { it.createdAt }
+                STOCK_LOW_FIRST -> compareBy { it.stock }
+                TERLARIS -> compareBy { it.id }
+            }
 }
-enum class TopSalesRange(val label: String) {
+
+enum class TopSalesRange(
+    val label: String,
+) {
     HARI_INI("Hari Ini"),
-    BULAN_INI("Bulan Ini")
+    BULAN_INI("Bulan Ini"),
 }
+
 internal fun sanitizeScannedCode(raw: String?): String? {
     if (raw.isNullOrBlank()) return null
     val cleaned = raw.trim().filter { c -> c.isLetterOrDigit() || c in "-_./: #" }.take(128)
     return cleaned.ifBlank { null }
 }
+
 @OptIn(kotlinx.coroutines.FlowPreview::class, ExperimentalCoroutinesApi::class)
 class InventoryViewModel(
     private val appContext: Context,
@@ -103,7 +114,14 @@ class InventoryViewModel(
                 if (sort == ProductSortOption.TERLARIS) {
                     val (start, end) = getRangeMillis(range)
                     reportRepository.observeProductsByTopSales(start, end).map { dbList ->
-                        if (query.isBlank()) dbList else dbList.filter { it.name.contains(query, ignoreCase = true) || it.sku.contains(query, ignoreCase = true) }
+                        if (query.isBlank()) {
+                            dbList
+                        } else {
+                            dbList.filter {
+                                it.name.contains(query, ignoreCase = true) ||
+                                    it.sku.contains(query, ignoreCase = true)
+                            }
+                        }
                     }
                 } else {
                     productRepository.search(query).map { list -> list.sortedWith(sort.comparator) }
@@ -122,14 +140,29 @@ class InventoryViewModel(
     val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
     private val _messages = Channel<String>(capacity = Channel.BUFFERED)
     val messages = _messages.receiveAsFlow()
-    data class ScanNotFoundState(val barcode: String)
+
+    data class ScanNotFoundState(
+        val barcode: String,
+    )
+
     private val _scanNotFound = MutableStateFlow<ScanNotFoundState?>(null)
     val scanNotFound: StateFlow<ScanNotFoundState?> = _scanNotFound.asStateFlow()
-    data class DeletedProductFoundState(val product: ProductEntity)
+
+    data class DeletedProductFoundState(
+        val product: ProductEntity,
+    )
+
     private val _deletedProductFound = MutableStateFlow<DeletedProductFoundState?>(null)
     val deletedProductFound: StateFlow<DeletedProductFoundState?> = _deletedProductFound.asStateFlow()
+
     enum class ImportStatus { NEW, CONFLICT, DUPLICATE_IN_FILE }
-    data class ImportReviewItem(val row: ImportedProductRow, val status: ImportStatus, val conflictWith: ProductEntity? = null)
+
+    data class ImportReviewItem(
+        val row: ImportedProductRow,
+        val status: ImportStatus,
+        val conflictWith: ProductEntity? = null,
+    )
+
     data class ExcelUiState(
         val isExporting: Boolean = false,
         val isImporting: Boolean = false,
@@ -138,131 +171,214 @@ class InventoryViewModel(
         val parseErrors: List<String> = emptyList(),
         val showReviewDialog: Boolean = false,
     )
+
     private val _excelState = MutableStateFlow(ExcelUiState())
     val excelState: StateFlow<ExcelUiState> = _excelState.asStateFlow()
+
     private fun getRangeMillis(range: TopSalesRange): Pair<Long, Long> {
         val zone = ZoneId.systemDefault()
         val now = LocalDate.now(zone)
         return when (range) {
             TopSalesRange.HARI_INI -> {
                 val start = now.atStartOfDay(zone).toInstant().toEpochMilli()
-                val end = now.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                val end =
+                    now
+                        .plusDays(1)
+                        .atStartOfDay(zone)
+                        .toInstant()
+                        .toEpochMilli()
                 start to end
             }
+
             TopSalesRange.BULAN_INI -> {
-                val start = now.withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
-                val end = now.plusMonths(1).withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                val start =
+                    now
+                        .withDayOfMonth(1)
+                        .atStartOfDay(zone)
+                        .toInstant()
+                        .toEpochMilli()
+                val end =
+                    now
+                        .plusMonths(1)
+                        .withDayOfMonth(1)
+                        .atStartOfDay(zone)
+                        .toInstant()
+                        .toEpochMilli()
                 start to end
             }
         }
     }
-    fun setTopSalesRange(range: TopSalesRange) { _topSalesRange.value = range }
+
+    fun setTopSalesRange(range: TopSalesRange) {
+        _topSalesRange.value = range
+    }
+
     fun dismissReviewDialog() {
         _excelState.value = _excelState.value.copy(showReviewDialog = false, reviewItems = emptyList(), parseErrors = emptyList())
     }
+
     fun exportToExcel(destinationUri: Uri) {
         if (_excelState.value.isExporting) return
         viewModelScope.launch {
             _excelState.value = _excelState.value.copy(isExporting = true)
             try {
                 val products = productRepository.getAllProductsOnce()
-                if (products.isEmpty()) { notify("Tidak ada produk untuk diekspor."); return@launch }
+                if (products.isEmpty()) {
+                    notify("Tidak ada produk untuk diekspor.")
+                    return@launch
+                }
                 when (val result = ExcelManager.exportProducts(appContext, products, destinationUri)) {
                     is ExcelOutcome.Success -> notify("Berhasil mengekspor ${products.size} produk ke Excel.")
                     is ExcelOutcome.Error -> notify("Gagal ekspor: ${result.throwable.message ?: "kesalahan tak dikenal"}")
                 }
-            } catch (e: Exception) { notify("Gagal ekspor: ${e.message ?: "kesalahan tak dikenal"}") }
-            finally { _excelState.value = _excelState.value.copy(isExporting = false) }
+            } catch (
+                e: Exception,
+            ) {
+                notify("Gagal ekspor: ${e.message ?: "kesalahan tak dikenal"}")
+            } finally {
+                _excelState.value = _excelState.value.copy(isExporting = false)
+            }
         }
     }
+
     fun importFromExcel(sourceUri: Uri) {
         if (_excelState.value.isImporting) return
         viewModelScope.launch {
             _excelState.value = _excelState.value.copy(isImporting = true)
             try {
                 val result: ExcelImportResult = ExcelManager.importProducts(appContext, sourceUri)
-                if (result.rows.isEmpty() && result.errors.isEmpty()) { notify("File Excel kosong atau tidak ada data valid."); return@launch }
+                if (result.rows.isEmpty() &&
+                    result.errors.isEmpty()
+                ) {
+                    notify("File Excel kosong atau tidak ada data valid.")
+                    return@launch
+                }
                 val reviewItems = validateImportedRows(result.rows)
                 _excelState.value = _excelState.value.copy(reviewItems = reviewItems, parseErrors = result.errors, showReviewDialog = true)
-            } catch (e: Exception) { notify("Gagal membaca file: ${e.message ?: "format tidak didukung"}") }
-            finally { _excelState.value = _excelState.value.copy(isImporting = false) }
+            } catch (
+                e: Exception,
+            ) {
+                notify("Gagal membaca file: ${e.message ?: "format tidak didukung"}")
+            } finally {
+                _excelState.value = _excelState.value.copy(isImporting = false)
+            }
         }
     }
-private suspend fun validateImportedRows(rows: List<ImportedProductRow>): List<ImportReviewItem> =
-      withContext(Dispatchers.IO) {
-          // Pre-fetch semua produk sekaligus ke memori untuk pencocokan instan (O(1))
-          val allProducts = productRepository.getAllProductsOnce()
-          val dbBarcodeMap = allProducts.filter { !it.barcode.isNullOrBlank() }.associateBy { it.barcode!! }
-          val dbSkuMap = allProducts.associateBy { it.sku }
 
-          val barcodeCounts = rows.mapNotNull { it.barcode }.groupingBy { it }.eachCount()
-          val skuCounts = rows.groupingBy { it.sku }.eachCount()
+    private suspend fun validateImportedRows(rows: List<ImportedProductRow>): List<ImportReviewItem> =
+        withContext(Dispatchers.IO) {
+            val allProducts = productRepository.getAllProductsOnce()
+            val dbBarcodeMap = allProducts.filter { !it.barcode.isNullOrBlank() }.associateBy { it.barcode!! }
+            val dbSkuMap = allProducts.associateBy { it.sku }
 
-          rows.map { row ->
-              val duplicateInFile = (row.barcode != null && (barcodeCounts[row.barcode] ?: 0) > 1) || (skuCounts[row.sku] ?: 0) > 1
-              val dbConflict = (row.barcode?.let { dbBarcodeMap[it] }) ?: dbSkuMap[row.sku]
-              val status = when {
-                  duplicateInFile -> ImportStatus.DUPLICATE_IN_FILE
-                  dbConflict != null -> ImportStatus.CONFLICT
-                  else -> ImportStatus.NEW
-              }
-              ImportReviewItem(row, status, dbConflict)
-          }
-      }
+            val barcodeCounts = rows.mapNotNull { it.barcode }.groupingBy { it }.eachCount()
+            val skuCounts = rows.groupingBy { it.sku }.eachCount()
+
+            rows.map { row ->
+                val duplicateInFile = (row.barcode != null && (barcodeCounts[row.barcode] ?: 0) > 1) || (skuCounts[row.sku] ?: 0) > 1
+                val dbConflict = (row.barcode?.let { dbBarcodeMap[it] }) ?: dbSkuMap[row.sku]
+                val status =
+                    when {
+                        duplicateInFile -> ImportStatus.DUPLICATE_IN_FILE
+                        dbConflict != null -> ImportStatus.CONFLICT
+                        else -> ImportStatus.NEW
+                    }
+                ImportReviewItem(row, status, dbConflict)
+            }
+        }
+
     fun commitImport() {
         if (_excelState.value.isCommitting) return
-        val newRows = _excelState.value.reviewItems.filter { it.status == ImportStatus.NEW }.map { it.row }
-        if (newRows.isEmpty()) { notify("Tidak ada produk baru yang bisa diimpor (semua konflik/duplikat)."); return }
+        val newRows =
+            _excelState.value.reviewItems
+                .filter { it.status == ImportStatus.NEW }
+                .map { it.row }
+        if (newRows.isEmpty()) {
+            notify("Tidak ada produk baru yang bisa diimpor (semua konflik/duplikat).")
+            return
+        }
         viewModelScope.launch {
             _excelState.value = _excelState.value.copy(isCommitting = true)
             try {
                 val now = System.currentTimeMillis()
-                val toInsert = newRows.map { row ->
-                    ProductEntity(id=0, name=row.name, sku=row.sku, barcode=row.barcode, category=row.category ?: "", price=row.price, cost=row.cost, stock=row.stock, active=true, createdAt=now, updatedAt=now)
-                }
+                val toInsert =
+                    newRows.map { row ->
+                        ProductEntity(
+                            id = 0,
+                            name = row.name,
+                            sku = row.sku,
+                            barcode = row.barcode,
+                            category = row.category ?: "",
+                            price = row.price,
+                            cost = row.cost,
+                            stock = row.stock,
+                            active = true,
+                            createdAt = now,
+                            updatedAt = now,
+                        )
+                    }
                 productRepository.bulkInsert(toInsert)
                 notify("Berhasil mengimpor ${toInsert.size} produk baru.")
                 dismissReviewDialog()
-            } catch (e: SQLiteConstraintException) { notify("Gagal impor: ada SKU/barcode dobel yang lolos validasi.") }
-            catch (e: Exception) { notify("Gagal impor: ${e.message ?: "kesalahan tak dikenal"}") }
-            finally { _excelState.value = _excelState.value.copy(isCommitting = false) }
-        }
-    }
-suspend fun onBarcodeScanned(raw: String?): Boolean {
-    val sanitized = sanitizeScannedCode(raw)
-    if (sanitized == null) { 
-        notify("Gagal memindai kode. Coba pindai ulang.")
-        return false 
-    }
-    return try {
-        val product = productRepository.getProductByBarcodeAny(sanitized)
-        when {
-            product == null -> {
-                _scanNotFound.value = ScanNotFoundState(sanitized)
-                false 
-            }
-            product.active -> {
-                startEdit(product)
-                true 
-            }
-            else -> {
-                _deletedProductFound.value = DeletedProductFoundState(product)
-                true 
+            } catch (
+                e: SQLiteConstraintException,
+            ) {
+                notify("Gagal impor: ada SKU/barcode dobel yang lolos validasi.")
+            } catch (
+                e: Exception,
+            ) {
+                notify("Gagal impor: ${e.message ?: "kesalahan tak dikenal"}")
+            } finally {
+                _excelState.value = _excelState.value.copy(isCommitting = false)
             }
         }
-    } catch (e: Exception) {
-        notify("Gagal memindai: ${e.message ?: "kesalahan tak dikenal"}.")
-        false
     }
-}
-    fun dismissScanNotFound() { _scanNotFound.value = null }
+
+    suspend fun onBarcodeScanned(raw: String?): Boolean {
+        val sanitized = sanitizeScannedCode(raw)
+        if (sanitized == null) {
+            notify("Gagal memindai kode. Coba pindai ulang.")
+            return false
+        }
+        return try {
+            val product = productRepository.getProductByBarcodeAny(sanitized)
+            when {
+                product == null -> {
+                    _scanNotFound.value = ScanNotFoundState(sanitized)
+                    false
+                }
+
+                product.active -> {
+                    startEdit(product)
+                    true
+                }
+
+                else -> {
+                    _deletedProductFound.value = DeletedProductFoundState(product)
+                    true
+                }
+            }
+        } catch (e: Exception) {
+            notify("Gagal memindai: ${e.message ?: "kesalahan tak dikenal"}.")
+            false
+        }
+    }
+
+    fun dismissScanNotFound() {
+        _scanNotFound.value = null
+    }
+
     fun startAddFromScanned() {
         val barcode = _scanNotFound.value?.barcode ?: return
         _scanNotFound.value = null
         editingProductSnapshot = null
         _form.value = ProductFormState(barcode = barcode)
     }
-    fun dismissDeletedProductFound() { _deletedProductFound.value = null }
+
+    fun dismissDeletedProductFound() {
+        _deletedProductFound.value = null
+    }
+
     fun restoreDeletedProduct() {
         val target = _deletedProductFound.value?.product ?: return
         _deletedProductFound.value = null
@@ -277,42 +393,78 @@ suspend fun onBarcodeScanned(raw: String?): Boolean {
             }
         }
     }
-    fun search(q: String) { _searchQuery.value = q }
-    fun setSortOption(option: ProductSortOption) { _sortOption.value = option }
+
+    fun search(q: String) {
+        _searchQuery.value = q
+    }
+
+    fun setSortOption(option: ProductSortOption) {
+        _sortOption.value = option
+    }
+
     fun startAdd() {
         editingProductSnapshot = null
         _form.value = ProductFormState()
     }
+
     fun startEdit(product: ProductEntity) {
         editingProductSnapshot = product
-        _form.value = ProductFormState(
-            id=product.id, name=product.name, sku=product.sku, 
-            barcode=product.barcode ?: "", category=product.category, 
-            price=product.price, cost=product.cost, stock=product.stock, 
-            damagedStock=product.damagedStock, // BARU: Memasukkan nilai dari database ke form
-            createdAt=product.createdAt
-        )
+        _form.value =
+            ProductFormState(
+                id = product.id,
+                name = product.name,
+                sku = product.sku,
+                barcode = product.barcode ?: "",
+                category = product.category,
+                price = product.price,
+                cost = product.cost,
+                stock = product.stock,
+                damagedStock = product.damagedStock,
+                createdAt = product.createdAt,
+            )
     }
-    fun dismissForm() { _form.value = null }
+
+    fun dismissForm() {
+        _form.value = null
+    }
+
     fun save(state: ProductFormState) {
         if (_isSaving.value) return
         viewModelScope.launch {
             _isSaving.value = true
             try {
                 val name = state.name.trim()
-                if (name.isBlank()) { notify("Nama produk wajib diisi."); return@launch }
-                if (state.price < 0) { notify("Harga tidak boleh negatif."); return@launch }
-                if (state.stock < 0.0) { notify("Stok tidak boleh negatif."); return@launch }
+                if (name.isBlank()) {
+                    notify("Nama produk wajib diisi.")
+                    return@launch
+                }
+                if (state.price < 0) {
+                    notify("Harga tidak boleh negatif.")
+                    return@launch
+                }
+                if (state.stock < 0.0) {
+                    notify("Stok tidak boleh negatif.")
+                    return@launch
+                }
                 val sku = state.sku.trim().ifBlank { "SKU-${System.currentTimeMillis()}" }
                 val barcode = state.barcode.trim().ifBlank { null }
                 val category = state.category.trim()
                 val now = System.currentTimeMillis()
-                val entity = ProductEntity(
-                    id=state.id, name=name, sku=sku, barcode=barcode, 
-                    category=category, price=state.price, cost=state.cost, 
-                    stock=state.stock, damagedStock=state.damagedStock, // BARU: Menyimpan ulang stok rusak
-                    active=true, createdAt=if (state.isNew) now else state.createdAt, updatedAt=now
-                )
+                val entity =
+                    ProductEntity(
+                        id = state.id,
+                        name = name,
+                        sku = sku,
+                        barcode = barcode,
+                        category = category,
+                        price = state.price,
+                        cost = state.cost,
+                        stock = state.stock,
+                        damagedStock = state.damagedStock,
+                        active = true,
+                        createdAt = if (state.isNew) now else state.createdAt,
+                        updatedAt = now,
+                    )
                 productRepository.save(entity)
                 notify(if (state.isNew) "Produk ditambahkan." else "Produk diperbarui.")
                 _form.value = null
@@ -325,16 +477,30 @@ suspend fun onBarcodeScanned(raw: String?): Boolean {
             }
         }
     }
-    fun cancelDelete() { _pendingDelete.value = null }
-    fun confirmDelete() = viewModelScope.launch {
-        val target = _pendingDelete.value ?: return@launch
-        try { productRepository.softDelete(target.id); notify("Produk \"${target.name}\" dihapus.") }
-        catch (e: Exception) { notify("Gagal menghapus: ${e.message ?: "kesalahan tak dikenal"}.") }
-        finally { _pendingDelete.value = null }
+
+    fun cancelDelete() {
+        _pendingDelete.value = null
     }
+
+    fun confirmDelete() =
+        viewModelScope.launch {
+            val target = _pendingDelete.value ?: return@launch
+            try {
+                productRepository.softDelete(target.id)
+                notify("Produk \"${target.name}\" dihapus.")
+            } catch (
+                e: Exception,
+            ) {
+                notify("Gagal menghapus: ${e.message ?: "kesalahan tak dikenal"}.")
+            } finally {
+                _pendingDelete.value = null
+            }
+        }
+
     fun requestDeleteFromForm(id: Long) {
-        val target = editingProductSnapshot?.takeIf { it.id == id }
-            ?: products.value.find { it.id == id }
+        val target =
+            editingProductSnapshot?.takeIf { it.id == id }
+                ?: products.value.find { it.id == id }
         if (target == null) {
             notify("Produk tidak ditemukan (mungkin sudah dihapus atau tersaring dari daftar).")
             return
@@ -342,27 +508,40 @@ suspend fun onBarcodeScanned(raw: String?): Boolean {
         _form.value = null
         _pendingDelete.value = target
     }
-    private fun notify(text: String) { _messages.trySend(text) }
-    suspend fun checkBarcodeConflict(barcode: String, excludeId: Long): String? {
+
+    private fun notify(text: String) {
+        _messages.trySend(text)
+    }
+
+    suspend fun checkBarcodeConflict(
+        barcode: String,
+        excludeId: Long,
+    ): String? {
         val trimmed = barcode.trim()
         if (trimmed.isBlank()) return null
         val existing = productRepository.getProductByBarcodeAny(trimmed)
         return if (existing != null && existing.id != excludeId) existing.name else null
     }
-    suspend fun checkSkuConflict(sku: String, excludeId: Long): String? {
+
+    suspend fun checkSkuConflict(
+        sku: String,
+        excludeId: Long,
+    ): String? {
         val trimmed = sku.trim()
         if (trimmed.isBlank()) return null
         val existing = productRepository.getProductBySku(trimmed)
         return if (existing != null && existing.id != excludeId) existing.name else null
     }
 
-    // BARU: Fungsi untuk memproses retur barang rusak ke pabrik/supplier
-    fun returnDamagedItemToSupplier(productId: Long, qty: Double) {
+    fun returnDamagedItemToSupplier(
+        productId: Long,
+        qty: Double,
+    ) {
         viewModelScope.launch {
             try {
                 productRepository.decrementDamagedStock(productId, qty)
                 notify("Berhasil meretur $qty stok rusak ke pabrik/supplier.")
-                _form.value = null // Menutup form otomatis untuk merefresh data inventaris
+                _form.value = null
             } catch (e: Exception) {
                 notify("Gagal meretur stok rusak: ${e.message}")
             }

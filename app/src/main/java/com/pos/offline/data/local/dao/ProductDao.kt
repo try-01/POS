@@ -93,16 +93,24 @@ interface ProductDao {
         UPDATE products
         SET damagedStock = damagedStock + :qty, updatedAt = :now
         WHERE id = :id
-        """
+        """,
     )
-    suspend fun incrementDamagedStock(id: Long, qty: Double, now: Long)
+    suspend fun incrementDamagedStock(
+        id: Long,
+        qty: Double,
+        now: Long,
+    )
 
     @Query(
         """
         UPDATE products
         SET damagedStock = MAX(0, damagedStock - :qty), updatedAt = :now
         WHERE id = :id
-        """
+        """,
     )
-    suspend fun decrementDamagedStock(id: Long, qty: Double, now: Long)
+    suspend fun decrementDamagedStock(
+        id: Long,
+        qty: Double,
+        now: Long,
+    )
 }

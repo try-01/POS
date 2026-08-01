@@ -2,6 +2,7 @@ package com.pos.offline.data.repository
 import com.pos.offline.data.local.dao.ShiftDao
 import com.pos.offline.data.local.entity.ShiftEntity
 import kotlinx.coroutines.flow.Flow
+
 data class ShiftSummary(
     val startingCash: Long,
     val cashRevenue: Long,
@@ -14,32 +15,43 @@ data class ShiftSummary(
     val grossProfit: Long get() = totalRevenue - totalCost
     val expectedCashInDrawer: Long get() = startingCash + cashRevenue - cashRefunds - qrisCashChangeOut
 }
+
 sealed class ShiftStartOutcome {
     data class Success(
         val shiftId: Long,
     ) : ShiftStartOutcome()
+
     data object AlreadyOpenForCashier : ShiftStartOutcome()
 }
+
 sealed class ShiftEndOutcome {
     data class Success(
         val shift: ShiftEntity,
     ) : ShiftEndOutcome()
+
     data object AlreadyClosed : ShiftEndOutcome()
+
     data object NotFound : ShiftEndOutcome()
 }
+
 class ShiftRepository(
     private val shiftDao: ShiftDao,
 ) {
     val openShift: Flow<ShiftEntity?> = shiftDao.observeOpenShift()
     val allShifts: Flow<List<ShiftEntity>> = shiftDao.observeAll()
     val openShifts: Flow<List<ShiftEntity>> = shiftDao.observeOpenShifts()
+
     suspend fun getOpenShift(): ShiftEntity? = shiftDao.getOpenShift()
+
     fun closedShiftsBetween(
         start: Long,
         end: Long,
     ): Flow<List<ShiftEntity>> = shiftDao.observeClosedShiftsBetween(start, end)
+
     suspend fun getById(shiftId: Long): ShiftEntity? = shiftDao.getById(shiftId)
+
     suspend fun hasOpenShift(cashierId: Long): Boolean = shiftDao.hasOpenShiftForCashier(cashierId)
+
     suspend fun startShift(
         cashierId: Long,
         cashierName: String,
@@ -55,6 +67,7 @@ class ShiftRepository(
         val id = shiftDao.insertIfNoOpenShift(shift)
         return if (id == -1L) ShiftStartOutcome.AlreadyOpenForCashier else ShiftStartOutcome.Success(id)
     }
+
     suspend fun getShiftSummary(shiftId: Long): ShiftSummary {
         val shift = shiftDao.getById(shiftId) ?: error("Shift #$shiftId tidak ditemukan")
         return ShiftSummary(
@@ -66,6 +79,7 @@ class ShiftRepository(
             qrisCashChangeOut = shiftDao.qrisCashChangeOutForShift(shiftId),
         )
     }
+
     suspend fun endShift(
         shiftId: Long,
         actualCash: Long,
@@ -89,7 +103,7 @@ class ShiftRepository(
                 endingCashActual = actualCash,
                 endedAt = System.currentTimeMillis(),
                 note = note,
-            ) ?: return ShiftEndOutcome.AlreadyClosed 
+            ) ?: return ShiftEndOutcome.AlreadyClosed
         return ShiftEndOutcome.Success(updated)
     }
 }

@@ -13,8 +13,8 @@ import com.pos.offline.data.local.entity.isVoid
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.SalesReportData
 import com.pos.offline.ui.components.paymentMethodLabel
-import com.pos.offline.util.toRupiah
 import com.pos.offline.util.formatQuantity
+import com.pos.offline.util.toRupiah
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -24,7 +24,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import android.graphics.Color as AndroidColor
+
 enum class ReceiptAlign { LEFT, CENTER, RIGHT }
+
 data class ReceiptLine(
     val left: String = "",
     val right: String = "",
@@ -32,8 +34,10 @@ data class ReceiptLine(
     val bold: Boolean = false,
     val large: Boolean = false,
 )
+
 object ReceiptManager {
     private val dateFmt = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("id-ID"))
+
     fun buildLines(
         result: CheckoutResult,
         storeProfile: StoreProfileEntity? = null,
@@ -78,7 +82,11 @@ object ReceiptManager {
             val name = item.productName.trim().ifEmpty { "(Tanpa nama)" }
             if (item.quantity > 1.0) {
                 lines += ReceiptLine(left = name, bold = true)
-                lines += ReceiptLine(left = "  ${item.quantity.formatQuantity()} x ${item.unitPrice.toRupiah()}", right = item.lineTotal.toRupiah())
+                lines +=
+                    ReceiptLine(
+                        left = "  ${item.quantity.formatQuantity()} x ${item.unitPrice.toRupiah()}",
+                        right = item.lineTotal.toRupiah(),
+                    )
             } else {
                 lines += ReceiptLine(left = name, right = item.lineTotal.toRupiah(), bold = true)
             }
@@ -116,7 +124,9 @@ object ReceiptManager {
         lines += ReceiptLine(left = "")
         return lines
     }
+
     private fun divider(): ReceiptLine = ReceiptLine(left = "--------------------------------", align = ReceiptAlign.CENTER)
+
     suspend fun exportToPdf(
         context: Context,
         result: CheckoutResult,
@@ -126,6 +136,7 @@ object ReceiptManager {
             val lines = buildLines(result, storeProfile)
             exportPdfFromLines(context, lines, result.transaction.id)
         }
+
     suspend fun exportPdfFromLines(
         context: Context,
         lines: List<ReceiptLine>,
@@ -135,7 +146,7 @@ object ReceiptManager {
             val pageWidth = 240
             val margin = 14f
             val lineHeight = 20f
-            val linesPerPage = 35 
+            val linesPerPage = 35
             val pageHeight = (linesPerPage * lineHeight + 2 * margin).toInt()
             val document = PdfDocument()
             try {
@@ -159,6 +170,7 @@ object ReceiptManager {
                 document.close()
             }
         }
+
     fun renderToBitmap(
         result: CheckoutResult,
         scale: Int = 3,
@@ -178,6 +190,7 @@ object ReceiptManager {
         }
         return bmp
     }
+
     private fun drawLine(
         canvas: Canvas,
         line: ReceiptLine,
@@ -207,10 +220,12 @@ object ReceiptManager {
                 ReceiptAlign.LEFT -> {
                     canvas.drawText(line.left, margin, y, paint)
                 }
+
                 ReceiptAlign.CENTER -> {
                     val tw = paint.measureText(line.left)
                     canvas.drawText(line.left, (pageWidth - tw) / 2f, y, paint)
                 }
+
                 ReceiptAlign.RIGHT -> {
                     val tw = paint.measureText(line.left)
                     canvas.drawText(line.left, pageWidth - margin - tw, y, paint)
@@ -218,16 +233,18 @@ object ReceiptManager {
             }
         }
     }
+
     fun buildShareIntent(
         context: Context,
         result: CheckoutResult,
         storeProfile: StoreProfileEntity? = null,
     ): Intent {
         val bitmap = renderToBitmap(result, storeProfile = storeProfile)
-        val dir = File(context.cacheDir, "shared_receipts").apply { 
-            mkdirs()
-            listFiles()?.forEach { oldFile -> runCatching { oldFile.delete() } }
-        }
+        val dir =
+            File(context.cacheDir, "shared_receipts").apply {
+                mkdirs()
+                listFiles()?.forEach { oldFile -> runCatching { oldFile.delete() } }
+            }
         val file = File(dir, "${result.transaction.id}_${System.currentTimeMillis()}.png")
         FileOutputStream(file).use { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }
         val authority = "${context.packageName}.fileprovider"
@@ -240,6 +257,7 @@ object ReceiptManager {
             }
         return Intent.createChooser(sendIntent, "Bagikan Struk")
     }
+
     fun buildPdfShareIntent(
         context: Context,
         file: File,
@@ -254,10 +272,16 @@ object ReceiptManager {
             }
         return Intent.createChooser(sendIntent, "Bagikan Struk PDF")
     }
+
     fun linesToEscPosMarkup(lines: List<ReceiptLine>): String {
         val sb = StringBuilder()
         for (line in lines) {
-            val alignTag = when (line.align) { ReceiptAlign.LEFT -> "[L]"; ReceiptAlign.CENTER -> "[C]"; ReceiptAlign.RIGHT -> "[R]" }
+            val alignTag =
+                when (line.align) {
+                    ReceiptAlign.LEFT -> "[L]"
+                    ReceiptAlign.CENTER -> "[C]"
+                    ReceiptAlign.RIGHT -> "[R]"
+                }
             val boldTag = if (line.bold) "<b>" else ""
             val boldEnd = if (line.bold) "</b>" else ""
             val sizeTag = if (line.large) "<font size='big'>" else ""
@@ -270,6 +294,7 @@ object ReceiptManager {
         }
         return sb.toString()
     }
+
     fun buildSalesReportLines(
         data: SalesReportData,
         storeProfile: StoreProfileEntity?,

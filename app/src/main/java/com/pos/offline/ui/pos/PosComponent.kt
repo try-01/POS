@@ -86,8 +86,6 @@ import com.pos.offline.ui.components.formatPercentTrim
 import com.pos.offline.util.formatQuantity
 import com.pos.offline.util.toRupiah
 
-// ─── Shift indicator ──────────────────────────────────────────────────────────
-
 @Composable
 internal fun ShiftIndicatorBar(
     openShift: ShiftEntity?,
@@ -101,36 +99,50 @@ internal fun ShiftIndicatorBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
-            modifier = Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(8.dp))
-                .clickable(onClick = onClick)
-                .padding(horizontal = 4.dp, vertical = 3.dp),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onClick)
+                    .padding(horizontal = 4.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (openShift != null) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                    ),
+                modifier =
+                    Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (openShift != null) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            },
+                        ),
             )
             Spacer(Modifier.width(6.dp))
             Text(
-                text = if (openShift != null) "${openShift.cashierName} · Shift Aktif"
-                else "Tanpa Shift · Ketuk untuk mulai",
+                text =
+                    if (openShift != null) {
+                        "${openShift.cashierName} · Shift Aktif"
+                    } else {
+                        "Tanpa Shift · Ketuk untuk mulai"
+                    },
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                color = if (openShift != null) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                color =
+                    if (openShift != null) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    },
             )
         }
         Box(
-            modifier = Modifier
-                .size(26.dp)
-                .clip(CircleShape)
-                .clickable(enabled = !isOpeningDrawer, onClick = onOpenDrawerClick),
+            modifier =
+                Modifier
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .clickable(enabled = !isOpeningDrawer, onClick = onOpenDrawerClick),
             contentAlignment = Alignment.Center,
         ) {
             if (isOpeningDrawer) {
@@ -150,10 +162,11 @@ internal fun ShiftIndicatorBar(
         }
         Spacer(Modifier.width(2.dp))
         Box(
-            modifier = Modifier
-                .size(26.dp)
-                .clip(CircleShape)
-                .clickable(onClick = onManageClick),
+            modifier =
+                Modifier
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onManageClick),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -166,8 +179,6 @@ internal fun ShiftIndicatorBar(
     }
 }
 
-// ─── Search & category ────────────────────────────────────────────────────────
-
 @Composable
 internal fun CompactSearchBar(
     query: String,
@@ -178,17 +189,19 @@ internal fun CompactSearchBar(
         value = query,
         onValueChange = onQueryChange,
         singleLine = true,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(
-            color = MaterialTheme.colorScheme.onSurface,
-        ),
+        textStyle =
+            MaterialTheme.typography.bodyMedium.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+            ),
         modifier = modifier,
         decorationBox = { innerTextField ->
             Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(12.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -230,32 +243,41 @@ internal fun CategoryChipsRow(
 }
 
 @Composable
-private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun CategoryChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     Box(
-        modifier = Modifier
-            .height(28.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp),
+        modifier =
+            Modifier
+                .height(28.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(
+                    if (selected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    },
+                ).clickable(onClick = onClick)
+                .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurfaceVariant,
+            color =
+                if (selected) {
+                    MaterialTheme.colorScheme.onPrimary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
     }
 }
-
-// ─── Product grid ─────────────────────────────────────────────────────────────
 
 @Composable
 internal fun ProductPane(
@@ -320,25 +342,37 @@ private fun ProductCard(
                     Text(
                         text = if (outOfStock) "Habis" else "Stok: ${remainingStock.formatQuantity()}",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color = if (outOfStock) MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        color =
+                            if (outOfStock) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            },
                     )
                 }
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (outOfStock) MaterialTheme.colorScheme.surfaceVariant
-                            else MaterialTheme.colorScheme.primary,
-                        ),
+                    modifier =
+                        Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (outOfStock) {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                            ),
                 ) {
                     Icon(
                         Icons.Rounded.Add,
                         contentDescription = "Tambah ${product.name}",
-                        tint = if (outOfStock) MaterialTheme.colorScheme.onSurfaceVariant
-                        else MaterialTheme.colorScheme.onPrimary,
+                        tint =
+                            if (outOfStock) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.onPrimary
+                            },
                         modifier = Modifier.size(14.dp),
                     )
                 }
@@ -346,8 +380,6 @@ private fun ProductCard(
         }
     }
 }
-
-// ─── Cart pane ────────────────────────────────────────────────────────────────
 
 @Composable
 internal fun CartPaneContent(
@@ -381,51 +413,55 @@ internal fun CartPaneContent(
     }
 
     Box(
-        modifier = modifier
-            .padding(start = 12.dp, end = 12.dp, top = 1.dp, bottom = 1.dp)
-            .background(MaterialTheme.colorScheme.background, RoundedCornerShape(16.dp))
-            .border(
-                1.dp,
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                RoundedCornerShape(16.dp),
-            )
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = { if (collapsible && !expanded) localState.toggleCart() },
-            ),
+        modifier =
+            modifier
+                .padding(start = 12.dp, end = 12.dp, top = 1.dp, bottom = 1.dp)
+                .background(MaterialTheme.colorScheme.background, RoundedCornerShape(16.dp))
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    RoundedCornerShape(16.dp),
+                ).clip(RoundedCornerShape(16.dp))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { if (collapsible && !expanded) localState.toggleCart() },
+                ),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(if (!collapsible) Modifier.fillMaxHeight() else Modifier)
-                .padding(10.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (!collapsible) Modifier.fillMaxHeight() else Modifier)
+                    .padding(10.dp),
         ) {
-            // Drag handle
             if (collapsible) {
                 Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(bottom = 6.dp)
-                        .width(36.dp)
-                        .height(4.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)),
+                    modifier =
+                        Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .padding(bottom = 6.dp)
+                            .width(36.dp)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)),
                 )
             }
 
-            // Header
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(
-                        if (collapsible) Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable(onClick = localState::toggleCart)
-                            .padding(vertical = 2.dp)
-                        else Modifier,
-                    ),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (collapsible) {
+                                Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable(onClick = localState::toggleCart)
+                                    .padding(vertical = 2.dp)
+                            } else {
+                                Modifier
+                            },
+                        ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Rounded.ShoppingCart, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -453,15 +489,20 @@ internal fun CartPaneContent(
                 }
                 if (collapsible) {
                     Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        modifier =
+                            Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = if (expanded) Icons.Rounded.KeyboardArrowDown
-                            else Icons.Rounded.KeyboardArrowUp,
+                            imageVector =
+                                if (expanded) {
+                                    Icons.Rounded.KeyboardArrowDown
+                                } else {
+                                    Icons.Rounded.KeyboardArrowUp
+                                },
                             contentDescription = if (expanded) "Ciutkan" else "Perluas",
                             modifier = Modifier.size(18.dp),
                         )
@@ -472,12 +513,12 @@ internal fun CartPaneContent(
             if (showFull) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
-                // Cart list
                 Box(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .fillMaxWidth()
-                        .clipToBounds(),
+                    modifier =
+                        Modifier
+                            .weight(1f, fill = false)
+                            .fillMaxWidth()
+                            .clipToBounds(),
                 ) {
                     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                         if (cart.isEmpty) {
@@ -539,7 +580,6 @@ internal fun CartPaneContent(
                     }
                 }
 
-                // Totals + checkout
                 if (!cart.isEmpty) {
                     HorizontalDivider(Modifier.padding(vertical = 4.dp))
                     TotalsSummary(
@@ -569,7 +609,6 @@ internal fun CartPaneContent(
                     Spacer(Modifier.height(4.dp))
                 }
             } else {
-                // Collapsed mini-bar
                 Spacer(Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(start = 84.dp),
@@ -604,9 +643,6 @@ internal fun CartPaneContent(
         }
     }
 }
-
-// ─── Cart row ─────────────────────────────────────────────────────────────────
-// Poin 1: Tidak ada parameter canIncrease. Tombol + selalu bisa diklik.
 
 @Composable
 internal fun CartRow(
@@ -648,11 +684,12 @@ internal fun CartRow(
         )
         Spacer(Modifier.width(8.dp))
         Box(
-            modifier = Modifier
-                .size(28.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f))
-                .clickable(onClick = onRemove),
+            modifier =
+                Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f))
+                    .clickable(onClick = onRemove),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -675,10 +712,11 @@ private fun QuantityStepper(
     Row(verticalAlignment = Alignment.CenterVertically) {
         CompactActionBox(icon = Icons.Rounded.Remove, contentDescription = "Kurangi", onClick = onDecrease)
         Box(
-            modifier = Modifier
-                .width(36.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .clickable(onClick = onQuantityClick),
+            modifier =
+                Modifier
+                    .width(36.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(onClick = onQuantityClick),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -688,7 +726,7 @@ private fun QuantityStepper(
                 textDecoration = TextDecoration.Underline,
             )
         }
-        // Poin 1: Tombol + SELALU aktif, tidak pernah dimmed
+
         CompactActionBox(icon = Icons.Rounded.Add, contentDescription = "Tambah", onClick = onIncrease)
     }
 }
@@ -701,14 +739,17 @@ internal fun CompactActionBox(
     onClick: () -> Unit,
 ) {
     Box(
-        modifier = Modifier
-            .size(28.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (dimmed) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                else MaterialTheme.colorScheme.surfaceVariant,
-            )
-            .clickable(enabled = !dimmed, onClick = onClick),
+        modifier =
+            Modifier
+                .size(28.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    if (dimmed) {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                ).clickable(enabled = !dimmed, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -720,10 +761,6 @@ internal fun CompactActionBox(
     }
 }
 
-// ─── Totals summary ───────────────────────────────────────────────────────────
-// Poin 3: PaymentMethodToggle sebagai icon switch kecil di samping Total
-// Poin 4: Preset bayar cepat
-
 @Composable
 internal fun TotalsSummary(
     payment: PaymentState,
@@ -733,7 +770,6 @@ internal fun TotalsSummary(
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         SummaryLine("Subtotal", totals.subtotal.toRupiah())
 
-        // Poin 2: Tinggi field 34dp, tanpa padding vertical tambahan
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -763,16 +799,18 @@ internal fun TotalsSummary(
             )
         }
         if (totals.discount > 0) {
-            val label = if (payment.discountType == DiscountType.PERCENT)
-                "Diskon (${formatPercentTrim(payment.discountValue)}%)"
-            else "Diskon"
+            val label =
+                if (payment.discountType == DiscountType.PERCENT) {
+                    "Diskon (${formatPercentTrim(payment.discountValue)}%)"
+                } else {
+                    "Diskon"
+                }
             SummaryLine(label, "- ${totals.discount.toRupiah()}")
         }
         if (totals.tax > 0) SummaryLine("Pajak", totals.tax.toRupiah())
 
         HorizontalDivider(Modifier.padding(vertical = 1.dp))
 
-        // Total + payment switch inline
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -785,8 +823,12 @@ internal fun TotalsSummary(
             CompactPaymentSwitch(
                 selected = payment.method,
                 onToggle = {
-                    val next = if (payment.method == PaymentMethod.CASH)
-                        PaymentMethod.QRIS else PaymentMethod.CASH
+                    val next =
+                        if (payment.method == PaymentMethod.CASH) {
+                            PaymentMethod.QRIS
+                        } else {
+                            PaymentMethod.CASH
+                        }
                     onAction(PosAction.SetPaymentMethod(next))
                 },
             )
@@ -798,7 +840,6 @@ internal fun TotalsSummary(
             )
         }
 
-        // Poin 1 & 2: Field bayar 34dp dengan preset di dalam
         PayMoneyField(
             value = payment.paid,
             total = totals.total,
@@ -809,11 +850,14 @@ internal fun TotalsSummary(
         if (payment.paid > 0) {
             val change = payment.change
             when {
-                change < 0L -> SummaryLine(
-                    "Kurang Bayar",
-                    kotlin.math.abs(change).toRupiah(),
-                    color = MaterialTheme.colorScheme.error,
-                )
+                change < 0L -> {
+                    SummaryLine(
+                        "Kurang Bayar",
+                        kotlin.math.abs(change).toRupiah(),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
                 change > 0L -> {
                     ChangeGivenField(
                         maxChange = change,
@@ -822,8 +866,9 @@ internal fun TotalsSummary(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     if (payment.method == PaymentMethod.QRIS) {
-                        val effectiveChangeGiven = payment.changeGivenOverride
-                            ?.coerceIn(0L, change) ?: change
+                        val effectiveChangeGiven =
+                            payment.changeGivenOverride
+                                ?.coerceIn(0L, change) ?: change
                         QrisCashChangeToggle(
                             changeGivenAmount = effectiveChangeGiven,
                             isCash = payment.changeGivenInCash,
@@ -832,15 +877,18 @@ internal fun TotalsSummary(
                         )
                     }
                 }
-                else -> SummaryLine(
-                    "Kembalian", 0L.toRupiah(), color = MaterialTheme.colorScheme.primary,
-                )
+
+                else -> {
+                    SummaryLine(
+                        "Kembalian",
+                        0L.toRupiah(),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
         }
     }
 }
-
-// ─── Poin 3: Compact payment method switch ────────────────────────────────────
 
 @Composable
 private fun CompactPaymentSwitch(
@@ -849,14 +897,17 @@ private fun CompactPaymentSwitch(
 ) {
     val isCash = selected == PaymentMethod.CASH
     Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (isCash) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                else MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
-            )
-            .clickable(onClick = onToggle)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    if (isCash) {
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    } else {
+                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+                    },
+                ).clickable(onClick = onToggle)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -864,20 +915,26 @@ private fun CompactPaymentSwitch(
             text = if (isCash) "Tunai" else "QRIS",
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
             fontWeight = FontWeight.Bold,
-            color = if (isCash) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.tertiary,
+            color =
+                if (isCash) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.tertiary
+                },
         )
         Icon(
             Icons.Rounded.SwapHoriz,
             contentDescription = "Ganti metode bayar",
             modifier = Modifier.size(14.dp),
-            tint = if (isCash) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.tertiary,
+            tint =
+                if (isCash) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.tertiary
+                },
         )
     }
 }
-
-// ─── Poin 1 & 2: Field bayar compact dengan preset di dalam ──────────────────
 
 @Composable
 private fun PayMoneyField(
@@ -899,23 +956,24 @@ private fun PayMoneyField(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         singleLine = true,
         visualTransformation = ThousandsSeparatorTransformation,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-        ),
+        textStyle =
+            MaterialTheme.typography.bodyMedium.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+            ),
         modifier = modifier,
         decorationBox = { innerTextField ->
             Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                    .border(
-                        1.dp,
-                        MaterialTheme.colorScheme.outlineVariant,
-                        RoundedCornerShape(10.dp),
-                    )
-                    .padding(start = 10.dp, end = 4.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant,
+                            RoundedCornerShape(10.dp),
+                        ).padding(start = 10.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -933,7 +991,7 @@ private fun PayMoneyField(
                     }
                     innerTextField()
                 }
-                // Preset chips di dalam field
+
                 InlinePresetChip(
                     label = "50rb",
                     onClick = { onValueChange(50_000L) },
@@ -954,11 +1012,12 @@ private fun InlinePresetChip(
     onClick: () -> Unit,
 ) {
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 7.dp, vertical = 3.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 7.dp, vertical = 3.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -969,8 +1028,6 @@ private fun InlinePresetChip(
         )
     }
 }
-
-// ─── Change given field ───────────────────────────────────────────────────────
 
 @Composable
 private fun ChangeGivenField(
@@ -995,23 +1052,24 @@ private fun ChangeGivenField(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             singleLine = true,
             visualTransformation = ThousandsSeparatorTransformation,
-            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.SemiBold,
-            ),
+            textStyle =
+                MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                ),
             modifier = Modifier.fillMaxWidth().height(34.dp),
             decorationBox = { innerTextField ->
                 Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
-                        .border(
-                            1.dp,
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-                            RoundedCornerShape(10.dp),
-                        )
-                        .padding(horizontal = 10.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                                RoundedCornerShape(10.dp),
+                            ).padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -1044,8 +1102,6 @@ private fun ChangeGivenField(
     }
 }
 
-// ─── Poin 5: QrisCashChangeToggle lebih compact ──────────────────────────────
-
 @Composable
 private fun QrisCashChangeToggle(
     changeGivenAmount: Long,
@@ -1053,18 +1109,26 @@ private fun QrisCashChangeToggle(
     onToggle: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val bgColor = if (isCash) MaterialTheme.colorScheme.tertiaryContainer
-    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-    val contentColor = if (isCash) MaterialTheme.colorScheme.onTertiaryContainer
-    else MaterialTheme.colorScheme.onSurfaceVariant
+    val bgColor =
+        if (isCash) {
+            MaterialTheme.colorScheme.tertiaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        }
+    val contentColor =
+        if (isCash) {
+            MaterialTheme.colorScheme.onTertiaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
 
-    // Poin 5: Padding lebih kecil agar tidak terlalu tinggi
     Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(bgColor)
-            .clickable { onToggle(!isCash) }
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(bgColor)
+                .clickable { onToggle(!isCash) }
+                .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -1082,8 +1146,12 @@ private fun QrisCashChangeToggle(
                 color = contentColor,
             )
             Text(
-                text = if (isCash) "⚠ ${changeGivenAmount.toRupiah()} dari laci"
-                else "Non-tunai — tidak mengurangi kas",
+                text =
+                    if (isCash) {
+                        "⚠ ${changeGivenAmount.toRupiah()} dari laci"
+                    } else {
+                        "Non-tunai — tidak mengurangi kas"
+                    },
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                 color = contentColor.copy(alpha = 0.8f),
                 maxLines = 1,
@@ -1098,8 +1166,6 @@ private fun QrisCashChangeToggle(
     }
 }
 
-// ─── Shared form fields ───────────────────────────────────────────────────────
-
 @Composable
 internal fun SummaryLine(
     label: String,
@@ -1110,14 +1176,22 @@ internal fun SummaryLine(
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(
             label,
-            style = if (emphasize) MaterialTheme.typography.titleMedium
-            else MaterialTheme.typography.bodyMedium,
+            style =
+                if (emphasize) {
+                    MaterialTheme.typography.titleMedium
+                } else {
+                    MaterialTheme.typography.bodyMedium
+                },
             color = color,
         )
         Text(
             value,
-            style = if (emphasize) MaterialTheme.typography.titleMedium
-            else MaterialTheme.typography.bodyMedium,
+            style =
+                if (emphasize) {
+                    MaterialTheme.typography.titleMedium
+                } else {
+                    MaterialTheme.typography.bodyMedium
+                },
             fontWeight = if (emphasize) FontWeight.Bold else FontWeight.Normal,
             color = color,
         )
@@ -1144,19 +1218,21 @@ internal fun MoneyField(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         singleLine = true,
         visualTransformation = ThousandsSeparatorTransformation,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-        ),
+        textStyle =
+            MaterialTheme.typography.bodyMedium.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+            ),
         modifier = modifier,
         decorationBox = { innerTextField ->
             Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
-                    .padding(horizontal = 12.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -1199,11 +1275,12 @@ internal fun DiscountField(
     LaunchedEffect(type, rawValue) {
         val parsed = text.toDoubleOrNull() ?: 0.0
         if (parsed != rawValue && (rawValue == 0.0 || !text.endsWith("."))) {
-            text = when {
-                rawValue <= 0.0 -> ""
-                type == DiscountType.NOMINAL -> rawValue.toLong().toString()
-                else -> formatPercentTrim(rawValue)
-            }
+            text =
+                when {
+                    rawValue <= 0.0 -> ""
+                    type == DiscountType.NOMINAL -> rawValue.toLong().toString()
+                    else -> formatPercentTrim(rawValue)
+                }
         }
     }
 
@@ -1215,45 +1292,55 @@ internal fun DiscountField(
     BasicTextField(
         value = text,
         onValueChange = { input ->
-            val cleaned = if (isNominal) {
-                input.filter { it.isDigit() }
-            } else {
-                buildString {
-                    var dotSeen = false
-                    for (c in input) {
-                        when {
-                            c.isDigit() -> append(c)
-                            c == '.' && !dotSeen -> { append(c); dotSeen = true }
+            val cleaned =
+                if (isNominal) {
+                    input.filter { it.isDigit() }
+                } else {
+                    buildString {
+                        var dotSeen = false
+                        for (c in input) {
+                            when {
+                                c.isDigit() -> {
+                                    append(c)
+                                }
+
+                                c == '.' && !dotSeen -> {
+                                    append(c)
+                                    dotSeen = true
+                                }
+                            }
                         }
                     }
                 }
-            }
             text = cleaned
             onValueChange(cleaned.toDoubleOrNull() ?: 0.0)
         },
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         singleLine = true,
         visualTransformation = visualTransformation,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-        ),
+        textStyle =
+            MaterialTheme.typography.bodyMedium.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+            ),
         modifier = modifier,
         decorationBox = { innerTextField ->
             Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp))
-                        .clickable(onClick = onToggleType)
-                        .padding(horizontal = 10.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp))
+                            .clickable(onClick = onToggleType)
+                            .padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -1270,10 +1357,11 @@ internal fun DiscountField(
                     )
                 }
                 Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .fillMaxHeight(0.6f)
-                        .background(MaterialTheme.colorScheme.outlineVariant),
+                    modifier =
+                        Modifier
+                            .width(1.dp)
+                            .fillMaxHeight(0.6f)
+                            .background(MaterialTheme.colorScheme.outlineVariant),
                 )
                 Box(
                     modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
@@ -1305,33 +1393,42 @@ internal fun DecimalField(
     BasicTextField(
         value = text,
         onValueChange = { input ->
-            val cleaned = buildString {
-                var dotSeen = false
-                for (c in input) {
-                    when {
-                        c.isDigit() -> append(c)
-                        c == '.' && !dotSeen -> { append(c); dotSeen = true }
+            val cleaned =
+                buildString {
+                    var dotSeen = false
+                    for (c in input) {
+                        when {
+                            c.isDigit() -> {
+                                append(c)
+                            }
+
+                            c == '.' && !dotSeen -> {
+                                append(c)
+                                dotSeen = true
+                            }
+                        }
                     }
                 }
-            }
             text = cleaned
             onValueChange(cleaned.toDoubleOrNull() ?: 0.0)
         },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         singleLine = true,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-        ),
+        textStyle =
+            MaterialTheme.typography.bodyMedium.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+            ),
         modifier = modifier,
         decorationBox = { innerTextField ->
             Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
-                    .padding(horizontal = 12.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(

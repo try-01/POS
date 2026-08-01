@@ -69,9 +69,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -90,10 +89,12 @@ import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 import com.pos.offline.ui.components.rememberBarcodeScanner
-import com.pos.offline.util.ExcelManager
-import com.pos.offline.util.toRupiah
-import com.pos.offline.util.formatQuantity
 import com.pos.offline.ui.inventory.sanitizeScannedCode
+import com.pos.offline.util.ExcelManager
+import com.pos.offline.util.formatQuantity
+import com.pos.offline.util.toRupiah
+import kotlinx.coroutines.launch
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InventoryScreen(viewModel: InventoryViewModel) {
@@ -211,7 +212,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                             Spacer(Modifier.width(6.dp))
                             TopSalesRangePicker(
                                 selected = topSalesRange,
-                                onSelect = viewModel::setTopSalesRange
+                                onSelect = viewModel::setTopSalesRange,
                             )
                         }
                     }
@@ -274,7 +275,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
             checkSkuConflict = viewModel::checkSkuConflict,
             onDeleteRequest = { viewModel.requestDeleteFromForm(state.id) },
             onScanError = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
-            onReturnDamaged = { qty -> viewModel.returnDamagedItemToSupplier(state.id, qty) } // BARU: Sambungan ke ViewModel
+            onReturnDamaged = { qty -> viewModel.returnDamagedItemToSupplier(state.id, qty) },
         )
     }
     pendingDelete?.let { target ->
@@ -339,6 +340,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
         )
     }
 }
+
 @Composable
 private fun ExcelIconButton(
     icon: ImageVector,
@@ -367,6 +369,7 @@ private fun ExcelIconButton(
         }
     }
 }
+
 @Composable
 private fun ImportReviewDialog(
     reviewItems: List<InventoryViewModel.ImportReviewItem>,
@@ -446,6 +449,7 @@ private fun ImportReviewDialog(
         },
     )
 }
+
 @Composable
 private fun ImportStatBadge(
     text: String,
@@ -461,6 +465,7 @@ private fun ImportStatBadge(
         )
     }
 }
+
 @Composable
 private fun ImportReviewRow(item: InventoryViewModel.ImportReviewItem) {
     val (label, color) =
@@ -507,6 +512,7 @@ private fun ImportReviewRow(item: InventoryViewModel.ImportReviewItem) {
         }
     }
 }
+
 @Composable
 private fun ProductRow(
     product: ProductEntity,
@@ -542,7 +548,7 @@ private fun ProductRow(
                     )
                     Spacer(Modifier.width(8.dp))
                     StockBadge(stock = product.stock)
-                    // BARU: Tampilkan badge khusus jika ada barang rusak
+
                     if (product.damagedStock > 0.0) {
                         Spacer(Modifier.width(6.dp))
                         DamagedStockBadge(stock = product.damagedStock)
@@ -574,6 +580,7 @@ private fun ProductRow(
         }
     }
 }
+
 @Composable
 private fun CategoryBadge(category: String) {
     Surface(color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
@@ -588,6 +595,7 @@ private fun CategoryBadge(category: String) {
         )
     }
 }
+
 @Composable
 private fun CompactIconAction(
     icon: ImageVector,
@@ -608,6 +616,7 @@ private fun CompactIconAction(
         Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(16.dp))
     }
 }
+
 @Composable
 private fun StockBadge(stock: Double) {
     val color =
@@ -626,6 +635,7 @@ private fun StockBadge(stock: Double) {
         )
     }
 }
+
 @Composable
 private fun DamagedStockBadge(stock: Double) {
     Surface(color = MaterialTheme.colorScheme.error.copy(alpha = 0.16f), shape = RoundedCornerShape(6.dp)) {
@@ -638,6 +648,7 @@ private fun DamagedStockBadge(stock: Double) {
         )
     }
 }
+
 @Composable
 private fun EmptyInventory(
     hasQuery: Boolean,
@@ -663,22 +674,26 @@ private fun EmptyInventory(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             )
             when {
-                isTopSalesEmpty ->
+                isTopSalesEmpty -> {
                     Text(
                         "Katalog produk tetap ada — coba pilih rentang waktu lain",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                     )
-                !hasQuery ->
+                }
+
+                !hasQuery -> {
                     Text(
                         "Ketuk tombol + untuk mulai",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                     )
+                }
             }
         }
     }
 }
+
 @Composable
 private fun CompactInventorySearchBar(
     query: String,
@@ -743,6 +758,7 @@ private fun CompactInventorySearchBar(
         },
     )
 }
+
 @Composable
 private fun SortMenuButton(
     current: ProductSortOption,
@@ -788,6 +804,7 @@ private fun SortMenuButton(
         }
     }
 }
+
 @Composable
 private fun ScanIconButton(onClick: () -> Unit) {
     Box(
@@ -807,6 +824,7 @@ private fun ScanIconButton(onClick: () -> Unit) {
         )
     }
 }
+
 @Composable
 private fun ProductFormDialog(
     state: ProductFormState,
@@ -818,7 +836,7 @@ private fun ProductFormDialog(
     checkSkuConflict: suspend (String, Long) -> String?,
     onDeleteRequest: () -> Unit,
     onScanError: (String) -> Unit,
-    onReturnDamaged: (Double) -> Unit, // BARU
+    onReturnDamaged: (Double) -> Unit,
 ) {
     var name by remember(state.id) { mutableStateOf(state.name) }
     var sku by remember(state.id) { mutableStateOf(state.sku) }
@@ -837,7 +855,7 @@ private fun ProductFormDialog(
     var skuConflict by remember(state.id) { mutableStateOf<String?>(null) }
     var isCheckingBarcode by remember(state.id) { mutableStateOf(false) }
     var isCheckingSku by remember(state.id) { mutableStateOf(false) }
-    var showReturnDamagedDialog by remember(state.id) { mutableStateOf(false) } // BARU: Mengontrol dialog retur pabrik
+    var showReturnDamagedDialog by remember(state.id) { mutableStateOf(false) }
     val context = LocalContext.current
     val hasCamera =
         remember {
@@ -849,10 +867,10 @@ private fun ProductFormDialog(
                 val sanitized = sanitizeScannedCode(code)
                 if (sanitized != null) {
                     barcode = sanitized
-                    true 
+                    true
                 } else {
                     onScanError("Gagal memindai kode. Coba pindai ulang.")
-                    false 
+                    false
                 }
             },
         )
@@ -867,7 +885,7 @@ private fun ProductFormDialog(
             return@LaunchedEffect
         }
         isCheckingBarcode = true
-        kotlinx.coroutines.delay(300) 
+        kotlinx.coroutines.delay(300)
         barcodeConflict = checkBarcodeConflict(trimmed, state.id)
         isCheckingBarcode = false
     }
@@ -992,26 +1010,34 @@ private fun ProductFormDialog(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                
-                // BARU: Panel Informasi Stok Rusak (Hanya tampil jika ada stok rusak pada mode edit)
+
                 if (!state.isNew && state.damagedStock > 0.0) {
                     Spacer(Modifier.height(4.dp))
                     Surface(
                         color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f),
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Row(
                             modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text("Stok Rusak/Garansi", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onErrorContainer)
-                                Text("${state.damagedStock.formatQuantity()} item tidak layak jual", fontSize = 11.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+                                Text(
+                                    "Stok Rusak/Garansi",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                                Text(
+                                    "${state.damagedStock.formatQuantity()} item tidak layak jual",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                )
                             }
                             Button(
                                 onClick = { showReturnDamagedDialog = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                             ) {
                                 Text("Retur Pabrik", fontSize = 11.sp, color = MaterialTheme.colorScheme.onError)
                             }
@@ -1043,8 +1069,9 @@ private fun ProductFormDialog(
                 TextButton(onClick = onDismiss, enabled = !isSaving) { Text("Batal") }
                 Spacer(Modifier.width(4.dp))
                 Button(
-                    enabled = !isSaving && !isCheckingBarcode && !isCheckingSku &&
-                        name.isNotBlank() && barcodeConflict == null && skuConflict == null,
+                    enabled =
+                        !isSaving && !isCheckingBarcode && !isCheckingSku &&
+                            name.isNotBlank() && barcodeConflict == null && skuConflict == null,
                     onClick = {
                         onSave(
                             ProductFormState(
@@ -1074,10 +1101,10 @@ private fun ProductFormDialog(
             }
         },
     )
-    // BARU: Dialog Konfirmasi Retur ke Pabrik yang akan muncul menumpuk jika ditekan
+
     if (showReturnDamagedDialog) {
         var returnQtyStr by remember { mutableStateOf(state.damagedStock.formatQuantity()) }
-        
+
         AlertDialog(
             onDismissRequest = { showReturnDamagedDialog = false },
             title = { Text("Retur ke Pabrik/Supplier", style = MaterialTheme.typography.titleMedium) },
@@ -1085,13 +1112,13 @@ private fun ProductFormDialog(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         "Berapa banyak stok rusak yang ingin dikembalikan ke pabrik/dibuang?",
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                     DecimalNumberField(
                         value = returnQtyStr,
                         onValueChange = { returnQtyStr = it },
                         label = "Jumlah Retur",
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             },
@@ -1103,20 +1130,21 @@ private fun ProductFormDialog(
                             onReturnDamaged(qty)
                             showReturnDamagedDialog = false
                         } else {
-                            onScanError("Jumlah tidak valid. Maksimal ${state.damagedStock.formatQuantity()}") // Memanfaatkan fungsi notif form yang sudah ada
+                            onScanError("Jumlah tidak valid. Maksimal ${state.damagedStock.formatQuantity()}")
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 ) {
                     Text("Konfirmasi Retur")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showReturnDamagedDialog = false }) { Text("Batal") }
-            }
+            },
         )
     }
 }
+
 @Composable
 private fun DecimalNumberField(
     value: String,
@@ -1127,18 +1155,22 @@ private fun DecimalNumberField(
     OutlinedTextField(
         value = value,
         onValueChange = { input ->
-            val cleaned = buildString {
-                var dotSeen = false
-                for (c in input) {
-                    when {
-                        c.isDigit() -> append(c)
-                        c == '.' && !dotSeen -> {
-                            append(c)
-                            dotSeen = true
+            val cleaned =
+                buildString {
+                    var dotSeen = false
+                    for (c in input) {
+                        when {
+                            c.isDigit() -> {
+                                append(c)
+                            }
+
+                            c == '.' && !dotSeen -> {
+                                append(c)
+                                dotSeen = true
+                            }
                         }
                     }
-                }
-            }.take(10)
+                }.take(10)
             onValueChange(cleaned)
         },
         label = { Text(label, style = MaterialTheme.typography.bodySmall) },
@@ -1149,6 +1181,7 @@ private fun DecimalNumberField(
         modifier = modifier,
     )
 }
+
 @Composable
 private fun CategoryField(
     value: String,
@@ -1207,6 +1240,7 @@ private fun CategoryField(
         }
     }
 }
+
 @Composable
 private fun MoneyNumberField(
     value: String,
@@ -1227,29 +1261,32 @@ private fun MoneyNumberField(
         modifier = modifier,
     )
 }
+
 @Composable
 private fun TopSalesRangePicker(
     selected: TopSalesRange,
     onSelect: (TopSalesRange) -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .height(34.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
-            .padding(horizontal = 4.dp),
+        modifier =
+            Modifier
+                .height(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         TopSalesRange.entries.forEach { range ->
             TopSalesChip(
                 label = range.label,
                 selected = selected == range,
-                onClick = { onSelect(range) }
+                onClick = { onSelect(range) },
             )
         }
     }
 }
+
 @Composable
 private fun TopSalesChip(
     label: String,
@@ -1257,18 +1294,19 @@ private fun TopSalesChip(
     onClick: () -> Unit,
 ) {
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        contentAlignment = Alignment.Center
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
             color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
         )
     }
 }

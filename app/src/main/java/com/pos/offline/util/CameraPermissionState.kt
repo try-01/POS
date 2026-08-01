@@ -21,18 +21,21 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+
 enum class CameraPermissionState {
     NOT_REQUESTED,
     GRANTED,
     SHOW_RATIONALE,
     PERMANENTLY_DENIED,
 }
+
 tailrec fun Context.findActivity(): Activity? =
     when (this) {
         is Activity -> this
         is ContextWrapper -> baseContext.findActivity()
         else -> null
     }
+
 @Composable
 fun rememberCameraPermissionState(): Pair<CameraPermissionState, () -> Unit> {
     val ctx = LocalContext.current
@@ -57,9 +60,11 @@ fun rememberCameraPermissionState(): Pair<CameraPermissionState, () -> Unit> {
                     granted -> {
                         CameraPermissionState.GRANTED
                     }
+
                     act != null && ActivityCompat.shouldShowRequestPermissionRationale(act, Manifest.permission.CAMERA) -> {
                         CameraPermissionState.SHOW_RATIONALE
                     }
+
                     else -> {
                         CameraPermissionState.PERMANENTLY_DENIED
                     }
@@ -80,6 +85,7 @@ fun rememberCameraPermissionState(): Pair<CameraPermissionState, () -> Unit> {
     }
     return state to { launcher.launch(Manifest.permission.CAMERA) }
 }
+
 fun openAppSettings(context: Context) {
     val intent =
         Intent(

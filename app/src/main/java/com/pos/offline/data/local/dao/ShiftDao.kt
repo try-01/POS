@@ -73,7 +73,6 @@ interface ShiftDao {
         return updated
     }
 
-    // PERBAIKAN: Menggunakan paidAmount - changeGiven untuk menghitung bersih kas tunai yang masuk ke laci
     @Query(
         """
         SELECT COALESCE(SUM(paidAmount - changeGiven), 0) FROM transactions
@@ -82,7 +81,6 @@ interface ShiftDao {
     )
     suspend fun cashRevenueForShift(shiftId: Long): Long
 
-    // Untuk QRIS, pendapatan bernilai sebesar total transaksi yang dibayar via QRIS
     @Query(
         """
         SELECT COALESCE(SUM(total), 0) FROM transactions
@@ -91,7 +89,6 @@ interface ShiftDao {
     )
     suspend fun qrisRevenueForShift(shiftId: Long): Long
 
-    // Pengeluaran tunai dari laci jika transaksi QRIS memberikan kembalian tunai
     @Query(
         """
         SELECT COALESCE(SUM(changeGiven), 0) FROM transactions

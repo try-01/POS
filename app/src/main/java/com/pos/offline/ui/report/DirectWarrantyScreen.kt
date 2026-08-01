@@ -13,11 +13,11 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.QrCodeScanner
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,8 +30,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.pos.offline.ui.inventory.InventoryViewModel
 import com.pos.offline.data.local.entity.ProductEntity
+import com.pos.offline.ui.inventory.InventoryViewModel
 import com.pos.offline.util.toRupiah
 
 @Composable
@@ -42,96 +42,108 @@ fun DirectWarrantyScreen(
     onScanClick: () -> Unit,
     onNavigateBack: () -> Unit,
     onSubmitWarranty: (product: ProductEntity, qty: Double, note: String) -> Unit,
-    // BARU: Callback untuk mode Tukar Guling (Beda Produk)
-    onSubmitExchange: (broken: ProductEntity, brokenQty: Double, replace: ProductEntity, replaceQty: Double, note: String) -> Unit
+    onSubmitExchange: (broken: ProductEntity, brokenQty: Double, replace: ProductEntity, replaceQty: Double, note: String) -> Unit,
 ) {
     BackHandler(onBack = onNavigateBack)
-    
+
     val products by inventoryViewModel.products.collectAsStateWithLifecycle()
-    
-    // State Dialog Garansi Normal (Barang Sama)
+
     var selectedProductForWarranty by remember { mutableStateOf<ProductEntity?>(null) }
-    
-    // State Mode Tukar Guling (Langkah 2: Pilih Barang Pengganti)
+
     var brokenProductToExchange by remember { mutableStateOf<ProductEntity?>(null) }
     var brokenQty by remember { mutableStateOf(1.0) }
     var warrantyNote by remember { mutableStateOf("") }
     var selectedReplacementProduct by remember { mutableStateOf<ProductEntity?>(null) }
 
-    val filteredProducts = remember(searchQuery, products) {
-        if (searchQuery.isBlank()) {
-            emptyList() 
-        } else {
-            val q = searchQuery.lowercase()
-            products.filter {
-                it.name.lowercase().contains(q) ||
-                it.sku.lowercase().contains(q) ||
-                it.category.lowercase().contains(q) ||
-                (it.barcode?.lowercase()?.contains(q) == true)
+    val filteredProducts =
+        remember(searchQuery, products) {
+            if (searchQuery.isBlank()) {
+                emptyList()
+            } else {
+                val q = searchQuery.lowercase()
+                products.filter {
+                    it.name.lowercase().contains(q) ||
+                        it.sku.lowercase().contains(q) ||
+                        it.category.lowercase().contains(q) ||
+                        (it.barcode?.lowercase()?.contains(q) == true)
+                }
             }
         }
-    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+        color = MaterialTheme.colorScheme.background,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .imePadding()
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .imePadding(),
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onNavigateBack) {
                     Icon(
-                        Icons.AutoMirrored.Rounded.ArrowBack, 
+                        Icons.AutoMirrored.Rounded.ArrowBack,
                         contentDescription = "Kembali",
-                        tint = MaterialTheme.colorScheme.onBackground
+                        tint = MaterialTheme.colorScheme.onBackground,
                     )
                 }
                 Spacer(Modifier.width(4.dp))
-                
+
                 WarrantySearchBar(
                     query = searchQuery,
                     onQueryChange = onQueryChange,
-                    modifier = Modifier.weight(1f).height(40.dp)
+                    modifier = Modifier.weight(1f).height(40.dp),
                 )
-                
+
                 Spacer(Modifier.width(8.dp))
-                
+
                 WarrantySquareIconButton(
                     icon = Icons.Rounded.QrCodeScanner,
                     contentDescription = "Scan Barcode Produk",
-                    onClick = onScanClick
+                    onClick = onScanClick,
                 )
             }
-            
+
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-            // BARU: Banner Notifikasi saat masuk ke Mode Tukar Guling (Barang Beda)
             if (brokenProductToExchange != null) {
                 Surface(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text("Mode Tukar Silang Aktif", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            Text("Silakan cari dan pilih barang pengganti untuk: ${brokenProductToExchange?.name}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Text(
+                                "Mode Tukar Silang Aktif",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                            Text(
+                                "Silakan cari dan pilih barang pengganti untuk: ${brokenProductToExchange?.name}",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
                         }
                         IconButton(onClick = { brokenProductToExchange = null }, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Rounded.Close, contentDescription = "Batal Mode", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Icon(
+                                Icons.Rounded.Close,
+                                contentDescription = "Batal Mode",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
                         }
                     }
                 }
@@ -140,15 +152,20 @@ fun DirectWarrantyScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (searchQuery.isEmpty()) {
                     item {
                         Text(
-                            if (brokenProductToExchange == null) "Ketik nama produk, SKU, kategori, atau scan barcode untuk mencari produk yang rusak..." 
-                            else "Cari barang pengganti yang diinginkan pelanggan...",
+                            if (brokenProductToExchange ==
+                                null
+                            ) {
+                                "Ketik nama produk, SKU, kategori, atau scan barcode untuk mencari produk yang rusak..."
+                            } else {
+                                "Cari barang pengganti yang diinginkan pelanggan..."
+                            },
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 } else if (filteredProducts.isEmpty()) {
@@ -157,24 +174,23 @@ fun DirectWarrantyScreen(
                             "Produk tidak ditemukan.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
                         )
                     }
                 } else {
                     items(
                         items = filteredProducts,
-                        key = { it.id }
+                        key = { it.id },
                     ) { product ->
                         WarrantyProductRow(
                             product = product,
                             onClick = {
-                                // Arahkan klik berdasarkan mode yang sedang aktif
                                 if (brokenProductToExchange == null) {
                                     selectedProductForWarranty = product
                                 } else {
                                     selectedReplacementProduct = product
                                 }
-                            }
+                            },
                         )
                     }
                 }
@@ -182,7 +198,6 @@ fun DirectWarrantyScreen(
         }
     }
 
-    // Dialog 1: Klaim Garansi Normal (Atau opsi untuk masuk mode tukar produk lain)
     selectedProductForWarranty?.let { product ->
         WarrantyClaimDialog(
             product = product,
@@ -193,17 +208,16 @@ fun DirectWarrantyScreen(
                 onNavigateBack()
             },
             onSelectDifferentItem = { qty, note ->
-                // Simpan barang rusak dan aktifkan Mode Tukar Guling
+
                 brokenProductToExchange = product
                 brokenQty = qty
                 warrantyNote = note
                 selectedProductForWarranty = null
-                onQueryChange("") // Reset search bar untuk cari barang baru
-            }
+                onQueryChange("")
+            },
         )
     }
 
-    // Dialog 2: Konfirmasi Tukar Guling (Menampilkan Selisih Harga / Delta)
     selectedReplacementProduct?.let { replacement ->
         ExchangeClaimDialog(
             brokenProduct = brokenProductToExchange!!,
@@ -217,12 +231,12 @@ fun DirectWarrantyScreen(
                     brokenQty,
                     replacement,
                     replaceQty,
-                    finalNote
+                    finalNote,
                 )
                 selectedReplacementProduct = null
                 brokenProductToExchange = null
                 onNavigateBack()
-            }
+            },
         )
     }
 }
@@ -232,7 +246,7 @@ private fun WarrantyClaimDialog(
     product: ProductEntity,
     onDismiss: () -> Unit,
     onSubmitSameItem: (qty: Double, note: String) -> Unit,
-    onSelectDifferentItem: (qty: Double, note: String) -> Unit
+    onSelectDifferentItem: (qty: Double, note: String) -> Unit,
 ) {
     var qty by remember { mutableStateOf(1.0) }
     var note by remember { mutableStateOf("") }
@@ -240,46 +254,72 @@ private fun WarrantyClaimDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { 
-            Text("Proses Garansi Direct", fontSize = 16.sp, fontWeight = FontWeight.Bold) 
+        title = {
+            Text("Proses Garansi Direct", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     "Produk: ${product.name}\nStok di inventory: ${product.stock}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Jumlah Klaim:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                     Box(
-                        modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable { if (qty > step) qty -= step },
-                        contentAlignment = Alignment.Center
+                        modifier =
+                            Modifier
+                                .size(
+                                    28.dp,
+                                ).clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable {
+                                    if (qty >
+                                        step
+                                    ) {
+                                        qty -= step
+                                    }
+                                },
+                        contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Rounded.Remove, contentDescription = "Kurangi", modifier = Modifier.size(16.dp)) }
-                    
-                    Text(text = qty.toString(), modifier = Modifier.width(40.dp), textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
-                    
+
+                    Text(
+                        text = qty.toString(),
+                        modifier = Modifier.width(40.dp),
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold,
+                    )
+
                     Box(
-                        modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable { qty += step },
-                        contentAlignment = Alignment.Center
+                        modifier =
+                            Modifier
+                                .size(
+                                    28.dp,
+                                ).clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable {
+                                    qty +=
+                                        step
+                                },
+                        contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Rounded.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp)) }
                 }
-                
+
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
                     label = { Text("Catatan Kerusakan", fontSize = 12.sp) },
                     modifier = Modifier.fillMaxWidth(),
                     textStyle = MaterialTheme.typography.bodyMedium,
-                    minLines = 2
+                    minLines = 2,
                 )
             }
         },
         confirmButton = {
             Column(
                 horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Button(onClick = { onSubmitSameItem(qty, note) }, modifier = Modifier.fillMaxWidth()) {
                     Text("Tukar Barang Sejenis", fontSize = 13.sp)
@@ -293,7 +333,7 @@ private fun WarrantyClaimDialog(
             TextButton(onClick = onDismiss) {
                 Text("Batal", fontSize = 13.sp)
             }
-        }
+        },
     )
 }
 
@@ -304,13 +344,12 @@ private fun ExchangeClaimDialog(
     replacementProduct: ProductEntity,
     initialNote: String,
     onDismiss: () -> Unit,
-    onSubmit: (replaceQty: Double, finalNote: String) -> Unit
+    onSubmit: (replaceQty: Double, finalNote: String) -> Unit,
 ) {
     var qty by remember { mutableStateOf(1.0) }
     var note by remember { mutableStateOf(initialNote) }
     val step = if (replacementProduct.stock % 1.0 == 0.0) 1.0 else 0.1
 
-    // Kalkulasi Selisih / Delta Uang secara Real-Time
     val totalBroken = (brokenProduct.price * brokenQty).toLong()
     val totalReplacement = (replacementProduct.price * qty).toLong()
     val delta = totalReplacement - totalBroken
@@ -320,50 +359,103 @@ private fun ExchangeClaimDialog(
         title = { Text("Konfirmasi Tukar Guling", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Info Barang A (Rusak)
                 Surface(
                     color = MaterialTheme.colorScheme.errorContainer,
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
-                        Text("Barang Rusak (Dikembalikan):", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text(
+                            "Barang Rusak (Dikembalikan):",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
                         Text("${brokenQty}x ${brokenProduct.name}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onErrorContainer)
-                        Text("Nilai Barang: ${totalBroken.toRupiah()}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text(
+                            "Nilai Barang: ${totalBroken.toRupiah()}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
                     }
                 }
 
-                // Info Barang B (Pengganti)
                 Text("Barang Pengganti: ${replacementProduct.name}\nStok Tersedia: ${replacementProduct.stock}", fontSize = 12.sp)
 
-                // Stepper Jumlah Barang Pengganti
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Jumlah Pengganti:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                     Box(
-                        modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable { if (qty > step) qty -= step },
-                        contentAlignment = Alignment.Center
+                        modifier =
+                            Modifier
+                                .size(
+                                    28.dp,
+                                ).clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable {
+                                    if (qty >
+                                        step
+                                    ) {
+                                        qty -= step
+                                    }
+                                },
+                        contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Rounded.Remove, contentDescription = "Kurangi", modifier = Modifier.size(16.dp)) }
-                    Text(text = qty.toString(), modifier = Modifier.width(40.dp), textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = qty.toString(),
+                        modifier = Modifier.width(40.dp),
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold,
+                    )
                     Box(
-                        modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable { qty += step },
-                        contentAlignment = Alignment.Center
+                        modifier =
+                            Modifier
+                                .size(
+                                    28.dp,
+                                ).clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable {
+                                    qty +=
+                                        step
+                                },
+                        contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Rounded.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp)) }
                 }
 
-                // Tampilan Selisih Uang (Berubah warna berdasarkan kondisi)
-                val deltaColor = if (delta > 0) MaterialTheme.colorScheme.error else if (delta < 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                val deltaText = if (delta > 0) "Kurang Bayar: ${delta.toRupiah()}" else if (delta < 0) "Kembali Uang: ${(delta * -1L).toRupiah()}" else "Tukar Pas (Selisih Rp 0)"
-                
+                val deltaColor =
+                    if (delta >
+                        0
+                    ) {
+                        MaterialTheme.colorScheme.error
+                    } else if (delta <
+                        0
+                    ) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                val deltaText =
+                    if (delta >
+                        0
+                    ) {
+                        "Kurang Bayar: ${delta.toRupiah()}"
+                    } else if (delta <
+                        0
+                    ) {
+                        "Kembali Uang: ${(delta * -1L).toRupiah()}"
+                    } else {
+                        "Tukar Pas (Selisih Rp 0)"
+                    }
+
                 Text(text = deltaText, fontWeight = FontWeight.Bold, color = deltaColor, fontSize = 14.sp)
 
-                // Input Catatan Final
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
                     label = { Text("Catatan Kasir", fontSize = 12.sp) },
                     modifier = Modifier.fillMaxWidth(),
                     textStyle = MaterialTheme.typography.bodyMedium,
-                    minLines = 2
+                    minLines = 2,
                 )
             }
         },
@@ -376,28 +468,27 @@ private fun ExchangeClaimDialog(
             TextButton(onClick = onDismiss) {
                 Text("Batal", fontSize = 13.sp)
             }
-        }
+        },
     )
 }
-
-// ... [Biarkan fungsi WarrantyProductRow, WarrantySearchBar, dan WarrantySquareIconButton persis sama seperti sebelumnya] ...
 
 @Composable
 private fun WarrantyProductRow(
     product: ProductEntity,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(onClick = onClick)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
@@ -405,19 +496,19 @@ private fun WarrantyProductRow(
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     "SKU: ${product.sku}  •  Kategori: ${product.category.ifBlank { "-" }}",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "Stok: ${product.stock}  •  Harga: ${product.price.toRupiah()}",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                     color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
             Spacer(Modifier.width(8.dp))
@@ -425,7 +516,7 @@ private fun WarrantyProductRow(
                 Icons.Rounded.Build,
                 contentDescription = "Pilih untuk Garansi",
                 modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.error
+                tint = MaterialTheme.colorScheme.error,
             )
         }
     }
@@ -441,18 +532,20 @@ private fun WarrantySearchBar(
         value = query,
         onValueChange = onQueryChange,
         singleLine = true,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 14.sp,
-        ),
+        textStyle =
+            MaterialTheme.typography.bodyMedium.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 14.sp,
+            ),
         modifier = modifier,
         decorationBox = { innerTextField ->
             Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(12.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -469,17 +562,18 @@ private fun WarrantySearchBar(
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                     innerTextField()
                 }
                 if (query.isNotEmpty()) {
                     Box(
-                        modifier = Modifier
-                            .size(22.dp)
-                            .clip(CircleShape)
-                            .clickable { onQueryChange("") },
+                        modifier =
+                            Modifier
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .clickable { onQueryChange("") },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -499,14 +593,15 @@ private fun WarrantySearchBar(
 private fun WarrantySquareIconButton(
     icon: ImageVector,
     contentDescription: String?,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Box(
-        modifier = Modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
+        modifier =
+            Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(

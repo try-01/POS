@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
@@ -52,4 +53,5 @@ fun GlassCard(
         content()
     }
 }
+
 private fun Color.luminance(): Float = 0.299f * red + 0.587f * green + 0.114f * blue

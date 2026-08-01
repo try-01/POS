@@ -5,11 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.pos.offline.data.local.dao.ReportDao
 import com.pos.offline.data.local.entity.PaymentMethod
 import com.pos.offline.data.local.entity.PrinterEntity
+import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.data.local.entity.ReturnEntity
 import com.pos.offline.data.local.entity.ShiftEntity
 import com.pos.offline.data.local.entity.TransactionEntity
 import com.pos.offline.data.local.entity.isVoid
-import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.PrinterRepository
 import com.pos.offline.data.repository.ProductRepository
@@ -93,6 +93,7 @@ data class ReportMessage(
 )
 
 enum class ReportTab { TRANSACTIONS, SHIFTS }
+
 enum class ReportPeriodType { DAILY, MONTHLY }
 
 data class ClosedShiftDetail(
@@ -117,20 +118,22 @@ data class PendingPrintTarget(
 
 data class DaySalesGroup(
     val date: LocalDate,
-    val transactions: List<TransactionEntity>
+    val transactions: List<TransactionEntity>,
 )
 
 data class MonthSalesGroup(
     val yearMonth: java.time.YearMonth,
     val days: List<DaySalesGroup>,
-    val totalTransactions: Int
+    val totalTransactions: Int,
 )
 
 sealed class SalesReportUiState {
     object Hidden : SalesReportUiState()
+
     data class Loading(
         val periodType: ReportPeriodType,
     ) : SalesReportUiState()
+
     data class Loaded(
         val periodType: ReportPeriodType,
         val data: SalesReportData,
@@ -146,10 +149,20 @@ private data class ReportSelection(
 
 sealed interface SearchUiState {
     object Idle : SearchUiState
+
     object Loading : SearchUiState
-    data class InvoiceResults(val transactions: List<TransactionEntity>) : SearchUiState
-    data class ProductHistoryResults(val hierarchy: List<MonthSalesGroup>) : SearchUiState
-    data class Empty(val query: String) : SearchUiState
+
+    data class InvoiceResults(
+        val transactions: List<TransactionEntity>,
+    ) : SearchUiState
+
+    data class ProductHistoryResults(
+        val hierarchy: List<MonthSalesGroup>,
+    ) : SearchUiState
+
+    data class Empty(
+        val query: String,
+    ) : SearchUiState
 }
 
 @OptIn(ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
@@ -164,7 +177,6 @@ class ReportViewModel(
     private val productRepository: ProductRepository,
     private val reportDao: ReportDao,
 ) : ViewModel() {
-
     private val zone: ZoneId = ZoneId.systemDefault()
     private val _selectedDate = MutableStateFlow(LocalDate.now(zone))
     val selectedDate: StateFlow<LocalDate> = _selectedDate.asStateFlow()
@@ -277,15 +289,19 @@ class ReportViewModel(
                         ),
                     )
                 }
+
                 VoidOutcome.AlreadyVoided -> {
                     _messages.emit(ReportMessage("Transaksi ini sudah dibatalkan sebelumnya.", isError = true))
                 }
+
                 VoidOutcome.ShiftClosed -> {
                     _messages.emit(ReportMessage("Tidak dapat membatalkan — shift transaksi ini sudah ditutup.", isError = true))
                 }
+
                 VoidOutcome.NotFound -> {
                     _messages.emit(ReportMessage("Transaksi tidak ditemukan.", isError = true))
                 }
+
                 VoidOutcome.HasReturn -> {
                     _messages.emit(ReportMessage("Tidak dapat membatalkan — transaksi ini sudah memiliki riwayat retur.", isError = true))
                 }
@@ -357,18 +373,23 @@ class ReportViewModel(
                         ),
                     )
                 }
+
                 ReturnOutcome.TransactionNotFound -> {
                     _returnMessage.value = ReportMessage("Transaksi tidak ditemukan.", isError = true)
                 }
+
                 ReturnOutcome.TransactionVoided -> {
                     _returnMessage.value = ReportMessage("Transaksi ini sudah dibatalkan, tidak dapat diretur.", isError = true)
                 }
+
                 ReturnOutcome.AlreadyReturned -> {
                     _returnMessage.value = ReportMessage("Transaksi ini sudah pernah diretur sebelumnya.", isError = true)
                 }
+
                 ReturnOutcome.NoItemsSelected -> {
                     _returnMessage.value = ReportMessage("Pilih minimal satu item untuk diretur.", isError = true)
                 }
+
                 is ReturnOutcome.InvalidQuantity -> {
                     _returnMessage.value =
                         ReportMessage(
@@ -376,6 +397,7 @@ class ReportViewModel(
                             isError = true,
                         )
                 }
+
                 is ReturnOutcome.InvalidRefundAmount -> {
                     _returnMessage.value =
                         ReportMessage(
@@ -399,9 +421,11 @@ class ReportViewModel(
                             result,
                         )
                 }
+
                 printers.size == 1 -> {
                     executePrint(printers.first(), result)
                 }
+
                 else -> {
                     _pendingPrintTarget.value = PendingPrintTarget(result, printers)
                 }
@@ -428,7 +452,6 @@ class ReportViewModel(
         _printUiState.value = PrintUiState.Result(outcome, result)
     }
 
-    // Manajemen State Pencarian Transaksi/Struk
     private val _invoiceSearchQuery = MutableStateFlow("")
     val invoiceSearchQuery: StateFlow<String> = _invoiceSearchQuery.asStateFlow()
 
@@ -454,15 +477,15 @@ class ReportViewModel(
         viewModelScope.launch {
             _invoiceSearchQuery.value = barcodeOrName
             val product = productRepository.getProductByBarcodeAny(barcodeOrName)
-            val results = reportDao.searchTransactionsByProduct(
-                query = barcodeOrName, 
-                productId = product?.id
-            )
+            val results =
+                reportDao.searchTransactionsByProduct(
+                    query = barcodeOrName,
+                    productId = product?.id,
+                )
             _searchResultsState.value = results
         }
     }
 
-    // Hirarki Riwayat Penjualan Produk 1 Tahun Terakhir
     private val _productHistoryQuery = MutableStateFlow("")
     val productHistoryQuery: StateFlow<String> = _productHistoryQuery.asStateFlow()
 
@@ -476,68 +499,74 @@ class ReportViewModel(
                 } else {
                     flow {
                         val zone = ZoneId.systemDefault()
-                        val oneYearAgoMillis = LocalDate.now(zone)
-                            .minusYears(1)
-                            .atStartOfDay(zone)
-                            .toInstant()
-                            .toEpochMilli()
+                        val oneYearAgoMillis =
+                            LocalDate
+                                .now(zone)
+                                .minusYears(1)
+                                .atStartOfDay(zone)
+                                .toInstant()
+                                .toEpochMilli()
 
                         val rawTransactions = reportDao.searchProductSalesHistory1Year(query.trim(), oneYearAgoMillis)
 
-                        val grouped = rawTransactions
-                            .groupBy { tx ->
-                                val instant = Instant.ofEpochMilli(tx.createdAt)
-                                val localDate = instant.atZone(zone).toLocalDate()
-                                java.time.YearMonth.from(localDate) to localDate
-                            }
-                            .entries
-                            .groupBy(
-                                keySelector = { entry -> entry.key.first },
-                                valueTransform = { entry -> DaySalesGroup(entry.key.second, entry.value) }
-                            )
-                            .map { (yearMonth, dayGroups) ->
-                                MonthSalesGroup(
-                                    yearMonth = yearMonth,
-                                    days = dayGroups.sortedByDescending { it.date },
-                                    totalTransactions = dayGroups.sumOf { it.transactions.size }
-                                )
-                            }
-                            .sortedByDescending { it.yearMonth }
+                        val grouped =
+                            rawTransactions
+                                .groupBy { tx ->
+                                    val instant = Instant.ofEpochMilli(tx.createdAt)
+                                    val localDate = instant.atZone(zone).toLocalDate()
+                                    java.time.YearMonth.from(localDate) to localDate
+                                }.entries
+                                .groupBy(
+                                    keySelector = { entry -> entry.key.first },
+                                    valueTransform = { entry -> DaySalesGroup(entry.key.second, entry.value) },
+                                ).map { (yearMonth, dayGroups) ->
+                                    MonthSalesGroup(
+                                        yearMonth = yearMonth,
+                                        days = dayGroups.sortedByDescending { it.date },
+                                        totalTransactions = dayGroups.sumOf { it.transactions.size },
+                                    )
+                                }.sortedByDescending { it.yearMonth }
 
                         emit(grouped)
                     }
                 }
-            }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun searchProductHistory(query: String) {
         _productHistoryQuery.value = query
     }
 
-    // Menggabungkan state pencarian produk & invoice ke dalam 1 Flow yang reaktif
-    val searchUiState: StateFlow<SearchUiState> = combine(
-        invoiceSearchQuery,
-        productHistoryQuery,
-        searchResults,
-        productHistoryHierarchy
-    ) { invoiceQuery, productQuery, invoices, productHierarchy ->
-        val activeQuery = productQuery.ifBlank { invoiceQuery }
-        
-        when {
-            activeQuery.isBlank() -> SearchUiState.Idle
-            productQuery.isNotBlank() && productHierarchy.isNotEmpty() -> {
-                SearchUiState.ProductHistoryResults(productHierarchy)
+    val searchUiState: StateFlow<SearchUiState> =
+        combine(
+            invoiceSearchQuery,
+            productHistoryQuery,
+            searchResults,
+            productHistoryHierarchy,
+        ) { invoiceQuery, productQuery, invoices, productHierarchy ->
+            val activeQuery = productQuery.ifBlank { invoiceQuery }
+
+            when {
+                activeQuery.isBlank() -> {
+                    SearchUiState.Idle
+                }
+
+                productQuery.isNotBlank() && productHierarchy.isNotEmpty() -> {
+                    SearchUiState.ProductHistoryResults(productHierarchy)
+                }
+
+                invoiceQuery.isNotBlank() && invoices.isNotEmpty() -> {
+                    SearchUiState.InvoiceResults(invoices)
+                }
+
+                else -> {
+                    SearchUiState.Empty(activeQuery)
+                }
             }
-            invoiceQuery.isNotBlank() && invoices.isNotEmpty() -> {
-                SearchUiState.InvoiceResults(invoices)
-            }
-            else -> SearchUiState.Empty(activeQuery)
-        }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = SearchUiState.Idle
-    )
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = SearchUiState.Idle,
+        )
 
     fun buildCurrentReportLinesForExportAsync(onResult: (List<ReceiptLine>?) -> Unit) {
         viewModelScope.launch(Dispatchers.Default) {
@@ -548,7 +577,11 @@ class ReportViewModel(
         }
     }
 
-    fun processDirectWarranty(product: ProductEntity, qty: Double, note: String) {
+    fun processDirectWarranty(
+        product: ProductEntity,
+        qty: Double,
+        note: String,
+    ) {
         viewModelScope.launch {
             try {
                 val openShift = shiftRepository.getOpenShift()
@@ -556,20 +589,20 @@ class ReportViewModel(
                 val cashierId = openShift?.cashierId
                 val cashierName = openShift?.cashierName ?: "Kasir (Tidak Diketahui)"
 
-                val outcome = returnRepository.processManualWarrantyClaim(
-                    productName = product.name,
-                    productId = product.id,
-                    quantity = qty,
-                    refundAmount = 0L,
-                    refundMethod = PaymentMethod.OTHER,
-                    shiftId = shiftId,
-                    cashierId = cashierId,
-                    cashierName = cashierName,
-                    note = note
-                )
+                val outcome =
+                    returnRepository.processManualWarrantyClaim(
+                        productName = product.name,
+                        productId = product.id,
+                        quantity = qty,
+                        refundAmount = 0L,
+                        refundMethod = PaymentMethod.OTHER,
+                        shiftId = shiftId,
+                        cashierId = cashierId,
+                        cashierName = cashierName,
+                        note = note,
+                    )
 
                 if (outcome is ReturnOutcome.Success) {
-                    // decrementStock sudah otomatis memperbarui database, tidak perlu copy & save manual
                     productRepository.decrementStock(product.id, qty)
                     _messages.emit(ReportMessage("Klaim garansi berhasil diproses.", isError = false))
                 } else {
@@ -584,30 +617,23 @@ class ReportViewModel(
         }
     }
 
-    /**
-     * Menghitung selisih uang antara barang pengganti dan barang rusak.
-     * @return Positif = pembeli harus tambah uang. Negatif = kasir kembalikan uang.
-     */
     fun hitungSelisihHarga(
         hargaRusak: Long,
         qtyRusak: Double,
         hargaPengganti: Long,
-        qtyPengganti: Double
+        qtyPengganti: Double,
     ): Long {
         val totalRusak = (hargaRusak * qtyRusak).toLong()
         val totalPengganti = (hargaPengganti * qtyPengganti).toLong()
         return totalPengganti - totalRusak
     }
 
-    /**
-     * Mengeksekusi pertukaran langsung dua barang berbeda beserta selisih dan penyesuaian stok.
-     */
     fun prosesTukarGulingGaransi(
         barangRusak: ProductEntity,
         qtyRusak: Double,
         barangPengganti: ProductEntity,
         qtyPengganti: Double,
-        catatan: String
+        catatan: String,
     ) {
         viewModelScope.launch {
             try {
@@ -616,16 +642,17 @@ class ReportViewModel(
                 val cashierId = openShift?.cashierId
                 val cashierName = openShift?.cashierName ?: "Kasir (Tidak Diketahui)"
 
-                val outcome = returnRepository.processDirectExchangeWarranty(
-                    brokenProduct = barangRusak,
-                    brokenQty = qtyRusak,
-                    replacementProduct = barangPengganti,
-                    replacementQty = qtyPengganti,
-                    shiftId = shiftId,
-                    cashierId = cashierId,
-                    cashierName = cashierName,
-                    note = catatan
-                )
+                val outcome =
+                    returnRepository.processDirectExchangeWarranty(
+                        brokenProduct = barangRusak,
+                        brokenQty = qtyRusak,
+                        replacementProduct = barangPengganti,
+                        replacementQty = qtyPengganti,
+                        shiftId = shiftId,
+                        cashierId = cashierId,
+                        cashierName = cashierName,
+                        note = catatan,
+                    )
 
                 if (outcome is ReturnOutcome.Success) {
                     _messages.emit(ReportMessage("Tukar Guling Garansi berhasil dicatat!", isError = false))
@@ -666,26 +693,27 @@ class ReportViewModel(
             _includeDeadStock,
             _selectedDate,
         ) { periodType, sales, sold, dead, date ->
-            if (periodType == null || !(sales || sold || dead)) null
-            else Triple(ReportSelection(periodType, sales, sold, dead), date, Unit)
-        }
-        .debounce(REPORT_DEBOUNCE_MS)
-        .distinctUntilChanged()
-        .flatMapLatest { triple ->
-            if (triple == null) {
-                flowOf<SalesReportUiState>(SalesReportUiState.Hidden)
+            if (periodType == null || !(sales || sold || dead)) {
+                null
             } else {
-                val (selection, targetDate) = triple
-                flow {
-                    emit(SalesReportUiState.Loading(selection.periodType))
-                    val (start, end) = getReportRange(targetDate, selection.periodType == ReportPeriodType.MONTHLY)
-                    val fetchProducts = selection.includeProductsSold || selection.includeDeadStock
-                    val data = reportRepository.buildSalesReport(start, end, fetchProducts)
-                    emit(SalesReportUiState.Loaded(selection.periodType, data))
-                }
+                Triple(ReportSelection(periodType, sales, sold, dead), date, Unit)
             }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SalesReportUiState.Hidden)
+        }.debounce(REPORT_DEBOUNCE_MS)
+            .distinctUntilChanged()
+            .flatMapLatest { triple ->
+                if (triple == null) {
+                    flowOf<SalesReportUiState>(SalesReportUiState.Hidden)
+                } else {
+                    val (selection, targetDate) = triple
+                    flow {
+                        emit(SalesReportUiState.Loading(selection.periodType))
+                        val (start, end) = getReportRange(targetDate, selection.periodType == ReportPeriodType.MONTHLY)
+                        val fetchProducts = selection.includeProductsSold || selection.includeDeadStock
+                        val data = reportRepository.buildSalesReport(start, end, fetchProducts)
+                        emit(SalesReportUiState.Loaded(selection.periodType, data))
+                    }
+                }
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SalesReportUiState.Hidden)
 
     fun toggleReportPeriod(periodType: ReportPeriodType) {
         _selectedPeriodType.value = if (_selectedPeriodType.value == periodType) null else periodType
@@ -720,27 +748,29 @@ class ReportViewModel(
     private suspend fun buildReportLines(
         periodType: ReportPeriodType,
         data: SalesReportData,
-    ): List<ReceiptLine> = withContext(Dispatchers.Default) {
-        val profile = storeProfileRepository.get()
-        val now = LocalDate.now(zone)
-        val periodLabel = periodLabelFor(now, periodType == ReportPeriodType.MONTHLY)
-        val shift = shiftRepository.getOpenShift()
-        ReceiptManager.buildSalesReportLines(
-            data = data,
-            storeProfile = profile,
-            periodLabel = periodLabel,
-            printedBy = shift?.cashierName,
-            shiftId = shift?.id?.toString(),
-            includeSalesSummary = _includeSalesSummary.value,
-            includeProductsSold = _includeProductsSold.value,
-            includeDeadStock = _includeDeadStock.value,
-        )
-    }
+    ): List<ReceiptLine> =
+        withContext(Dispatchers.Default) {
+            val profile = storeProfileRepository.get()
+            val now = LocalDate.now(zone)
+            val periodLabel = periodLabelFor(now, periodType == ReportPeriodType.MONTHLY)
+            val shift = shiftRepository.getOpenShift()
+            ReceiptManager.buildSalesReportLines(
+                data = data,
+                storeProfile = profile,
+                periodLabel = periodLabel,
+                printedBy = shift?.cashierName,
+                shiftId = shift?.id?.toString(),
+                includeSalesSummary = _includeSalesSummary.value,
+                includeProductsSold = _includeProductsSold.value,
+                includeDeadStock = _includeDeadStock.value,
+            )
+        }
 
-    suspend fun buildCurrentReportLinesForExport(): List<ReceiptLine>? = withContext(Dispatchers.Default) {
-        val state = salesReportUiState.value as? SalesReportUiState.Loaded ?: return@withContext null
-        buildReportLines(state.periodType, state.data)
-    }
+    suspend fun buildCurrentReportLinesForExport(): List<ReceiptLine>? =
+        withContext(Dispatchers.Default) {
+            val state = salesReportUiState.value as? SalesReportUiState.Loaded ?: return@withContext null
+            buildReportLines(state.periodType, state.data)
+        }
 
     private fun buildEmptyStateNote(data: SalesReportData): String? {
         val soldEmpty = _includeProductsSold.value && data.products.none { it.qtySold > 0.0 }
@@ -776,16 +806,27 @@ class ReportViewModel(
             }
             val outcome = printCoordinator.printCustomLines(printer, lines)
             when (outcome) {
-                is com.pos.offline.util.ReceiptPrintOutcome.Success ->
+                is com.pos.offline.util.ReceiptPrintOutcome.Success -> {
                     _messages.emit(ReportMessage(appendEmptyStateNote("Laporan berhasil dicetak.", state.data), isError = false))
-                is com.pos.offline.util.ReceiptPrintOutcome.SuccessWithNotice ->
+                }
+
+                is com.pos.offline.util.ReceiptPrintOutcome.SuccessWithNotice -> {
                     _messages.emit(ReportMessage(appendEmptyStateNote("Laporan dicetak: ${outcome.notice}", state.data), isError = false))
-                is com.pos.offline.util.ReceiptPrintOutcome.Failed ->
-                    _messages.emit(ReportMessage("Gagal mencetak laporan: ${outcome.attempts.firstOrNull()?.message ?: "Unknown"}", isError = true))
-                com.pos.offline.util.ReceiptPrintOutcome.AlreadyInProgress ->
+                }
+
+                is com.pos.offline.util.ReceiptPrintOutcome.Failed -> {
+                    _messages.emit(
+                        ReportMessage("Gagal mencetak laporan: ${outcome.attempts.firstOrNull()?.message ?: "Unknown"}", isError = true),
+                    )
+                }
+
+                com.pos.offline.util.ReceiptPrintOutcome.AlreadyInProgress -> {
                     _messages.emit(ReportMessage("Sedang mencetak, mohon tunggu...", isError = false))
-                com.pos.offline.util.ReceiptPrintOutcome.NoPrinterConfigured ->
+                }
+
+                com.pos.offline.util.ReceiptPrintOutcome.NoPrinterConfigured -> {
                     _messages.emit(ReportMessage("Printer belum diatur.", isError = true))
+                }
             }
         }
     }
@@ -797,19 +838,33 @@ class ReportViewModel(
         }
     }
 
-    private fun getReportRange(now: LocalDate, isMonthly: Boolean): Pair<Long, Long> {
-        return if (isMonthly) {
-            val s = now.withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
-            val e = now.plusMonths(1).withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
+    private fun getReportRange(
+        now: LocalDate,
+        isMonthly: Boolean,
+    ): Pair<Long, Long> =
+        if (isMonthly) {
+            val s =
+                now
+                    .withDayOfMonth(1)
+                    .atStartOfDay(zone)
+                    .toInstant()
+                    .toEpochMilli()
+            val e =
+                now
+                    .plusMonths(1)
+                    .withDayOfMonth(1)
+                    .atStartOfDay(zone)
+                    .toInstant()
+                    .toEpochMilli()
             s to e
         } else {
             dayBounds(now)
         }
-    }
 
     private fun dayBounds(date: LocalDate): Pair<Long, Long> {
         val timestamp = date.atStartOfDay(zone).toInstant().toEpochMilli()
-        return com.pos.offline.util.getAbsoluteDayRange(timestamp)
+        return com.pos.offline.util
+            .getAbsoluteDayRange(timestamp)
     }
 
     private fun aggregate(
@@ -819,13 +874,13 @@ class ReportViewModel(
         if (txs.isEmpty()) return DailyReport.empty(date)
         val completed = txs.filterNot { it.isVoid }
         val voidedCount = txs.size - completed.size
-        fun actualReceived(tx: TransactionEntity): Long {
-            return if (tx.paymentMethod == PaymentMethod.CASH.name) {
+
+        fun actualReceived(tx: TransactionEntity): Long =
+            if (tx.paymentMethod == PaymentMethod.CASH.name) {
                 tx.paidAmount - tx.changeGiven
             } else {
                 tx.total
             }
-        }
         val totalDiscount = completed.sumOf { it.discount }
         val totalTax = completed.sumOf { it.tax }
         val count = completed.size

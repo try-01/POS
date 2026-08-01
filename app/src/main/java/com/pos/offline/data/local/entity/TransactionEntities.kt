@@ -3,20 +3,21 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+
 @Entity(
     tableName = "transactions",
-    indices = [Index(value = ["createdAt"])]
+    indices = [Index(value = ["createdAt"])],
 )
 data class TransactionEntity(
     @PrimaryKey
-    val id: String, 
-    val createdAt: Long, 
-    val subtotal: Long, 
-    val discount: Long, 
-    val tax: Long, 
-    val total: Long, 
-    val paidAmount: Long, 
-    val change: Long, 
+    val id: String,
+    val createdAt: Long,
+    val subtotal: Long,
+    val discount: Long,
+    val tax: Long,
+    val total: Long,
+    val paidAmount: Long,
+    val change: Long,
     @ColumnInfo(defaultValue = "0")
     val changeGiven: Long = 0L,
     @ColumnInfo(defaultValue = "1")
@@ -37,12 +38,13 @@ data class TransactionEntity(
     val voidReason: String? = null,
     val returnId: Long? = null,
 )
+
 @Entity(
     tableName = "transaction_items",
     indices = [
-        Index(value = ["transactionId"]), 
-        Index(value = ["productId"]) 
-    ], 
+        Index(value = ["transactionId"]),
+        Index(value = ["productId"]),
+    ],
 )
 data class TransactionItemEntity(
     @PrimaryKey(autoGenerate = true)
@@ -56,5 +58,6 @@ data class TransactionItemEntity(
     val unitCost: Long = 0L,
     val productId: Long? = null,
 )
+
 val TransactionEntity.hasReturn: Boolean
     get() = returnId != null

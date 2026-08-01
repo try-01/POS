@@ -79,13 +79,9 @@ android {
                 "org/apache/poi/xwpf/**",
                 "org/apache/poi/hwpf/**",
 
-                // ===== POI: VISIO =====
+                // ===== POI: VISIO / PUBLISHER / OUTLOOK =====
                 "org/apache/poi/xdgf/**",
-
-                // ===== POI: PUBLISHER =====
                 "org/apache/poi/hpbf/**",
-
-                // ===== POI: OUTLOOK =====
                 "org/apache/poi/hmef/**",
                 "org/apache/poi/hsmf/**",
 
@@ -98,23 +94,8 @@ android {
                 // ===== SCHEMA: WORD =====
                 "org/openxmlformats/schemas/wordprocessingml/**",
 
-                // ===== SCHEMA: DRAWING (besar, tidak dipakai) =====
+                // ===== SCHEMA: DRAWING =====
                 "org/openxmlformats/schemas/drawingml/**",
-
-                // ===== LOG4J =====
-                "org/apache/logging/**",
-                "log4j2.xml",
-                "Log4j-config.xsd",
-                "Log4j-events.xsd",
-                "Log4j-levels.xsd",
-                "META-INF/services/org.apache.logging.*",
-                "META-INF/log4j-provider.properties",
-
-                // ===== BOUNCY CASTLE =====
-                "org/bouncycastle/**",
-
-                // ===== COMMONS-MATH3 =====
-                "org/apache/commons/math3/**",
 
                 // ===== DOKUMENTASI =====
                 "**/*.md",
@@ -166,20 +147,21 @@ dependencies {
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     // =====================================================
-    //  APACHE POI — TETAP PAKAI poi-ooxml (full)
-    //  Karena SXSSFWorkbook hanya ada di poi-ooxml
+    //  APACHE POI
     //
-    //  Optimasi dilakukan via:
-    //  1. Exclude dependency transitif yang berat
-    //  2. Exclude file via packaging (di atas)
-    //  3. R8 shrinking (ProGuard rules)
+    //  PENTING: JANGAN exclude log4j!
+    //  SXSSFWorkbook WAJIB butuh log4j saat class loading.
+    //
+    //  Yang AMAN di-exclude:
+    //  - commons-math3 (fungsi matematika lanjutan)
+    //  - bouncycastle (crypto/encryption)
+    //  - santuario (XML digital signature)
+    //  - pdfbox (PDF processing)
+    //  - javaparser (code parsing)
+    //  - poi-scratchpad (old binary formats PPT/Word/Visio)
     // =====================================================
-    implementation("org.apache.poi:poi:5.5.1") {
-        exclude(group = "org.apache.logging.log4j")
-        exclude(group = "org.apache.commons", module = "commons-math3")
-    }
+    implementation("org.apache.poi:poi:5.5.1")
     implementation("org.apache.poi:poi-ooxml:5.5.1") {
-        exclude(group = "org.apache.logging.log4j")
         exclude(group = "org.apache.commons", module = "commons-math3")
         exclude(group = "org.bouncycastle")
         exclude(group = "org.apache.santuario")
@@ -187,17 +169,6 @@ dependencies {
         exclude(group = "de.rototor.pdfbox")
         exclude(group = "com.github.javaparser")
         exclude(group = "org.apache.poi", module = "poi-scratchpad")
-    }
-
-    // Exclude global
-    configurations.configureEach {
-        exclude(group = "org.apache.logging.log4j")
-        exclude(group = "org.apache.commons", module = "commons-math3")
-        exclude(group = "org.bouncycastle")
-        exclude(group = "org.apache.santuario")
-        exclude(group = "de.rototor.pdfbox")
-        exclude(group = "org.apache.pdfbox")
-        exclude(group = "com.github.javaparser")
     }
 
     // ===== TESTING =====

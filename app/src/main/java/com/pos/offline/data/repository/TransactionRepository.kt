@@ -13,23 +13,31 @@ import com.pos.offline.data.local.entity.TransactionStatus
 import com.pos.offline.data.local.entity.isVoid
 import com.pos.offline.util.roundToRupiah
 import kotlinx.coroutines.flow.Flow
+
 data class CheckoutResult(
     val transaction: TransactionEntity,
     val items: List<TransactionItemEntity>,
 )
+
 class InsufficientStockException(
     val productName: String,
 ) : RuntimeException()
+
 sealed class VoidOutcome {
     data class Success(
         val restoredStockCount: Int,
         val skippedStockCount: Int,
     ) : VoidOutcome()
+
     data object AlreadyVoided : VoidOutcome()
+
     data object NotFound : VoidOutcome()
+
     data object ShiftClosed : VoidOutcome()
+
     data object HasReturn : VoidOutcome()
 }
+
 class TransactionRepository(
     private val database: PosDatabase,
     private val transactionDao: TransactionDao,
@@ -38,15 +46,19 @@ class TransactionRepository(
     private val shiftRepository: ShiftRepository,
 ) {
     val transactions: Flow<List<TransactionEntity>> = transactionDao.observeAll()
+
     fun dailyTransactions(
         startOfDay: Long,
         endOfDay: Long,
     ): Flow<List<TransactionEntity>> = transactionDao.observeByDateRange(startOfDay, endOfDay)
+
     fun dailyRevenue(
         startOfDay: Long,
         endOfDay: Long,
     ): Flow<Long> = transactionDao.observeDailyRevenue(startOfDay, endOfDay)
+
     fun transactionsByShift(shiftId: Long): Flow<List<TransactionEntity>> = transactionDao.observeByShift(shiftId)
+
     suspend fun checkout(
         cart: List<CartItemEntity>,
         discountType: DiscountType,
@@ -70,7 +82,7 @@ class TransactionRepository(
                 }
             ).coerceAtLeast(0L)
         val discountAmount = rawDiscountAmount.coerceAtMost(subtotal)
-        val taxableBase = (subtotal - discountAmount).coerceAtLeast(0L) 
+        val taxableBase = (subtotal - discountAmount).coerceAtLeast(0L)
         val tax = (taxableBase * taxRate).roundToRupiah()
         val total = taxableBase + tax
         val change = paid - total
@@ -123,11 +135,13 @@ class TransactionRepository(
         }
         return CheckoutResult(transaction, items)
     }
+
     suspend fun loadReceipt(invoiceId: String): CheckoutResult? {
         val tx = transactionDao.getById(invoiceId) ?: return null
         val items = transactionDao.getItems(invoiceId)
         return CheckoutResult(tx, items)
     }
+
     suspend fun voidTransaction(invoiceId: String): VoidOutcome {
         val tx = transactionDao.getById(invoiceId) ?: return VoidOutcome.NotFound
         if (tx.isVoid) return VoidOutcome.AlreadyVoided
@@ -161,7 +175,6 @@ class TransactionRepository(
         return VoidOutcome.Success(restoredStockCount = restored, skippedStockCount = skipped)
     }
 
-    // Tambahkan fungsi ini di TransactionRepository.kt
     suspend fun searchGlobalTransactions(query: String): List<TransactionEntity> {
         if (query.isBlank()) return emptyList()
         return transactionDao.searchGlobalTransactions(query.trim())

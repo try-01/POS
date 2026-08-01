@@ -58,6 +58,7 @@ import com.pos.offline.data.local.entity.PaperWidth
 import com.pos.offline.data.local.entity.PrinterConnectionType
 import com.pos.offline.data.local.entity.PrinterEntity
 import com.pos.offline.ui.components.GlassCard
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrinterManagementDialog(
@@ -147,6 +148,7 @@ fun PrinterManagementDialog(
         )
     }
 }
+
 @Composable
 private fun PrinterRow(
     printer: PrinterEntity,
@@ -240,6 +242,7 @@ private fun PrinterRow(
         }
     }
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PrinterFormDialog(viewModel: PrinterViewModel) {
@@ -400,7 +403,7 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
                         "Dimatikan otomatis, printer tidak merespons.",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                        modifier = Modifier.padding(start = 4.dp, top = 2.dp),
                     )
                 }
             }
@@ -425,6 +428,7 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
         },
     )
 }
+
 @Composable
 private fun DeletePrinterConfirmDialog(
     printerLabel: String,
@@ -456,14 +460,17 @@ private fun DeletePrinterConfirmDialog(
         },
     )
 }
+
 private fun printerSubtitle(printer: PrinterEntity): String =
     when (printer.connectionType) {
         PrinterConnectionType.WIFI -> {
             "${printer.wifiIpAddress}:${printer.wifiPort} • ${printer.charPerLine} kar/baris (${printer.paperWidth.label()})"
         }
+
         PrinterConnectionType.BLUETOOTH -> {
             "${printer.bluetoothMacAddress ?: "-"} • ${printer.charPerLine} kar/baris"
         }
+
         PrinterConnectionType.USB -> {
             val vid = printer.usbVendorId
             val pid = printer.usbProductId
@@ -471,11 +478,13 @@ private fun printerSubtitle(printer: PrinterEntity): String =
             "USB $idLabel • ${printer.charPerLine} kar/baris"
         }
     }
+
 private fun PaperWidth.label(): String =
     when (this) {
         PaperWidth.MM_58 -> "58mm"
         PaperWidth.MM_80 -> "80mm"
     }
+
 private fun PrinterConnectionType.icon() =
     when (this) {
         PrinterConnectionType.WIFI -> Icons.Rounded.Wifi
