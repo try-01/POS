@@ -388,7 +388,7 @@ jobs:
 
           chmod +x ./gradlew
 
-          ./assembleRelease --parallel --build-cache --configuration-cache --stacktrace \
+          ./gradlew assembleRelease --parallel --build-cache --configuration-cache --stacktrace \
             -Dorg.gradle.daemon=false \
             2>&1 | tail -30
 
