@@ -74,12 +74,29 @@
 
 
 # =========================================================
-# 4. FASTEXCEL
-#    Sangat ringan, hampir tidak butuh rules khusus
+# 4. FASTEXCEL + AALTO XML
+#
+#    FastExcel Writer: menulis XML langsung (tidak butuh Aalto)
+#    FastExcel Reader: parsing XML via Aalto (WAJIB keep)
+#
+#    Aalto menggunakan ServiceLoader + reflection
+#    untuk inisialisasi XMLInputFactory → harus di-keep
 # =========================================================
 
+# Aalto XML parser (WAJIB untuk import/read .xlsx)
+-keep class com.fasterxml.aalto.** { *; }
+-keep class com.fasterxml.core.** { *; }
+
+# XMLInputFactory ServiceLoader
+-keep class javax.xml.stream.XMLInputFactory { *; }
+-keep class * implements javax.xml.stream.XMLInputFactory { *; }
+-keep class * extends javax.xml.stream.XMLInputFactory { *; }
+
+# FastExcel
 -dontwarn org.dhatim.fastexcel.**
 -dontwarn org.dhatim.fastexcel.reader.**
+-dontwarn com.fasterxml.aalto.**
+-dontwarn com.fasterxml.core.**
 
 
 # =========================================================
@@ -130,6 +147,7 @@
     !static !transient <fields>;
 }
 
+
 # =========================================================
 # 10. DONTWARN
 # =========================================================
@@ -138,12 +156,10 @@
 -dontwarn javax.**
 -dontwarn java.nio.file.**
 -dontwarn java.lang.invoke.**
+-dontwarn java.lang.reflect.AnnotatedType
 
-# FastExcel optional dependencies
+# FastExcel optional compression dependencies
 -dontwarn org.tukaani.xz.**
 -dontwarn org.brotli.dec.**
 -dontwarn org.objectweb.asm.**
 -dontwarn com.github.luben.zstd.**
-
-# Java reflection (Android tidak punya AnnotatedType)
--dontwarn java.lang.reflect.AnnotatedType

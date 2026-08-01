@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.dhatim.fastexcel.Workbook
+import org.dhatim.fastexcel.Worksheet
 import org.dhatim.fastexcel.reader.ReadableWorkbook
 import java.io.IOException
 import java.io.InputStream
@@ -35,25 +36,23 @@ data class ExcelImportResult(
 
 object ExcelManager {
 
-    /**
-     * Batas maksimum baris yang bisa diimport.
-     * Mencegah OOM jika user import file sangat besar.
-     * 50.000 produk sudah sangat banyak untuk POS app.
-     */
     private const val MAX_IMPORT_ROWS = 50_000
-
-    /**
-     * Batas maksimum ukuran file import (50 MB).
-     * File Excel normal untuk data produk biasanya < 5 MB.
-     */
     private const val MAX_IMPORT_FILE_SIZE = 50L * 1024 * 1024
 
-    /**
-     * Header kolom yang diharapkan.
-     */
-    private val EXPECTED_HEADERS = listOf(
-        "SKU", "Barcode", "Nama", "Kategori",
+    private val HEADERS = listOf(
+        "SKU", "Barcode", "Nama Produk", "Kategori",
         "Harga Jual", "Modal", "Stok"
+    )
+
+    // Lebar kolom (karakter)
+    private val COLUMN_WIDTHS = listOf(
+        15.0,  // SKU
+        18.0,  // Barcode
+        30.0,  // Nama Produk
+        20.0,  // Kategori
+        18.0,  // Harga Jual
+        18.0,  // Modal
+        12.0   // Stok
     )
 
     private const val REQUIRED_COLUMN_COUNT = 7
@@ -61,9 +60,9 @@ object ExcelManager {
     fun suggestedExportFileName(): String =
         "produk_${System.currentTimeMillis()}.xlsx"
 
-    // =============================================================
+    // =========================================================
     //  EXPORT
-    // =============================================================
+    // =========================================================
 
     suspend fun exportProducts(
         context: Context,
@@ -71,7 +70,6 @@ object ExcelManager {
         destinationUri: Uri,
     ): ExcelOutcome = withContext(Dispatchers.IO) {
         var outputStream: OutputStream? = null
-
         try {
             outputStream = context.contentResolver.openOutputStream(destinationUri)
                 ?: return@withContext ExcelOutcome.Error(
@@ -79,70 +77,125 @@ object ExcelManager {
                 )
 
             writeWorkbook(outputStream, products)
-
             ExcelOutcome.Success
         } catch (e: Exception) {
             ExcelOutcome.Error(e)
         } finally {
-            // Pastikan stream SELALU ditutup,
-            // bahkan jika Workbook.close() gagal
-            try {
-                outputStream?.close()
-            } catch (_: Exception) {
-                // Abaikan error saat close
-            }
+            try { outputStream?.close() } catch (_: Exception) { }
         }
     }
 
-    /**
-     * Menulis data produk ke workbook.
-     * Menggunakan FastExcel streaming writer → hemat memory.
-     *
-     * FastExcel Workbook TIDAK membuat temp file di disk
-     * (berbeda dengan SXSSFWorkbook POI yang buat temp file).
-     * Data langsung di-flush ke OutputStream.
-     */
     private fun writeWorkbook(
         outputStream: OutputStream,
         products: List<ProductEntity>,
     ) {
-        // Workbook(os, appName, version) → streaming, langsung tulis ke os
-        // .use{} memastikan workbook.close() dipanggil → flush & finalize
         Workbook(outputStream, "POS Offline", "1.0").use { wb ->
             val ws = wb.newWorksheet("Produk")
 
-            // Header
-            EXPECTED_HEADERS.forEachIndexed { col, title ->
-                ws.value(0, col, title)
-                ws.width(col, 20.0)
+            // Setup lebar kolom
+            COLUMN_WIDTHS.forEachIndexed { col, width ->
+                ws.width(col, width)
             }
 
-            // Data
+            // Tulis header dengan formatting
+            writeHeader(wb, ws)
+
+            // Tulis data
             products.forEachIndexed { idx, p ->
-                val row = idx + 1
-                ws.value(row, 0, p.sku)
-                ws.value(row, 1, p.barcode ?: "")
-                ws.value(row, 2, p.name)
-                ws.value(row, 3, p.category)
-                ws.value(row, 4, p.price)
-                ws.value(row, 5, p.cost)
-                ws.value(row, 6, p.stock)
+                writeDataRow(wb, ws, idx + 1, p)
             }
         }
     }
 
-    // =============================================================
+    private fun writeHeader(wb: Workbook, ws: Worksheet) {
+        // Style header: bold, background biru, teks putih
+        val headerStyle = wb.style()
+            .bold()
+            .fontSize(11)
+            .fontColor("FFFFFF")
+            .fillColor("2E75B6")
+            .horizontalAlignment("center")
+            .verticalAlignment("center")
+            .set()
+
+        ws.rowHeight(0, 22.0)
+
+        HEADERS.forEachIndexed { col, title ->
+            ws.value(0, col, title)
+            ws.style(0, col).style(headerStyle).set()
+        }
+    }
+
+    private fun writeDataRow(
+        wb: Workbook,
+        ws: Worksheet,
+        rowIndex: Int,
+        p: ProductEntity,
+    ) {
+        // Style alternating row (zebra)
+        val isEven = rowIndex % 2 == 0
+        val bgColor = if (isEven) "F2F2F2" else "FFFFFF"
+
+        val textStyle = wb.style()
+            .fontSize(10)
+            .fillColor(bgColor)
+            .verticalAlignment("center")
+            .set()
+
+        val numberStyle = wb.style()
+            .fontSize(10)
+            .fillColor(bgColor)
+            .format("#,##0")
+            .horizontalAlignment("right")
+            .verticalAlignment("center")
+            .set()
+
+        val decimalStyle = wb.style()
+            .fontSize(10)
+            .fillColor(bgColor)
+            .format("#,##0.##")
+            .horizontalAlignment("right")
+            .verticalAlignment("center")
+            .set()
+
+        ws.rowHeight(rowIndex, 18.0)
+
+        // Isi data dengan style
+        ws.value(rowIndex, 0, p.sku)
+        ws.style(rowIndex, 0).style(textStyle).set()
+
+        ws.value(rowIndex, 1, p.barcode ?: "")
+        ws.style(rowIndex, 1).style(textStyle).set()
+
+        ws.value(rowIndex, 2, p.name)
+        ws.style(rowIndex, 2).style(textStyle).set()
+
+        ws.value(rowIndex, 3, p.category ?: "")
+        ws.style(rowIndex, 3).style(textStyle).set()
+
+        // Harga & modal sebagai angka (bukan string)
+        // Agar Excel bisa sort/filter/sum
+        ws.value(rowIndex, 4, p.price.toDouble())
+        ws.style(rowIndex, 4).style(numberStyle).set()
+
+        ws.value(rowIndex, 5, p.cost.toDouble())
+        ws.style(rowIndex, 5).style(numberStyle).set()
+
+        // Stok bisa desimal
+        ws.value(rowIndex, 6, p.stock)
+        ws.style(rowIndex, 6).style(decimalStyle).set()
+    }
+
+    // =========================================================
     //  IMPORT
-    // =============================================================
+    // =========================================================
 
     suspend fun importProducts(
         context: Context,
         sourceUri: Uri,
     ): ExcelImportResult = withContext(Dispatchers.IO) {
         var inputStream: InputStream? = null
-
         try {
-            // --- Validasi ukuran file ---
             val fileSize = getFileSize(context, sourceUri)
             if (fileSize > MAX_IMPORT_FILE_SIZE) {
                 val maxMb = MAX_IMPORT_FILE_SIZE / (1024 * 1024)
@@ -165,22 +218,10 @@ object ExcelManager {
                 listOf("Error membaca file: ${e.message}")
             )
         } finally {
-            try {
-                inputStream?.close()
-            } catch (_: Exception) {
-            }
+            try { inputStream?.close() } catch (_: Exception) { }
         }
     }
 
-    /**
-     * Membaca workbook secara streaming (row by row).
-     *
-     * FastExcel ReadableWorkbook menggunakan streaming XML parser,
-     * sehingga TIDAK memuat seluruh file ke RAM.
-     *
-     * Namun hasil (List<ImportedProductRow>) tetap di memory.
-     * Dibatasi MAX_IMPORT_ROWS untuk mencegah OOM.
-     */
     private suspend fun readWorkbook(
         inputStream: InputStream,
     ): ExcelImportResult {
@@ -190,37 +231,35 @@ object ExcelManager {
         ReadableWorkbook(inputStream).use { wb ->
             val sheet = wb.firstSheet
 
-            // Gunakan openStream() untuk streaming read
             sheet.openStream().use { rowStream ->
                 var rowIndex = 0
                 val iterator = rowStream.iterator()
 
                 while (iterator.hasNext()) {
-                    // Dukung coroutine cancellation
                     withContext(Dispatchers.IO) { ensureActive() }
 
                     val row = iterator.next()
 
-                    // Baris pertama = header, validasi lalu skip
                     if (rowIndex == 0) {
                         val headerError = validateHeader(row)
                         if (headerError != null) {
-                            return ExcelImportResult(emptyList(), listOf(headerError))
+                            return ExcelImportResult(
+                                emptyList(),
+                                listOf(headerError)
+                            )
                         }
                         rowIndex++
                         continue
                     }
 
-                    // Cek batas maksimum
                     if (rows.size >= MAX_IMPORT_ROWS) {
                         errors.add(
-                            "Import dibatasi maksimal $MAX_IMPORT_ROWS baris. " +
+                            "Import dibatasi $MAX_IMPORT_ROWS baris. " +
                             "Sisa baris diabaikan."
                         )
                         break
                     }
 
-                    // Parse row
                     val parsed = parseRow(row, rowIndex)
                     if (parsed != null) {
                         parsed.first?.let { rows.add(it) }
@@ -232,35 +271,22 @@ object ExcelManager {
             }
         }
 
-        // Trim ArrayList ke ukuran aktual → lepas memory berlebih
         rows.trimToSize()
-
         return ExcelImportResult(rows, errors)
     }
 
-    /**
-     * Validasi header row.
-     * Return null jika valid, error message jika tidak.
-     */
     private fun validateHeader(
         row: org.dhatim.fastexcel.reader.Row,
     ): String? {
-        val cellCount = row.cellCount
-        if (cellCount < REQUIRED_COLUMN_COUNT) {
+        if (row.cellCount < REQUIRED_COLUMN_COUNT) {
             return "Format file tidak valid: " +
-                   "dibutuhkan minimal $REQUIRED_COLUMN_COUNT kolom, " +
-                   "ditemukan $cellCount kolom. " +
-                   "Kolom yang diharapkan: ${EXPECTED_HEADERS.joinToString(", ")}"
+                   "butuh $REQUIRED_COLUMN_COUNT kolom, " +
+                   "ditemukan ${row.cellCount} kolom. " +
+                   "Kolom: ${HEADERS.joinToString(", ")}"
         }
         return null
     }
 
-    /**
-     * Parse satu baris data.
-     * Return Pair(data, null) jika sukses.
-     * Return Pair(null, errorMessage) jika gagal.
-     * Return null jika baris kosong (skip).
-     */
     private fun parseRow(
         row: org.dhatim.fastexcel.reader.Row,
         rowIndex: Int,
@@ -268,33 +294,36 @@ object ExcelManager {
         fun cell(c: Int): String =
             row.getCellAsString(c).orElse("").trim()
 
-        // Skip baris kosong
-        val allBlank = (0 until REQUIRED_COLUMN_COUNT).all { cell(it).isBlank() }
+        val allBlank = (0 until REQUIRED_COLUMN_COUNT).all {
+            cell(it).isBlank()
+        }
         if (allBlank) return null
 
         return try {
-            val product = ImportedProductRow(
-                sku = cell(0).also {
-                    require(it.isNotBlank()) { "SKU kosong" }
-                },
-                barcode = cell(1).ifBlank { null },
-                name = cell(2).also {
-                    require(it.isNotBlank()) { "Nama kosong" }
-                },
-                category = cell(3).ifBlank { null },
-                price = parseCurrency(cell(4), "Harga"),
-                cost = parseCurrency(cell(5), "Modal"),
-                stock = parseQty(cell(6), "Stok"),
+            Pair(
+                ImportedProductRow(
+                    sku = cell(0).also {
+                        require(it.isNotBlank()) { "SKU kosong" }
+                    },
+                    barcode = cell(1).ifBlank { null },
+                    name = cell(2).also {
+                        require(it.isNotBlank()) { "Nama kosong" }
+                    },
+                    category = cell(3).ifBlank { null },
+                    price = parseCurrency(cell(4), "Harga"),
+                    cost = parseCurrency(cell(5), "Modal"),
+                    stock = parseQty(cell(6), "Stok"),
+                ),
+                null
             )
-            Pair(product, null)
         } catch (e: Exception) {
             Pair(null, "Baris ${rowIndex + 1}: ${e.message}")
         }
     }
 
-    // =============================================================
+    // =========================================================
     //  NUMBER PARSING
-    // =============================================================
+    // =========================================================
 
     private fun parseCurrency(s: String, field: String): Long {
         val value = parseFlexibleNumber(s)
@@ -310,10 +339,6 @@ object ExcelManager {
         return value
     }
 
-    /**
-     * Parse angka dengan format fleksibel.
-     * Support: 1000, 1.000, 1,000, 1.000,50, 1,000.50, dll.
-     */
     private fun parseFlexibleNumber(raw: String): Double? {
         val cleaned = raw.trim().filter {
             it.isDigit() || it == '.' || it == ',' || it == '-'
@@ -327,7 +352,7 @@ object ExcelManager {
         val hasDot = body.contains('.')
         val hasComma = body.contains(',')
 
-        val normalized: String = when {
+        val normalized = when {
             hasDot && hasComma -> {
                 val lastDot = body.lastIndexOf('.')
                 val lastComma = body.lastIndexOf(',')
@@ -339,18 +364,14 @@ object ExcelManager {
             }
             hasDot -> {
                 val dotCount = body.count { it == '.' }
-                val lastDot = body.lastIndexOf('.')
-                val digitsAfter = body.length - lastDot - 1
+                val digitsAfter = body.length - body.lastIndexOf('.') - 1
                 if (dotCount > 1 || digitsAfter == 3) {
                     body.replace(".", "")
-                } else {
-                    body
-                }
+                } else body
             }
             hasComma -> {
                 val commaCount = body.count { it == ',' }
-                val lastComma = body.lastIndexOf(',')
-                val digitsAfter = body.length - lastComma - 1
+                val digitsAfter = body.length - body.lastIndexOf(',') - 1
                 if (commaCount > 1 || digitsAfter == 3) {
                     body.replace(",", "")
                 } else {
@@ -364,19 +385,14 @@ object ExcelManager {
         return if (negative) -value else value
     }
 
-    // =============================================================
+    // =========================================================
     //  UTILITY
-    // =============================================================
+    // =========================================================
 
-    /**
-     * Mendapatkan ukuran file dari Uri.
-     * Return -1 jika tidak bisa ditentukan.
-     */
     private fun getFileSize(context: Context, uri: Uri): Long {
         return try {
-            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use {
-                it.length
-            } ?: -1L
+            context.contentResolver.openAssetFileDescriptor(uri, "r")
+                ?.use { it.length } ?: -1L
         } catch (_: Exception) {
             -1L
         }
