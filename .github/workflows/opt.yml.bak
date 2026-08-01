@@ -1,0 +1,506 @@
+# ============================================================
+#  🚀 POS Offline — Code Optimizer & Builder
+#
+#  Workflow:
+#  1. Hapus semua komentar Kotlin
+#  2. Hapus debug Log/println statements
+#  3. Format kode dengan ktlint
+#  4. Static analysis dengan detekt (auto-correct)
+#  5. Minify XML resources
+#  6. Build release APK (R8 full shrinking)
+#  7. Analisa ukuran APK
+#  8. Upload artifacts (cleaned source + APK)
+# ============================================================
+
+name: 🚀 Optimize & Build POS Offline
+
+on:
+  workflow_dispatch:
+    inputs:
+      remove_comments:
+        description: "Hapus semua komentar Kotlin"
+        default: true
+        type: boolean
+
+      remove_logs:
+        description: "Hapus Log/println statements"
+        default: true
+        type: boolean
+
+      format_ktlint:
+        description: "Format kode dengan ktlint"
+        default: true
+        type: boolean
+
+      run_detekt:
+        description: "Jalankan detekt auto-correct"
+        default: true
+        type: boolean
+
+      minify_xml:
+        description: "Minify XML resources"
+        default: true
+        type: boolean
+
+      build_apk:
+        description: "Build release APK"
+        default: true
+        type: boolean
+
+      upload_source:
+        description: "Upload cleaned source ke artifacts"
+        default: true
+        type: boolean
+
+jobs:
+  optimize-and-build:
+    name: 🚀 Optimize & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ============================================
+      #  SETUP
+      # ============================================
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: ☕ Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: 📊 Pre-Optimization Stats
+        run: |
+          echo "╔════════════════════════════════════════╗"
+          echo "║  📊 STATISTIK SEBELUM OPTIMASI         ║"
+          echo "╚════════════════════════════════════════╝"
+          echo ""
+
+          KT_FILES=$(find app/src -name "*.kt" -o -name "*.kts" | \
+                     grep -v '/build/' | wc -l)
+          KT_LINES=$(find app/src -name "*.kt" -o -name "*.kts" | \
+                     grep -v '/build/' | xargs wc -l 2>/dev/null | \
+                     tail -1 | awk '{print $1}')
+          XML_FILES=$(find app/src -name "*.xml" | wc -l)
+
+          echo "  File Kotlin : $KT_FILES"
+          echo "  Total baris : $KT_LINES"
+          echo "  File XML    : $XML_FILES"
+          echo ""
+
+      # ============================================
+      #  STEP 1: HAPUS KOMENTAR
+      # ============================================
+      - name: "🗑️ Step 1/6: Remove All Comments"
+        if: ${{ inputs.remove_comments }}
+        run: |
+          cat > /tmp/remove_comments.py << 'PYSCRIPT'
+          import os, sys
+
+          def remove_comments(src):
+              r, i, n = [], 0, len(src)
+              while i < n:
+                  if src[i:i+3] == '"""':
+                      r.append('"""'); i += 3
+                      while i < n:
+                          if src[i:i+3] == '"""': r.append('"""'); i += 3; break
+                          r.append(src[i]); i += 1
+                      continue
+                  if src[i] == '"':
+                      r.append('"'); i += 1
+                      while i < n:
+                          if src[i] == '\\' and i+1 < n: r.append(src[i:i+2]); i += 2
+                          elif src[i] == '"': r.append('"'); i += 1; break
+                          else: r.append(src[i]); i += 1
+                      continue
+                  if src[i] == "'":
+                      r.append("'"); i += 1
+                      while i < n:
+                          if src[i] == '\\' and i+1 < n: r.append(src[i:i+2]); i += 2
+                          elif src[i] == "'": r.append("'"); i += 1; break
+                          else: r.append(src[i]); i += 1
+                      continue
+                  if src[i:i+2] == '/*':
+                      d = 1; i += 2
+                      while i < n and d > 0:
+                          if src[i:i+2] == '/*': d += 1; i += 2
+                          elif src[i:i+2] == '*/': d -= 1; i += 2
+                          else: i += 1
+                      continue
+                  if src[i:i+2] == '//':
+                      while i < n and src[i] != '\n': i += 1
+                      continue
+                  r.append(src[i]); i += 1
+              return ''.join(r)
+
+          def clean(code):
+              lines = [l.rstrip() for l in code.split('\n')]
+              out, pe = [], False
+              for l in lines:
+                  e = l.strip() == ''
+                  if e:
+                      if not pe: out.append(l)
+                      pe = True
+                  else: out.append(l); pe = False
+              while out and out[0].strip() == '': out.pop(0)
+              while out and out[-1].strip() == '': out.pop()
+              return '\n'.join(out) + '\n' if out else ''
+
+          target = sys.argv[1] if len(sys.argv) > 1 else "app/src"
+          total_saved, count = 0, 0
+          skip = {'build', '.gradle', '.idea', '.git', 'schemas'}
+
+          for root, dirs, files in os.walk(target):
+              dirs[:] = [d for d in dirs if d not in skip]
+              for f in files:
+                  if f.endswith(('.kt', '.kts')):
+                      p = os.path.join(root, f)
+                      with open(p, 'r') as fh: orig = fh.read()
+                      result = clean(remove_comments(orig))
+                      saved = len(orig) - len(result)
+                      if saved > 0:
+                          with open(p, 'w') as fh: fh.write(result)
+                          total_saved += saved; count += 1
+                          print(f"  ✅ {os.path.relpath(p)} (-{saved} bytes)")
+
+          print(f"\n📊 {count} files cleaned, {total_saved:,} bytes saved")
+          PYSCRIPT
+
+          python /tmp/remove_comments.py "app/src"
+
+      # ============================================
+      #  STEP 2: HAPUS LOG STATEMENTS
+      # ============================================
+      - name: "🗑️ Step 2/6: Remove Debug Log Statements"
+        if: ${{ inputs.remove_logs }}
+        run: |
+          cat > /tmp/remove_logs.py << 'PYSCRIPT'
+          import os, sys, re
+
+          PATTERNS = [
+              re.compile(r'^\s*Log\.(v|d|i|w|e|wtf)\s*\('),
+              re.compile(r'^\s*println\s*\('),
+              re.compile(r'^\s*print\s*\('),
+              re.compile(r'^\s*Timber\.(v|d|i|w|e|wtf)\s*\('),
+              re.compile(r'^\s*System\s*\.\s*out\s*\.'),
+          ]
+
+          def remove_logs(content):
+              lines = content.split('\n')
+              out = []
+              removed = 0
+              i = 0
+              while i < len(lines):
+                  line = lines[i]
+                  matched = any(p.match(line) for p in PATTERNS)
+                  if matched:
+                      # Cek apakah statement selesai di baris ini
+                      stmt = line
+                      opens = stmt.count('(') - stmt.count(')')
+                      while opens > 0 and i + 1 < len(lines):
+                          i += 1
+                          stmt += '\n' + lines[i]
+                          opens = stmt.count('(') - stmt.count(')')
+                      removed += 1
+                      i += 1
+                      continue
+                  out.append(line)
+                  i += 1
+              return '\n'.join(out), removed
+
+          target = sys.argv[1] if len(sys.argv) > 1 else "app/src"
+          total = 0
+          skip = {'build', '.gradle', '.idea', '.git', 'test', 'androidTest', 'schemas'}
+
+          for root, dirs, files in os.walk(target):
+              dirs[:] = [d for d in dirs if d not in skip]
+              for f in files:
+                  if f.endswith(('.kt', '.kts')):
+                      p = os.path.join(root, f)
+                      with open(p, 'r') as fh: content = fh.read()
+                      cleaned, removed = remove_logs(content)
+                      if removed > 0:
+                          with open(p, 'w') as fh: fh.write(cleaned)
+                          total += removed
+                          print(f"  ✅ {os.path.relpath(p)}: {removed} log(s)")
+
+          print(f"\n📊 {total} total log statements removed")
+          PYSCRIPT
+
+          python /tmp/remove_logs.py "app/src"
+
+      # ============================================
+      #  STEP 3: FORMAT DENGAN KTLINT
+      # ============================================
+      - name: "🔧 Step 3/6: Format with Ktlint"
+        if: ${{ inputs.format_ktlint }}
+        run: |
+          if [ ! -f "./ktlint" ]; then
+            echo "📥 Downloading ktlint..."
+            curl -sSLO https://github.com/pinterest/ktlint/releases/latest/download/ktlint
+          fi
+          chmod a+x ktlint
+
+          echo "ktlint version: $(./ktlint --version)"
+          echo ""
+          echo "🔧 Formatting Kotlin files..."
+          ./ktlint --format "app/src/**/*.kt" 2>&1 | tail -30 || true
+          echo ""
+          echo "✅ Ktlint format done!"
+
+      # ============================================
+      #  STEP 4: DETEKT AUTO-CORRECT
+      # ============================================
+      - name: "🔍 Step 4/6: Detekt Static Analysis"
+        if: ${{ inputs.run_detekt }}
+        run: |
+          DETEKT_VERSION="1.23.7"
+          echo "📥 Downloading detekt ${DETEKT_VERSION}..."
+          curl -sSLO "https://github.com/detekt/detekt/releases/download/v${DETEKT_VERSION}/detekt-cli-${DETEKT_VERSION}-all.jar"
+
+          # Config fokus pada optimasi & cleanup
+          cat > /tmp/detekt.yml << 'YAML'
+          style:
+            active: true
+            UnusedImports:
+              active: true
+              autoCorrect: true
+            WildcardImport:
+              active: true
+              autoCorrect: true
+            OptionalUnit:
+              active: true
+              autoCorrect: true
+            UnusedPrivateMember:
+              active: true
+            UnusedPrivateClass:
+              active: true
+            UnnecessaryLet:
+              active: true
+            UnnecessaryApply:
+              active: true
+            RedundantVisibilityModifierRule:
+              active: true
+
+          empty-blocks:
+            active: true
+            EmptyFunctionBlock:
+              active: true
+            EmptyCatchBlock:
+              active: true
+            EmptyClassBlock:
+              active: true
+
+          performance:
+            active: true
+            ForEachOnRange:
+              active: true
+            SpreadOperator:
+              active: true
+            UnnecessaryTemporaryInstantiation:
+              active: true
+          YAML
+
+          echo "🔍 Running detekt..."
+          java -jar "detekt-cli-${DETEKT_VERSION}-all.jar" \
+            --input "app/src/main" \
+            --config /tmp/detekt.yml \
+            --auto-correct \
+            2>&1 | tail -20 || true
+
+          rm -f "detekt-cli-${DETEKT_VERSION}-all.jar"
+          echo "✅ Detekt done!"
+
+      # ============================================
+      #  STEP 5: MINIFY XML
+      # ============================================
+      - name: "📄 Step 5/6: Minify XML Resources"
+        if: ${{ inputs.minify_xml }}
+        run: |
+          python3 << 'PYSCRIPT'
+          import os, re
+
+          target = "app/src/main/res"
+          if not os.path.isdir(target):
+              print("⚠️ res/ folder not found, skipping")
+              exit(0)
+
+          saved_total = 0
+          count = 0
+
+          for root, dirs, files in os.walk(target):
+              for f in files:
+                  if f.endswith('.xml'):
+                      p = os.path.join(root, f)
+                      with open(p, 'r') as fh:
+                          orig = fh.read()
+
+                      # Hapus komentar XML
+                      cleaned = re.sub(r'<!--[\s\S]*?-->', '', orig)
+
+                      # Rapikan baris kosong
+                      lines = [l.rstrip() for l in cleaned.split('\n')]
+                      out, prev_empty = [], False
+                      for l in lines:
+                          empty = l.strip() == ''
+                          if empty:
+                              if not prev_empty:
+                                  out.append(l)
+                              prev_empty = True
+                          else:
+                              out.append(l)
+                              prev_empty = False
+
+                      while out and out[0].strip() == '':
+                          out.pop(0)
+                      while out and out[-1].strip() == '':
+                          out.pop()
+
+                      result = '\n'.join(out) + '\n' if out else ''
+                      diff = len(orig) - len(result)
+
+                      if diff > 0:
+                          with open(p, 'w') as fh:
+                              fh.write(result)
+                          saved_total += diff
+                          count += 1
+
+          print(f"📊 {count} XML files minified, {saved_total:,} bytes saved")
+          PYSCRIPT
+
+      # ============================================
+      #  STEP 6: BUILD RELEASE APK
+      # ============================================
+      - name: "🏗️ Step 6/6: Build Release APK"
+        if: ${{ inputs.build_apk }}
+        run: |
+          echo "🏗️ Building release APK with R8 shrinking..."
+          echo ""
+
+          chmod +x ./gradlew
+
+          ./gradlew assembleRelease \
+            --no-daemon \
+            --no-build-cache \
+            -Dorg.gradle.jvmargs="-Xmx2g" \
+            2>&1 | tail -30
+
+          echo ""
+          echo "📦 Release APK(s):"
+          find app/build -name "*.apk" -type f | while read -r apk; do
+            SIZE=$(stat -c%s "$apk" 2>/dev/null || echo "0")
+            MB=$(echo "scale=2; $SIZE / 1048576" | bc 2>/dev/null || echo "?")
+            echo "  📦 $(basename $apk): ${MB} MB ($SIZE bytes)"
+          done
+
+      # ============================================
+      #  POST-PROCESS: STATISTIK
+      # ============================================
+      - name: 📊 Post-Optimization Stats
+        run: |
+          echo ""
+          echo "╔════════════════════════════════════════╗"
+          echo "║  📊 STATISTIK SETELAH OPTIMASI         ║"
+          echo "╚════════════════════════════════════════╝"
+          echo ""
+
+          KT_FILES=$(find app/src -name "*.kt" -o -name "*.kts" | \
+                     grep -v '/build/' | wc -l)
+          KT_LINES=$(find app/src -name "*.kt" -o -name "*.kts" | \
+                     grep -v '/build/' | xargs wc -l 2>/dev/null | \
+                     tail -1 | awk '{print $1}')
+
+          echo "  File Kotlin : $KT_FILES"
+          echo "  Total baris : $KT_LINES"
+          echo ""
+
+          if [ -d "app/build" ]; then
+            echo "  📦 APK files:"
+            find app/build -name "*.apk" -type f | while read -r apk; do
+              SIZE=$(stat -c%s "$apk" 2>/dev/null || echo "0")
+              MB=$(echo "scale=2; $SIZE / 1048576" | bc 2>/dev/null || echo "?")
+              echo "     $(basename $apk): ${MB} MB"
+            done
+          fi
+          echo ""
+
+      # ============================================
+      #  UPLOAD: CLEANED SOURCE CODE
+      # ============================================
+      - name: 📦 Upload Cleaned Source
+        if: ${{ inputs.upload_source }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleaned-source-code
+          path: |
+            app/src/**
+            app/build.gradle.kts
+            app/proguard-rules.pro
+            build.gradle.kts
+            settings.gradle.kts
+            gradle.properties
+            gradle/**
+            gradlew
+            gradlew.bat
+          retention-days: 30
+          compression-level: 9
+
+      # ============================================
+      #  UPLOAD: RELEASE APK
+      # ============================================
+      - name: 📦 Upload Release APK
+        if: ${{ inputs.build_apk }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: |
+            app/build/outputs/apk/release/*.apk
+          retention-days: 30
+          if-no-files-found: warn
+
+      # ============================================
+      #  RINGKASAN AKHIR
+      # ============================================
+      - name: 📋 Final Summary
+        run: |
+          echo ""
+          echo "╔════════════════════════════════════════════════╗"
+          echo "║                                                ║"
+          echo "║   ✅  SEMUA PROSES SELESAI!                   ║"
+          echo "║                                                ║"
+          echo "╠════════════════════════════════════════════════╣"
+          echo "║                                                ║"
+          echo "║   Yang dilakukan:                              ║"
+
+          if [ "${{ inputs.remove_comments }}" = "true" ]; then
+          echo "║   ✅ Komentar Kotlin dihapus                  ║"
+          fi
+          if [ "${{ inputs.remove_logs }}" = "true" ]; then
+          echo "║   ✅ Log/println statements dihapus            ║"
+          fi
+          if [ "${{ inputs.format_ktlint }}" = "true" ]; then
+          echo "║   ✅ Kode diformat dengan ktlint               ║"
+          fi
+          if [ "${{ inputs.run_detekt }}" = "true" ]; then
+          echo "║   ✅ Detekt auto-correct dijalankan            ║"
+          fi
+          if [ "${{ inputs.minify_xml }}" = "true" ]; then
+          echo "║   ✅ XML resources di-minify                   ║"
+          fi
+          if [ "${{ inputs.build_apk }}" = "true" ]; then
+          echo "║   ✅ Release APK di-build (R8 shrinking)       ║"
+          fi
+
+          echo "║                                                ║"
+          echo "║   📥 Download dari tab Artifacts               ║"
+          echo "║                                                ║"
+          echo "╚════════════════════════════════════════════════╝"

@@ -2,8 +2,8 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose") // Kotlin 2.0+ Compose compiler plugin
-    id("com.google.devtools.ksp")             // Codegen Room cepat & hemat
-    id("androidx.room")                       // Export skema JSON otomatis
+    id("com.google.devtools.ksp")             // codegen Room yang cepat & hemat
+    id("androidx.room")                       // export skema JSON
 }
 
 room {
@@ -20,6 +20,7 @@ android {
         targetSdk = 36
         versionCode = 2
         versionName = "1.0.0.1"
+        vectorDrawables { useSupportLibrary = true }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -27,7 +28,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
-            isShrinkResources = true
+            isShrinkResources = true // Membuang gambar/ikon yang tidak dipakai
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -48,6 +49,7 @@ android {
         getByName("debug").assets.srcDir("$projectDir/schemas")
     }
 
+    // OPTIMALISASI: Membuang file metadata/lisensi raksasa bawaan Apache POI & library lain
     packaging {
         resources { 
             excludes += setOf(
@@ -65,6 +67,15 @@ android {
             )
         }
     }
+}
+
+afterEvaluate {
+    tasks.matching { it.name == "mergeDebugAssets" || it.name == "mergeDebugAndroidTestAssets" }
+        .configureEach { dependsOn("kspDebugKotlin") }
+    
+    val schemaGenTasks = tasks.matching { it.name.matches(Regex("ksp\\w*Kotlin")) }
+    tasks.matching { it.name.contains("MergeAssets", ignoreCase = true) }
+        .configureEach { dependsOn(schemaGenTasks) }
 }
 
 dependencies {
@@ -97,6 +108,7 @@ dependencies {
 
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
+    // Apache POI (Library berat, ProGuard akan membuang bagian Word/PPT-nya)
     implementation("org.apache.poi:poi:5.5.1")
     implementation("org.apache.poi:poi-ooxml:5.5.1")
 

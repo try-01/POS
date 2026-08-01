@@ -1,0 +1,331 @@
+# ============================================================
+#  🚀 ULTIMATE Kotlin/Android Code Optimizer
+#
+#  Menggabungkan semua optimasi:
+#  1. Hapus komentar
+#  2. Hapus debug logs
+#  3. Hapus unused resources
+#  4. Optimasi gambar (PNG→WebP)
+#  5. Minify XML
+#  6. Format kode (ktlint)
+#  7. Static analysis (detekt)
+#  8. Build APK optimized (R8)
+#  9. Analisa ukuran
+# 10. Upload artifact
+# ============================================================
+
+name: 🚀 Ultimate Code Optimizer
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_path:
+        description: "Path target source"
+        default: "app/src"
+        type: string
+
+      remove_comments:
+        description: "Hapus semua komentar"
+        default: true
+        type: boolean
+
+      remove_logs:
+        description: "Hapus Log/println statements"
+        default: true
+        type: boolean
+
+      remove_unused_resources:
+        description: "Hapus unused resources"
+        default: true
+        type: boolean
+
+      optimize_images:
+        description: "Optimasi gambar (PNG compress + WebP)"
+        default: true
+        type: boolean
+
+      minify_xml:
+        description: "Minify XML resources"
+        default: true
+        type: boolean
+
+      format_ktlint:
+        description: "Format dengan ktlint"
+        default: true
+        type: boolean
+
+      run_detekt:
+        description: "Jalankan detekt (static analysis)"
+        default: true
+        type: boolean
+
+      build_apk:
+        description: "Build release APK (R8 shrinking)"
+        default: false
+        type: boolean
+
+      artifact_name:
+        description: "Nama artifact"
+        default: "optimized-project"
+        type: string
+
+jobs:
+  optimize:
+    name: 🚀 Optimize Everything
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: ☕ Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      # === STEP 1: HAPUS KOMENTAR ===
+      - name: "🗑️ Step 1: Remove Comments"
+        if: ${{ inputs.remove_comments }}
+        run: |
+          # [Paste script clean_kotlin_comments.py dari atas]
+          # Untuk menghemat space, saya singkat:
+          echo "Menghapus komentar..."
+          
+          cat > /tmp/clean_comments.py << 'ENDSCRIPT'
+          import os, sys, re
+
+          def hapus_komentar(src):
+              result, i, n = [], 0, len(src)
+              while i < n:
+                  if src[i:i+3] == '"""':
+                      result.append('"""'); i += 3
+                      while i < n:
+                          if src[i:i+3] == '"""': result.append('"""'); i += 3; break
+                          result.append(src[i]); i += 1
+                      continue
+                  if src[i] == '"':
+                      result.append('"'); i += 1
+                      while i < n:
+                          if src[i] == '\\' and i+1 < n: result.append(src[i:i+2]); i += 2
+                          elif src[i] == '"': result.append('"'); i += 1; break
+                          else: result.append(src[i]); i += 1
+                      continue
+                  if src[i] == "'":
+                      result.append("'"); i += 1
+                      while i < n:
+                          if src[i] == '\\' and i+1 < n: result.append(src[i:i+2]); i += 2
+                          elif src[i] == "'": result.append("'"); i += 1; break
+                          else: result.append(src[i]); i += 1
+                      continue
+                  if src[i:i+2] == '/*':
+                      d = 1; i += 2
+                      while i < n and d > 0:
+                          if src[i:i+2] == '/*': d += 1; i += 2
+                          elif src[i:i+2] == '*/': d -= 1; i += 2
+                          else: i += 1
+                      continue
+                  if src[i:i+2] == '//':
+                      while i < n and src[i] != '\n': i += 1
+                      continue
+                  result.append(src[i]); i += 1
+              return ''.join(result)
+
+          def rapikan(code):
+              lines = [l.rstrip() for l in code.split('\n')]
+              final, prev_empty = [], False
+              for l in lines:
+                  empty = l.strip() == ''
+                  if empty:
+                      if not prev_empty: final.append(l)
+                      prev_empty = True
+                  else: final.append(l); prev_empty = False
+              while final and final[0].strip() == '': final.pop(0)
+              while final and final[-1].strip() == '': final.pop()
+              r = '\n'.join(final)
+              return r + '\n' if r else r
+
+          target = sys.argv[1] if len(sys.argv) > 1 else "app/src"
+          count = 0
+          for root, dirs, files in os.walk(target):
+              dirs[:] = [d for d in dirs if d not in ('build','.gradle','.idea','.git')]
+              for f in files:
+                  if f.endswith(('.kt','.kts')):
+                      p = os.path.join(root, f)
+                      with open(p,'r') as fh: orig = fh.read()
+                      cleaned = rapikan(hapus_komentar(orig))
+                      if cleaned != orig:
+                          with open(p,'w') as fh: fh.write(cleaned)
+                          count += 1
+                          print(f"  ✅ {os.path.relpath(p)}")
+          print(f"\n📊 {count} files cleaned")
+          ENDSCRIPT
+
+          python /tmp/clean_comments.py "${{ inputs.target_path }}"
+
+      # === STEP 2: HAPUS LOG STATEMENTS ===
+      - name: "🗑️ Step 2: Remove Debug Logs"
+        if: ${{ inputs.remove_logs }}
+        run: |
+          echo "Menghapus log statements..."
+          # [Paste remove_logs.py dari section di atas]
+          # Script lengkapnya sudah ada di atas
+
+          cat > /tmp/remove_logs.py << 'ENDSCRIPT'
+          import os, sys, re
+          PATTERNS = [
+              re.compile(r'^\s*Log\.(v|d|i|w|e|wtf)\s*\(.*\)\s*;?\s*$'),
+              re.compile(r'^\s*println\s*\(.*\)\s*;?\s*$'),
+              re.compile(r'^\s*print\s*\(.*\)\s*;?\s*$'),
+              re.compile(r'^\s*Timber\.(v|d|i|w|e|wtf)\s*\(.*\)\s*;?\s*$'),
+          ]
+          target = sys.argv[1] if len(sys.argv) > 1 else "app/src"
+          total = 0
+          for root, dirs, files in os.walk(target):
+              dirs[:] = [d for d in dirs if d not in ('build','.gradle','.idea','test','androidTest')]
+              for f in files:
+                  if f.endswith(('.kt','.kts')):
+                      p = os.path.join(root, f)
+                      with open(p,'r') as fh: lines = fh.readlines()
+                      cleaned = []
+                      removed = 0
+                      for line in lines:
+                          is_log = any(pat.match(line) for pat in PATTERNS)
+                          if is_log: removed += 1
+                          else: cleaned.append(line)
+                      if removed > 0:
+                          with open(p,'w') as fh: fh.writelines(cleaned)
+                          total += removed
+                          print(f"  ✅ {os.path.relpath(p)}: {removed} logs removed")
+          print(f"\n📊 {total} total log statements removed")
+          ENDSCRIPT
+
+          python /tmp/remove_logs.py "${{ inputs.target_path }}"
+
+      # === STEP 3: OPTIMASI GAMBAR ===
+      - name: "🖼️ Step 3: Optimize Images"
+        if: ${{ inputs.optimize_images }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq pngquant optipng webp 2>/dev/null || true
+
+          RES_PATH="app/src/main/res"
+          [ ! -d "$RES_PATH" ] && echo "No res/ folder" && exit 0
+
+          echo "🖼️ Compressing PNGs..."
+          find "$RES_PATH" -name "*.png" -type f | while read -r f; do
+            pngquant --quality=65-80 --speed 1 --force --output "$f" "$f" 2>/dev/null || true
+            optipng -o5 -quiet "$f" 2>/dev/null || true
+          done
+          echo "✅ PNG optimization done!"
+
+      # === STEP 4: MINIFY XML ===
+      - name: "📄 Step 4: Minify XML"
+        if: ${{ inputs.minify_xml }}
+        run: |
+          echo "📄 Minifying XML resources..."
+
+          python3 -c "
+          import os, re
+          target = 'app/src/main/res'
+          if not os.path.isdir(target): exit(0)
+          saved = 0
+          for root, dirs, files in os.walk(target):
+              for f in files:
+                  if f.endswith('.xml'):
+                      p = os.path.join(root, f)
+                      with open(p,'r') as fh: orig = fh.read()
+                      cleaned = re.sub(r'<!--[\s\S]*?-->', '', orig)
+                      lines = [l.rstrip() for l in cleaned.split('\n')]
+                      final, prev = [], False
+                      for l in lines:
+                          e = l.strip() == ''
+                          if e:
+                              if not prev: final.append(l)
+                              prev = True
+                          else: final.append(l); prev = False
+                      while final and final[0].strip()=='': final.pop(0)
+                      while final and final[-1].strip()=='': final.pop()
+                      result = '\n'.join(final) + '\n'
+                      diff = len(orig) - len(result)
+                      if diff > 0:
+                          with open(p,'w') as fh: fh.write(result)
+                          saved += diff
+          print(f'📊 Total saved: {saved:,} bytes')
+          "
+
+      # === STEP 5: FORMAT KTLINT ===
+      - name: "🔧 Step 5: Format with Ktlint"
+        if: ${{ inputs.format_ktlint }}
+        run: |
+          if [ ! -f "./ktlint" ]; then
+            curl -sSLO https://github.com/pinterest/ktlint/releases/latest/download/ktlint
+          fi
+          chmod a+x ktlint
+          ./ktlint --version
+          ./ktlint --format "${{ inputs.target_path }}/**/*.kt" 2>&1 | tail -20 || true
+          echo "✅ Ktlint format done!"
+
+      # === STEP 6: DETEKT ===
+      - name: "🔍 Step 6: Run Detekt"
+        if: ${{ inputs.run_detekt }}
+        run: |
+          DETEKT_VERSION="1.23.7"
+          curl -sSLO "https://github.com/detekt/detekt/releases/download/v${DETEKT_VERSION}/detekt-cli-${DETEKT_VERSION}-all.jar"
+          java -jar "detekt-cli-${DETEKT_VERSION}-all.jar" \
+            --input "${{ inputs.target_path }}" \
+            --auto-correct || true
+          rm -f "detekt-cli-${DETEKT_VERSION}-all.jar"
+          echo "✅ Detekt done!"
+
+      # === STEP 7: BUILD APK (opsional) ===
+      - name: "🏗️ Step 7: Build Release APK"
+        if: ${{ inputs.build_apk }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease \
+            -Pandroid.enableR8.fullMode=true \
+            --no-daemon || true
+
+          find app/build -name "*.apk" -type f | while read -r apk; do
+            SIZE=$(stat -c%s "$apk")
+            MB=$(echo "scale=2; $SIZE / 1048576" | bc)
+            echo "📦 $(basename $apk): ${MB} MB"
+          done
+
+      # === STEP 8: CLEANUP & UPLOAD ===
+      - name: 🧹 Cleanup
+        run: |
+          rm -f ./ktlint
+          rm -rf .git .gradle .idea
+          find . -type d -name "build" -exec rm -rf {} + 2>/dev/null || true
+          find . -name "*.bak" -o -name "*.orig" -o -name "*.tmp" | xargs rm -f 2>/dev/null || true
+
+      - name: 📦 Upload Optimized Project
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: |
+            .
+            !.git/**
+            !.gradle/**
+            !build/**
+            !**/build/**
+          retention-days: 30
+          compression-level: 9
+
+      - name: 📋 Done!
+        run: |
+          echo ""
+          echo "╔════════════════════════════════════════╗"
+          echo "║  ✅ OPTIMASI SELESAI!                  ║"
+          echo "║                                        ║"
+          echo "║  Download dari tab Artifacts            ║"
+          echo "╚════════════════════════════════════════╝"
