@@ -55,22 +55,12 @@ object ExcelManager {
     )
 
     private val COLUMN_WIDTHS = listOf(
-        6.0,   // No
-        15.0,  // SKU
-        18.0,  // Barcode
-        32.0,  // Nama Produk
-        18.0,  // Kategori
-        18.0,  // Harga Jual
-        18.0,  // Modal
-        12.0,  // Stok
-        14.0,  // Margin
-        20.0   // Nilai Stok
+        6.0, 15.0, 18.0, 32.0, 18.0,
+        18.0, 18.0, 12.0, 14.0, 20.0
     )
 
-    // Import hanya butuh 7 kolom (No, Margin, Nilai Stok adalah tambahan export)
     private const val REQUIRED_IMPORT_COLUMNS = 7
 
-    // Warna
     private const val COLOR_HEADER_BG = "1F4E79"
     private const val COLOR_HEADER_TEXT = "FFFFFF"
     private const val COLOR_TITLE_BG = "2E75B6"
@@ -119,21 +109,15 @@ object ExcelManager {
         Workbook(outputStream, "POS Offline", "1.0").use { wb ->
             val ws = wb.newWorksheet("Produk")
 
-            // Lebar kolom
             COLUMN_WIDTHS.forEachIndexed { col, width ->
                 ws.width(col, width)
             }
 
-            // Freeze pane: baris 0-1 (title + header) tetap terlihat saat scroll
             ws.freezePane(0, 2)
 
-            // Baris 0: Judul
-            writeTitleRow(wb, ws, products.size)
+            writeTitleRow(ws, products.size)
+            writeHeaderRow(ws)
 
-            // Baris 1: Header kolom
-            writeHeaderRow(wb, ws)
-
-            // Baris 2+: Data produk
             var totalPrice = 0L
             var totalCost = 0L
             var totalStock = 0.0
@@ -146,14 +130,12 @@ object ExcelManager {
                 totalCost += p.cost
                 totalStock += p.stock
                 totalStockValue += stockValue
-
-                writeDataRow(wb, ws, idx + 2, idx + 1, p, margin, stockValue)
+                writeDataRow(ws, idx + 2, idx + 1, p, margin, stockValue)
             }
 
-            // Baris terakhir: Summary
             val summaryRow = products.size + 2
             writeSummaryRow(
-                wb, ws, summaryRow, products.size,
+                ws, summaryRow, products.size,
                 totalPrice, totalCost, totalStock, totalStockValue
             )
         }
@@ -163,31 +145,20 @@ object ExcelManager {
     //  TITLE ROW
     // -----------------------------------------------------------------
 
-    private fun writeTitleRow(wb: Workbook, ws: Worksheet, productCount: Int) {
-        val titleStyle = wb.style()
-            .bold()
-            .fontSize(14)
-            .fontColor(COLOR_TITLE_TEXT)
-            .fillColor(COLOR_TITLE_BG)
-            .horizontalAlignment("left")
-            .verticalAlignment("center")
-            .set()
-
+    private fun writeTitleRow(ws: Worksheet, productCount: Int) {
         ws.rowHeight(0, 30.0)
-
         val title = "Data Produk — Total: $productCount produk"
         ws.value(0, 0, title)
 
-        // Apply style ke semua kolom di title row
         for (col in HEADERS.indices) {
-            if (col == 0) {
-                ws.style(0, col).style(titleStyle).set()
-            } else {
-                // Kolom lain juga diberi background agar rapi
-                ws.style(0, col)
-                    .fillColor(COLOR_TITLE_BG)
-                    .set()
-            }
+            ws.style(0, col)
+                .bold()
+                .fontSize(if (col == 0) 14 else 11)
+                .fontColor(COLOR_TITLE_TEXT)
+                .fillColor(COLOR_TITLE_BG)
+                .horizontalAlignment(if (col == 0) "left" else "center")
+                .verticalAlignment("center")
+                .set()
         }
     }
 
@@ -195,23 +166,21 @@ object ExcelManager {
     //  HEADER ROW
     // -----------------------------------------------------------------
 
-    private fun writeHeaderRow(wb: Workbook, ws: Worksheet) {
-        val headerStyle = wb.style()
-            .bold()
-            .fontSize(11)
-            .fontColor(COLOR_HEADER_TEXT)
-            .fillColor(COLOR_HEADER_BG)
-            .horizontalAlignment("center")
-            .verticalAlignment("center")
-            .borderStyle(BorderSide.BOTTOM, BorderStyle.MEDIUM)
-            .borderColor(BorderSide.BOTTOM, COLOR_BORDER)
-            .set()
-
+    private fun writeHeaderRow(ws: Worksheet) {
         ws.rowHeight(1, 24.0)
 
         HEADERS.forEachIndexed { col, title ->
             ws.value(1, col, title)
-            ws.style(1, col).style(headerStyle).set()
+            ws.style(1, col)
+                .bold()
+                .fontSize(11)
+                .fontColor(COLOR_HEADER_TEXT)
+                .fillColor(COLOR_HEADER_BG)
+                .horizontalAlignment("center")
+                .verticalAlignment("center")
+                .borderStyle(BorderSide.BOTTOM, BorderStyle.MEDIUM)
+                .borderColor(BorderSide.BOTTOM, COLOR_BORDER)
+                .set()
         }
     }
 
@@ -220,7 +189,6 @@ object ExcelManager {
     // -----------------------------------------------------------------
 
     private fun writeDataRow(
-        wb: Workbook,
         ws: Worksheet,
         rowIndex: Int,
         number: Int,
@@ -230,9 +198,13 @@ object ExcelManager {
     ) {
         val isEven = number % 2 == 0
         val bgColor = if (isEven) COLOR_ROW_EVEN else COLOR_ROW_ODD
+        val marginColor = if (margin >= 0) COLOR_POSITIVE else COLOR_NEGATIVE
 
-        // --- Style: nomor (center) ---
-        val numberStyle = wb.style()
+        ws.rowHeight(rowIndex, 20.0)
+
+        // Col 0: No
+        ws.value(rowIndex, 0, number)
+        ws.style(rowIndex, 0)
             .fontSize(10)
             .fillColor(bgColor)
             .horizontalAlignment("center")
@@ -241,17 +213,17 @@ object ExcelManager {
             .borderColor(BorderSide.BOTTOM, COLOR_BORDER)
             .set()
 
-        // --- Style: teks biasa (left) ---
-        val textStyle = wb.style()
-            .fontSize(10)
-            .fillColor(bgColor)
-            .verticalAlignment("center")
-            .borderStyle(BorderSide.BOTTOM, BorderStyle.THIN)
-            .borderColor(BorderSide.BOTTOM, COLOR_BORDER)
-            .set()
+        // Col 1: SKU
+        ws.value(rowIndex, 1, p.sku)
+        applyTextStyle(ws, rowIndex, 1, bgColor)
 
-        // --- Style: teks bold (nama produk) ---
-        val nameStyle = wb.style()
+        // Col 2: Barcode
+        ws.value(rowIndex, 2, p.barcode ?: "")
+        applyTextStyle(ws, rowIndex, 2, bgColor)
+
+        // Col 3: Nama Produk (bold)
+        ws.value(rowIndex, 3, p.name)
+        ws.style(rowIndex, 3)
             .bold()
             .fontSize(10)
             .fillColor(bgColor)
@@ -260,19 +232,21 @@ object ExcelManager {
             .borderColor(BorderSide.BOTTOM, COLOR_BORDER)
             .set()
 
-        // --- Style: currency (right, format ribuan) ---
-        val currencyStyle = wb.style()
-            .fontSize(10)
-            .fillColor(bgColor)
-            .format("#,##0")
-            .horizontalAlignment("right")
-            .verticalAlignment("center")
-            .borderStyle(BorderSide.BOTTOM, BorderStyle.THIN)
-            .borderColor(BorderSide.BOTTOM, COLOR_BORDER)
-            .set()
+        // Col 4: Kategori
+        ws.value(rowIndex, 4, p.category ?: "")
+        applyTextStyle(ws, rowIndex, 4, bgColor)
 
-        // --- Style: stok (right, desimal) ---
-        val stockStyle = wb.style()
+        // Col 5: Harga Jual
+        ws.value(rowIndex, 5, p.price.toDouble())
+        applyCurrencyStyle(ws, rowIndex, 5, bgColor)
+
+        // Col 6: Modal
+        ws.value(rowIndex, 6, p.cost.toDouble())
+        applyCurrencyStyle(ws, rowIndex, 6, bgColor)
+
+        // Col 7: Stok
+        ws.value(rowIndex, 7, p.stock)
+        ws.style(rowIndex, 7)
             .fontSize(10)
             .fillColor(bgColor)
             .format("#,##0.##")
@@ -282,9 +256,9 @@ object ExcelManager {
             .borderColor(BorderSide.BOTTOM, COLOR_BORDER)
             .set()
 
-        // --- Style: margin (warna hijau/merah tergantung nilai) ---
-        val marginColor = if (margin >= 0) COLOR_POSITIVE else COLOR_NEGATIVE
-        val marginStyle = wb.style()
+        // Col 8: Margin
+        ws.value(rowIndex, 8, margin.toDouble())
+        ws.style(rowIndex, 8)
             .bold()
             .fontSize(10)
             .fillColor(bgColor)
@@ -296,8 +270,27 @@ object ExcelManager {
             .borderColor(BorderSide.BOTTOM, COLOR_BORDER)
             .set()
 
-        // --- Style: nilai stok (right, format ribuan) ---
-        val stockValueStyle = wb.style()
+        // Col 9: Nilai Stok
+        ws.value(rowIndex, 9, stockValue)
+        applyCurrencyStyle(ws, rowIndex, 9, bgColor)
+    }
+
+    // -----------------------------------------------------------------
+    //  STYLE HELPERS
+    // -----------------------------------------------------------------
+
+    private fun applyTextStyle(ws: Worksheet, row: Int, col: Int, bgColor: String) {
+        ws.style(row, col)
+            .fontSize(10)
+            .fillColor(bgColor)
+            .verticalAlignment("center")
+            .borderStyle(BorderSide.BOTTOM, BorderStyle.THIN)
+            .borderColor(BorderSide.BOTTOM, COLOR_BORDER)
+            .set()
+    }
+
+    private fun applyCurrencyStyle(ws: Worksheet, row: Int, col: Int, bgColor: String) {
+        ws.style(row, col)
             .fontSize(10)
             .fillColor(bgColor)
             .format("#,##0")
@@ -306,48 +299,6 @@ object ExcelManager {
             .borderStyle(BorderSide.BOTTOM, BorderStyle.THIN)
             .borderColor(BorderSide.BOTTOM, COLOR_BORDER)
             .set()
-
-        ws.rowHeight(rowIndex, 20.0)
-
-        // Col 0: No
-        ws.value(rowIndex, 0, number)
-        ws.style(rowIndex, 0).style(numberStyle).set()
-
-        // Col 1: SKU
-        ws.value(rowIndex, 1, p.sku)
-        ws.style(rowIndex, 1).style(textStyle).set()
-
-        // Col 2: Barcode
-        ws.value(rowIndex, 2, p.barcode ?: "")
-        ws.style(rowIndex, 2).style(textStyle).set()
-
-        // Col 3: Nama Produk (bold)
-        ws.value(rowIndex, 3, p.name)
-        ws.style(rowIndex, 3).style(nameStyle).set()
-
-        // Col 4: Kategori
-        ws.value(rowIndex, 4, p.category ?: "")
-        ws.style(rowIndex, 4).style(textStyle).set()
-
-        // Col 5: Harga Jual
-        ws.value(rowIndex, 5, p.price.toDouble())
-        ws.style(rowIndex, 5).style(currencyStyle).set()
-
-        // Col 6: Modal
-        ws.value(rowIndex, 6, p.cost.toDouble())
-        ws.style(rowIndex, 6).style(currencyStyle).set()
-
-        // Col 7: Stok
-        ws.value(rowIndex, 7, p.stock)
-        ws.style(rowIndex, 7).style(stockStyle).set()
-
-        // Col 8: Margin (Harga - Modal)
-        ws.value(rowIndex, 8, margin.toDouble())
-        ws.style(rowIndex, 8).style(marginStyle).set()
-
-        // Col 9: Nilai Stok (Stok × Modal)
-        ws.value(rowIndex, 9, stockValue)
-        ws.style(rowIndex, 9).style(stockValueStyle).set()
     }
 
     // -----------------------------------------------------------------
@@ -355,7 +306,6 @@ object ExcelManager {
     // -----------------------------------------------------------------
 
     private fun writeSummaryRow(
-        wb: Workbook,
         ws: Worksheet,
         rowIndex: Int,
         productCount: Int,
@@ -364,41 +314,54 @@ object ExcelManager {
         totalStock: Double,
         totalStockValue: Double,
     ) {
-        val labelStyle = wb.style()
-            .bold()
-            .fontSize(11)
-            .fillColor(COLOR_SUMMARY_BG)
-            .horizontalAlignment("right")
-            .verticalAlignment("center")
-            .borderStyle(BorderSide.TOP, BorderStyle.DOUBLE)
-            .borderColor(BorderSide.TOP, COLOR_HEADER_BG)
-            .set()
-
-        val totalCurrencyStyle = wb.style()
-            .bold()
-            .fontSize(11)
-            .fillColor(COLOR_SUMMARY_BG)
-            .format("#,##0")
-            .horizontalAlignment("right")
-            .verticalAlignment("center")
-            .borderStyle(BorderSide.TOP, BorderStyle.DOUBLE)
-            .borderColor(BorderSide.TOP, COLOR_HEADER_BG)
-            .set()
-
-        val totalStockStyle = wb.style()
-            .bold()
-            .fontSize(11)
-            .fillColor(COLOR_SUMMARY_BG)
-            .format("#,##0.##")
-            .horizontalAlignment("right")
-            .verticalAlignment("center")
-            .borderStyle(BorderSide.TOP, BorderStyle.DOUBLE)
-            .borderColor(BorderSide.TOP, COLOR_HEADER_BG)
-            .set()
-
         val totalMargin = totalPrice - totalCost
         val marginColor = if (totalMargin >= 0) COLOR_POSITIVE else COLOR_NEGATIVE
-        val totalMarginStyle = wb.style()
+
+        ws.rowHeight(rowIndex, 26.0)
+
+        // Kolom kosong 0-2 dengan background
+        for (col in 0..2) {
+            ws.style(rowIndex, col)
+                .fillColor(COLOR_SUMMARY_BG)
+                .borderStyle(BorderSide.TOP, BorderStyle.DOUBLE)
+                .borderColor(BorderSide.TOP, COLOR_HEADER_BG)
+                .set()
+        }
+
+        // Col 3: Label TOTAL
+        ws.value(rowIndex, 3, "TOTAL ($productCount produk)")
+        ws.style(rowIndex, 3)
+            .bold()
+            .fontSize(11)
+            .fillColor(COLOR_SUMMARY_BG)
+            .horizontalAlignment("right")
+            .verticalAlignment("center")
+            .borderStyle(BorderSide.TOP, BorderStyle.DOUBLE)
+            .borderColor(BorderSide.TOP, COLOR_HEADER_BG)
+            .set()
+
+        // Col 4: Kategori kosong
+        ws.style(rowIndex, 4)
+            .fillColor(COLOR_SUMMARY_BG)
+            .borderStyle(BorderSide.TOP, BorderStyle.DOUBLE)
+            .borderColor(BorderSide.TOP, COLOR_HEADER_BG)
+            .set()
+
+        // Col 5: Total harga
+        ws.value(rowIndex, 5, totalPrice.toDouble())
+        applySummaryNumberStyle(ws, rowIndex, 5, "#,##0")
+
+        // Col 6: Total modal
+        ws.value(rowIndex, 6, totalCost.toDouble())
+        applySummaryNumberStyle(ws, rowIndex, 6, "#,##0")
+
+        // Col 7: Total stok
+        ws.value(rowIndex, 7, totalStock)
+        applySummaryNumberStyle(ws, rowIndex, 7, "#,##0.##")
+
+        // Col 8: Total margin (warna)
+        ws.value(rowIndex, 8, totalMargin.toDouble())
+        ws.style(rowIndex, 8)
             .bold()
             .fontSize(11)
             .fillColor(COLOR_SUMMARY_BG)
@@ -410,45 +373,27 @@ object ExcelManager {
             .borderColor(BorderSide.TOP, COLOR_HEADER_BG)
             .set()
 
-        val emptyStyle = wb.style()
+        // Col 9: Total nilai stok
+        ws.value(rowIndex, 9, totalStockValue)
+        applySummaryNumberStyle(ws, rowIndex, 9, "#,##0")
+    }
+
+    private fun applySummaryNumberStyle(
+        ws: Worksheet,
+        row: Int,
+        col: Int,
+        numberFormat: String,
+    ) {
+        ws.style(row, col)
+            .bold()
+            .fontSize(11)
             .fillColor(COLOR_SUMMARY_BG)
+            .format(numberFormat)
+            .horizontalAlignment("right")
+            .verticalAlignment("center")
             .borderStyle(BorderSide.TOP, BorderStyle.DOUBLE)
             .borderColor(BorderSide.TOP, COLOR_HEADER_BG)
             .set()
-
-        ws.rowHeight(rowIndex, 26.0)
-
-        // Kolom kosong dengan background
-        for (col in 0..2) {
-            ws.style(rowIndex, col).style(emptyStyle).set()
-        }
-
-        // Label "TOTAL"
-        ws.value(rowIndex, 3, "TOTAL ($productCount produk)")
-        ws.style(rowIndex, 3).style(labelStyle).set()
-
-        // Kolom kategori kosong
-        ws.style(rowIndex, 4).style(emptyStyle).set()
-
-        // Total harga jual
-        ws.value(rowIndex, 5, totalPrice.toDouble())
-        ws.style(rowIndex, 5).style(totalCurrencyStyle).set()
-
-        // Total modal
-        ws.value(rowIndex, 6, totalCost.toDouble())
-        ws.style(rowIndex, 6).style(totalCurrencyStyle).set()
-
-        // Total stok
-        ws.value(rowIndex, 7, totalStock)
-        ws.style(rowIndex, 7).style(totalStockStyle).set()
-
-        // Total margin
-        ws.value(rowIndex, 8, totalMargin.toDouble())
-        ws.style(rowIndex, 8).style(totalMarginStyle).set()
-
-        // Total nilai stok
-        ws.value(rowIndex, 9, totalStockValue)
-        ws.style(rowIndex, 9).style(totalCurrencyStyle).set()
     }
 
     // =================================================================
@@ -490,16 +435,6 @@ object ExcelManager {
         }
     }
 
-    /**
-     * Import membaca kolom 0-6 (atau 1-7 jika ada kolom "No").
-     *
-     * Support 2 format:
-     * Format A (export dari app ini):
-     *   No | SKU | Barcode | Nama | Kategori | Harga | Modal | Stok | Margin | Nilai
-     *
-     * Format B (file manual/sederhana):
-     *   SKU | Barcode | Nama | Kategori | Harga | Modal | Stok
-     */
     private suspend fun readWorkbook(
         inputStream: InputStream,
     ): ExcelImportResult {
@@ -511,7 +446,7 @@ object ExcelManager {
 
             sheet.openStream().use { rowStream ->
                 var rowIndex = 0
-                var skipOffset = 0 // 0 jika Format B, 1 jika Format A (ada kolom No)
+                var skipOffset = 0
                 var headerFound = false
                 val iterator = rowStream.iterator()
 
@@ -520,7 +455,6 @@ object ExcelManager {
 
                     val row = iterator.next()
 
-                    // Cari header row (skip title row jika ada)
                     if (!headerFound) {
                         val detection = detectHeader(row)
                         if (detection != null) {
@@ -529,12 +463,10 @@ object ExcelManager {
                             rowIndex++
                             continue
                         }
-                        // Bukan header, mungkin title row → skip
                         rowIndex++
                         continue
                     }
 
-                    // Cek batas
                     if (rows.size >= MAX_IMPORT_ROWS) {
                         errors.add(
                             "Import dibatasi $MAX_IMPORT_ROWS baris. " +
@@ -543,7 +475,6 @@ object ExcelManager {
                         break
                     }
 
-                    // Parse data row
                     val parsed = parseRow(row, rowIndex, skipOffset)
                     if (parsed != null) {
                         parsed.first?.let { rows.add(it) }
@@ -570,12 +501,6 @@ object ExcelManager {
         return ExcelImportResult(rows, errors)
     }
 
-    /**
-     * Deteksi baris header.
-     * Return null jika bukan header.
-     * Return 0 jika Format B (SKU di kolom 0).
-     * Return 1 jika Format A (No di kolom 0, SKU di kolom 1).
-     */
     private fun detectHeader(
         row: org.dhatim.fastexcel.reader.Row,
     ): Int? {
@@ -584,25 +509,20 @@ object ExcelManager {
         fun cell(c: Int): String =
             row.getCellAsString(c).orElse("").trim().lowercase()
 
-        // Format A: No | SKU | Barcode | Nama | ...
         val cell0 = cell(0)
         val cell1 = cell(1)
         val cell2 = cell(2)
 
-        if ((cell0 == "no" || cell0 == "no.") &&
-            cell1.contains("sku")
-        ) {
+        if ((cell0 == "no" || cell0 == "no.") && cell1.contains("sku")) {
             return 1
         }
 
-        // Format B: SKU | Barcode | Nama | ...
         if (cell0.contains("sku") &&
             (cell2.contains("nama") || cell2.contains("name"))
         ) {
             return 0
         }
 
-        // Fallback: cek apakah ada kata kunci header
         val allCells = (0 until minOf(row.cellCount, 10)).map { cell(it) }
         val headerKeywords = listOf("sku", "nama", "harga", "modal", "stok")
         val matchCount = headerKeywords.count { keyword ->
@@ -610,7 +530,6 @@ object ExcelManager {
         }
 
         if (matchCount >= 3) {
-            // Tentukan offset
             return if (cell0 == "no" || cell0 == "no." ||
                 cell0.contains("nomor") || cell0 == "#"
             ) 1 else 0
@@ -628,13 +547,11 @@ object ExcelManager {
         fun cell(logicalCol: Int): String =
             row.getCellAsString(logicalCol + skipOffset).orElse("").trim()
 
-        // Skip baris kosong
         val allBlank = (0 until REQUIRED_IMPORT_COLUMNS).all {
             cell(it).isBlank()
         }
         if (allBlank) return null
 
-        // Skip baris summary (TOTAL, dll)
         val firstCell = cell(0).lowercase()
         if (firstCell.contains("total") || firstCell.contains("jumlah")) {
             return null
