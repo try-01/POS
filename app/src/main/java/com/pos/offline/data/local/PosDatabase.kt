@@ -42,7 +42,7 @@ private data class SeedProduct(
         PrinterEntity::class,
         StoreProfileEntity::class,
     ],
-    version = 15,
+    version = 16,
     exportSchema = true,
 )
 abstract class PosDatabase : RoomDatabase() {

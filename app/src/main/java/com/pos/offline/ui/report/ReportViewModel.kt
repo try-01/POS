@@ -551,47 +551,92 @@ class ReportViewModel(
     fun processDirectWarranty(product: ProductEntity, qty: Double, note: String) {
         viewModelScope.launch {
             try {
-                // 1. Ambil data Shift & Kasir yang sedang aktif saat ini
                 val openShift = shiftRepository.getOpenShift()
                 val shiftId = openShift?.id
                 val cashierId = openShift?.cashierId
                 val cashierName = openShift?.cashierName ?: "Kasir (Tidak Diketahui)"
 
-                // 2. Simpan laporan garansi ke database melalui ReturnRepository
-                // Kita memanggil fungsi processManualWarrantyClaim yang sudah ada di kodemu
                 val outcome = returnRepository.processManualWarrantyClaim(
                     productName = product.name,
                     productId = product.id,
                     quantity = qty,
-                    refundAmount = 0L, // Rp 0 karena ini garansi tukar barang (bukan kembali uang)
-                    refundMethod = PaymentMethod.OTHER, // Menggunakan metode "OTHER" untuk klaim
+                    refundAmount = 0L,
+                    refundMethod = PaymentMethod.OTHER,
                     shiftId = shiftId,
                     cashierId = cashierId,
                     cashierName = cashierName,
                     note = note
                 )
 
-                // 3. Jika riwayat garansi berhasil dicatat, kurangi stok barang fisiknya
                 if (outcome is ReturnOutcome.Success) {
-                    val remainingStock = product.stock - qty
-                    
-                    // Buat salinan produk dengan stok yang sudah dikurangi dan waktu update terbaru
-                    val updatedProduct = product.copy(
-                        stock = remainingStock,
-                        updatedAt = System.currentTimeMillis()
-                    )
-                    
-                    // Simpan perubahan stok ke database produk
-                    productRepository.save(updatedProduct)
-                    
-                    // TODO (Opsional): Tampilkan notifikasi sukses ke UI menggunakan SharedFlow / Toast
+                    // decrementStock sudah otomatis memperbarui database, tidak perlu copy & save manual
+                    productRepository.decrementStock(product.id, qty)
+                    _messages.emit(ReportMessage("Klaim garansi berhasil diproses.", isError = false))
                 } else {
-                    // TODO (Opsional): Tangani jika terjadi kegagalan (misalnya tampilkan pesan error)
+                    _messages.emit(ReportMessage("Gagal memproses klaim garansi.", isError = true))
                 }
-
             } catch (e: Exception) {
-                // Mencegah aplikasi crash jika terjadi masalah tak terduga pada database
                 e.printStackTrace()
+                viewModelScope.launch {
+                    _messages.emit(ReportMessage("Terjadi kesalahan sistem: ${e.message}", isError = true))
+                }
+            }
+        }
+    }
+
+    /**
+     * Menghitung selisih uang antara barang pengganti dan barang rusak.
+     * @return Positif = pembeli harus tambah uang. Negatif = kasir kembalikan uang.
+     */
+    fun hitungSelisihHarga(
+        hargaRusak: Long,
+        qtyRusak: Double,
+        hargaPengganti: Long,
+        qtyPengganti: Double
+    ): Long {
+        val totalRusak = (hargaRusak * qtyRusak).toLong()
+        val totalPengganti = (hargaPengganti * qtyPengganti).toLong()
+        return totalPengganti - totalRusak
+    }
+
+    /**
+     * Mengeksekusi pertukaran langsung dua barang berbeda beserta selisih dan penyesuaian stok.
+     */
+    fun prosesTukarGulingGaransi(
+        barangRusak: ProductEntity,
+        qtyRusak: Double,
+        barangPengganti: ProductEntity,
+        qtyPengganti: Double,
+        catatan: String
+    ) {
+        viewModelScope.launch {
+            try {
+                val openShift = shiftRepository.getOpenShift()
+                val shiftId = openShift?.id
+                val cashierId = openShift?.cashierId
+                val cashierName = openShift?.cashierName ?: "Kasir (Tidak Diketahui)"
+
+                val outcome = returnRepository.processDirectExchangeWarranty(
+                    brokenProduct = barangRusak,
+                    brokenQty = qtyRusak,
+                    replacementProduct = barangPengganti,
+                    replacementQty = qtyPengganti,
+                    shiftId = shiftId,
+                    cashierId = cashierId,
+                    cashierName = cashierName,
+                    note = catatan
+                )
+
+                if (outcome is ReturnOutcome.Success) {
+                    _messages.emit(ReportMessage("Tukar Guling Garansi berhasil dicatat!", isError = false))
+                } else {
+                    _messages.emit(ReportMessage("Gagal mencatat Tukar Guling Garansi.", isError = true))
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                viewModelScope.launch {
+                    _messages.emit(ReportMessage("Gagal: ${e.message}", isError = true))
+                }
             }
         }
     }

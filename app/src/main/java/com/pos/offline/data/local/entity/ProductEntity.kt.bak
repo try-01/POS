@@ -22,8 +22,6 @@ data class ProductEntity(
     @ColumnInfo(name = "cost", defaultValue = "0")
     val cost: Long = 0L,
     val stock: Double,
-    @ColumnInfo(name = "damagedStock", defaultValue = "0.0")
-    val damagedStock: Double = 0.0,
     val active: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),

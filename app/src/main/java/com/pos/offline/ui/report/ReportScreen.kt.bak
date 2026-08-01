@@ -572,16 +572,25 @@ androidx.compose.animation.AnimatedVisibility(
     enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.slideInVertically { it },
     exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.slideOutVertically { it }
 ) {
-    DirectWarrantyScreen(
-        inventoryViewModel = inventoryViewModel, // Kirim akses database produk
-        searchQuery = warrantySearchQuery,
-        onQueryChange = { warrantySearchQuery = it },
-        onScanClick = { warrantyScanner() }, // Panggil kamera dengan aman
-        onNavigateBack = { 
-            showDirectWarrantyScreen = false 
-            warrantySearchQuery = "" // Kosongkan pencarian saat keluar
-        }
-    )
+        DirectWarrantyScreen(
+            inventoryViewModel = inventoryViewModel,
+            searchQuery = warrantySearchQuery,
+            onQueryChange = { warrantySearchQuery = it },
+            onScanClick = { warrantyScanner() },
+            onNavigateBack = { 
+                showDirectWarrantyScreen = false 
+                warrantySearchQuery = "" 
+            },
+            // MENGHUBUNGKAN KE VIEWMODEL:
+            onSubmitWarranty = { product, qty, note ->
+                // Panggil fungsi yang ada di ReportViewModel
+                viewModel.processDirectWarranty(
+                    product = product,
+                    qty = qty,
+                    note = note
+                )
+            }
+        )
 }
 }
     if (selectedTransaction != null && !pendingVoidConfirm && !showReturnDialog && pendingPrintTarget == null) {

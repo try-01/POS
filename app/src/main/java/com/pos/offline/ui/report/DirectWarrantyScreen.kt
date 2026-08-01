@@ -41,15 +41,22 @@ fun DirectWarrantyScreen(
     onQueryChange: (String) -> Unit,
     onScanClick: () -> Unit,
     onNavigateBack: () -> Unit,
-    // Menambahkan fungsi callback saat proses garansi disetujui di dialog
-    onSubmitWarranty: (product: ProductEntity, qty: Double, note: String) -> Unit
+    onSubmitWarranty: (product: ProductEntity, qty: Double, note: String) -> Unit,
+    // BARU: Callback untuk mode Tukar Guling (Beda Produk)
+    onSubmitExchange: (broken: ProductEntity, brokenQty: Double, replace: ProductEntity, replaceQty: Double, note: String) -> Unit
 ) {
     BackHandler(onBack = onNavigateBack)
     
     val products by inventoryViewModel.products.collectAsStateWithLifecycle()
     
-    // State untuk menyimpan produk yang sedang diklik (untuk memunculkan dialog)
+    // State Dialog Garansi Normal (Barang Sama)
     var selectedProductForWarranty by remember { mutableStateOf<ProductEntity?>(null) }
+    
+    // State Mode Tukar Guling (Langkah 2: Pilih Barang Pengganti)
+    var brokenProductToExchange by remember { mutableStateOf<ProductEntity?>(null) }
+    var brokenQty by remember { mutableStateOf(1.0) }
+    var warrantyNote by remember { mutableStateOf("") }
+    var selectedReplacementProduct by remember { mutableStateOf<ProductEntity?>(null) }
 
     val filteredProducts = remember(searchQuery, products) {
         if (searchQuery.isBlank()) {
@@ -60,7 +67,6 @@ fun DirectWarrantyScreen(
                 it.name.lowercase().contains(q) ||
                 it.sku.lowercase().contains(q) ||
                 it.category.lowercase().contains(q) ||
-                // PERBAIKAN: Tambahkan pencocokan Barcode di sini
                 (it.barcode?.lowercase()?.contains(q) == true)
             }
         }
@@ -109,6 +115,28 @@ fun DirectWarrantyScreen(
             
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
+            // BARU: Banner Notifikasi saat masuk ke Mode Tukar Guling (Barang Beda)
+            if (brokenProductToExchange != null) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Mode Tukar Silang Aktif", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Text("Silakan cari dan pilih barang pengganti untuk: ${brokenProductToExchange?.name}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                        IconButton(onClick = { brokenProductToExchange = null }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Rounded.Close, contentDescription = "Batal Mode", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                }
+            }
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(12.dp),
@@ -117,7 +145,8 @@ fun DirectWarrantyScreen(
                 if (searchQuery.isEmpty()) {
                     item {
                         Text(
-                            "Ketik nama produk, SKU, kategori, atau scan barcode untuk mencari produk yang akan diklaim...",
+                            if (brokenProductToExchange == null) "Ketik nama produk, SKU, kategori, atau scan barcode untuk mencari produk yang rusak..." 
+                            else "Cari barang pengganti yang diinginkan pelanggan...",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -139,8 +168,12 @@ fun DirectWarrantyScreen(
                         WarrantyProductRow(
                             product = product,
                             onClick = {
-                                // Saat diklik, simpan produk ke State untuk membuka dialog
-                                selectedProductForWarranty = product
+                                // Arahkan klik berdasarkan mode yang sedang aktif
+                                if (brokenProductToExchange == null) {
+                                    selectedProductForWarranty = product
+                                } else {
+                                    selectedReplacementProduct = product
+                                }
                             }
                         )
                     }
@@ -149,16 +182,45 @@ fun DirectWarrantyScreen(
         }
     }
 
-    // Tampilkan Dialog jika ada produk yang dipilih
+    // Dialog 1: Klaim Garansi Normal (Atau opsi untuk masuk mode tukar produk lain)
     selectedProductForWarranty?.let { product ->
         WarrantyClaimDialog(
             product = product,
-            onDismiss = { selectedProductForWarranty = null }, // Tutup dialog
-            onSubmit = { qty, note ->
-                // Panggil callback ke ReportScreen
+            onDismiss = { selectedProductForWarranty = null },
+            onSubmitSameItem = { qty, note ->
                 onSubmitWarranty(product, qty, note)
-                // Tutup dialog dan kembali ke layar laporan
                 selectedProductForWarranty = null
+                onNavigateBack()
+            },
+            onSelectDifferentItem = { qty, note ->
+                // Simpan barang rusak dan aktifkan Mode Tukar Guling
+                brokenProductToExchange = product
+                brokenQty = qty
+                warrantyNote = note
+                selectedProductForWarranty = null
+                onQueryChange("") // Reset search bar untuk cari barang baru
+            }
+        )
+    }
+
+    // Dialog 2: Konfirmasi Tukar Guling (Menampilkan Selisih Harga / Delta)
+    selectedReplacementProduct?.let { replacement ->
+        ExchangeClaimDialog(
+            brokenProduct = brokenProductToExchange!!,
+            brokenQty = brokenQty,
+            replacementProduct = replacement,
+            initialNote = warrantyNote,
+            onDismiss = { selectedReplacementProduct = null },
+            onSubmit = { replaceQty, finalNote ->
+                onSubmitExchange(
+                    brokenProductToExchange!!,
+                    brokenQty,
+                    replacement,
+                    replaceQty,
+                    finalNote
+                )
+                selectedReplacementProduct = null
+                brokenProductToExchange = null
                 onNavigateBack()
             }
         )
@@ -169,12 +231,11 @@ fun DirectWarrantyScreen(
 private fun WarrantyClaimDialog(
     product: ProductEntity,
     onDismiss: () -> Unit,
-    onSubmit: (qty: Double, note: String) -> Unit
+    onSubmitSameItem: (qty: Double, note: String) -> Unit,
+    onSelectDifferentItem: (qty: Double, note: String) -> Unit
 ) {
     var qty by remember { mutableStateOf(1.0) }
     var note by remember { mutableStateOf("") }
-    
-    // Menentukan langkah penambahan/pengurangan berdasarkan tipe stok
     val step = if (product.stock % 1.0 == 0.0) 1.0 else 0.1
 
     AlertDialog(
@@ -190,47 +251,116 @@ private fun WarrantyClaimDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 
-                // Stepper Qty
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Jumlah Klaim:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    
-                    // Tombol Minus
                     Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .clickable { if (qty > step) qty -= step },
+                        modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable { if (qty > step) qty -= step },
                         contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.Remove, contentDescription = "Kurangi", modifier = Modifier.size(16.dp))
-                    }
+                    ) { Icon(Icons.Rounded.Remove, contentDescription = "Kurangi", modifier = Modifier.size(16.dp)) }
                     
-                    Text(
-                        text = qty.toString(),
-                        modifier = Modifier.width(40.dp),
-                        textAlign = TextAlign.Center,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text(text = qty.toString(), modifier = Modifier.width(40.dp), textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
                     
-                    // Tombol Plus
                     Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .clickable { qty += step },
+                        modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable { qty += step },
                         contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp))
-                    }
+                    ) { Icon(Icons.Rounded.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp)) }
                 }
                 
-                // Input Catatan
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
-                    label = { Text("Catatan Kerusakan (Wajib/Opsional)", fontSize = 12.sp) },
+                    label = { Text("Catatan Kerusakan", fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    minLines = 2
+                )
+            }
+        },
+        confirmButton = {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(onClick = { onSubmitSameItem(qty, note) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Tukar Barang Sejenis", fontSize = 13.sp)
+                }
+                OutlinedButton(onClick = { onSelectDifferentItem(qty, note) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Tukar dengan Produk Lain...", fontSize = 13.sp)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Batal", fontSize = 13.sp)
+            }
+        }
+    )
+}
+
+@Composable
+private fun ExchangeClaimDialog(
+    brokenProduct: ProductEntity,
+    brokenQty: Double,
+    replacementProduct: ProductEntity,
+    initialNote: String,
+    onDismiss: () -> Unit,
+    onSubmit: (replaceQty: Double, finalNote: String) -> Unit
+) {
+    var qty by remember { mutableStateOf(1.0) }
+    var note by remember { mutableStateOf(initialNote) }
+    val step = if (replacementProduct.stock % 1.0 == 0.0) 1.0 else 0.1
+
+    // Kalkulasi Selisih / Delta Uang secara Real-Time
+    val totalBroken = (brokenProduct.price * brokenQty).toLong()
+    val totalReplacement = (replacementProduct.price * qty).toLong()
+    val delta = totalReplacement - totalBroken
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Konfirmasi Tukar Guling", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Info Barang A (Rusak)
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("Barang Rusak (Dikembalikan):", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text("${brokenQty}x ${brokenProduct.name}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text("Nilai Barang: ${totalBroken.toRupiah()}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
+                    }
+                }
+
+                // Info Barang B (Pengganti)
+                Text("Barang Pengganti: ${replacementProduct.name}\nStok Tersedia: ${replacementProduct.stock}", fontSize = 12.sp)
+
+                // Stepper Jumlah Barang Pengganti
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Jumlah Pengganti:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Box(
+                        modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable { if (qty > step) qty -= step },
+                        contentAlignment = Alignment.Center
+                    ) { Icon(Icons.Rounded.Remove, contentDescription = "Kurangi", modifier = Modifier.size(16.dp)) }
+                    Text(text = qty.toString(), modifier = Modifier.width(40.dp), textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+                    Box(
+                        modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable { qty += step },
+                        contentAlignment = Alignment.Center
+                    ) { Icon(Icons.Rounded.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp)) }
+                }
+
+                // Tampilan Selisih Uang (Berubah warna berdasarkan kondisi)
+                val deltaColor = if (delta > 0) MaterialTheme.colorScheme.error else if (delta < 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                val deltaText = if (delta > 0) "Kurang Bayar: ${delta.toRupiah()}" else if (delta < 0) "Kembali Uang: ${(delta * -1L).toRupiah()}" else "Tukar Pas (Selisih Rp 0)"
+                
+                Text(text = deltaText, fontWeight = FontWeight.Bold, color = deltaColor, fontSize = 14.sp)
+
+                // Input Catatan Final
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("Catatan Kasir", fontSize = 12.sp) },
                     modifier = Modifier.fillMaxWidth(),
                     textStyle = MaterialTheme.typography.bodyMedium,
                     minLines = 2
@@ -239,7 +369,7 @@ private fun WarrantyClaimDialog(
         },
         confirmButton = {
             Button(onClick = { onSubmit(qty, note) }) {
-                Text("Konfirmasi Garansi", fontSize = 13.sp)
+                Text("Selesaikan Transaksi", fontSize = 13.sp)
             }
         },
         dismissButton = {

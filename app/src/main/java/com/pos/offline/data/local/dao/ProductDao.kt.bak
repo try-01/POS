@@ -87,22 +87,4 @@ interface ProductDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAll(products: List<ProductEntity>)
-
-    @Query(
-        """
-        UPDATE products
-        SET damagedStock = damagedStock + :qty, updatedAt = :now
-        WHERE id = :id
-        """
-    )
-    suspend fun incrementDamagedStock(id: Long, qty: Double, now: Long)
-
-    @Query(
-        """
-        UPDATE products
-        SET damagedStock = MAX(0, damagedStock - :qty), updatedAt = :now
-        WHERE id = :id
-        """
-    )
-    suspend fun decrementDamagedStock(id: Long, qty: Double, now: Long)
 }

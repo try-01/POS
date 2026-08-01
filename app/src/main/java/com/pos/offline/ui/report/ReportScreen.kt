@@ -584,14 +584,24 @@ androidx.compose.animation.AnimatedVisibility(
             // MENGHUBUNGKAN KE VIEWMODEL:
             onSubmitWarranty = { product, qty, note ->
                 // Panggil fungsi yang ada di ReportViewModel
-                viewModel.processDirectWarranty(
+                reportViewModel.processDirectWarranty(
                     product = product,
                     qty = qty,
                     note = note
                 )
+            },
+
+            onSubmitExchange = { broken, brokenQty, replace, replaceQty, note ->
+                reportViewModel.prosesTukarGulingGaransi(
+                    barangRusak = broken,
+                    qtyRusak = brokenQty,
+                    barangPengganti = replace,
+                    qtyPengganti = replaceQty,
+                    catatan = note
+                )
             }
         )
-}
+    }
 }
     if (selectedTransaction != null && !pendingVoidConfirm && !showReturnDialog && pendingPrintTarget == null) {
         val current = selectedTransaction!!

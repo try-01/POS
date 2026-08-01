@@ -22,13 +22,5 @@ class ProductRepository(
     suspend fun getProductBySku(sku: String): ProductEntity? = productDao.getBySku(sku)
     suspend fun bulkInsert(products: List<ProductEntity>) = productDao.insertAll(products)
     suspend fun getAllProductsOnce(): List<ProductEntity> = productDao.observeAll().first()
-
-    suspend fun decrementStock(id: Long, qty: Double) = 
-        productDao.decrementStock(id, qty, System.currentTimeMillis())
-
-    suspend fun incrementDamagedStock(id: Long, qty: Double) =
-        productDao.incrementDamagedStock(id, qty, System.currentTimeMillis())
-
-    suspend fun decrementDamagedStock(id: Long, qty: Double) =
-        productDao.decrementDamagedStock(id, qty, System.currentTimeMillis())
+    suspend fun decrementStock(id: Long, qty: Double) = productDao.decrementStock(id, qty, System.currentTimeMillis())
 }
