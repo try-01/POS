@@ -552,11 +552,28 @@ object ExcelManager {
         }
         if (allBlank) return null
 
-        val firstCell = cell(0).lowercase()
-        if (firstCell.contains("total") || firstCell.contains("jumlah")) {
+        // ==========================================
+        // 1. LOGIKA DETEKSI BARIS RINGKASAN (REGEX)
+        // ==========================================
+        val skuCell = cell(0).lowercase()
+        val nameCell = cell(2).lowercase() // cell(2) adalah indeks untuk kolom Nama Produk
+//      Fleksible mode
+//      val isSummaryRow = (skuCell.isBlank() && (nameCell.contains("total") || nameCell.contains("jumlah"))) ||
+//                           skuCell == "total" || skuCell == "jumlah"
+//      Ketat Mode
+        val totalRegex = Regex("total\\s*\\(\\s*\\d+\\s*produk\\s*\\)")
+
+        val isSummaryRow = (skuCell.isBlank() && totalRegex.containsMatchIn(nameCell)) ||
+                           skuCell == "total" || skuCell == "jumlah"
+
+        if (isSummaryRow) {
+            // Jika ini baris ringkasan, langsung lewati dengan aman
             return null
         }
 
+        // ==========================================
+        // 2. LOGIKA UTAMA MEMBACA PRODUK
+        // ==========================================
         return try {
             Pair(
                 ImportedProductRow(
