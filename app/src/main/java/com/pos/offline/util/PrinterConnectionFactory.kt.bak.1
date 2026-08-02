@@ -336,23 +336,7 @@ class PrinterConnectionFactory(
                                 write(cmd)
                                 flush()
                             }
-                            
-                            // === PERUBAHAN WIFI: Membaca respon lengkap ===
-                            val buffer = ByteArray(1024)
-                            val bytesRead = socket.getInputStream().read(buffer)
-                            var status = -1
-                            
-                            if (bytesRead != -1) {
-                                val rawResponse = buffer.copyOf(bytesRead)
-                                // Ubah kumpulan byte menjadi format Hex yang mudah dibaca (misal: 10 0F 00)
-                                val hexResponse = rawResponse.joinToString(separator = " ") { String.format("%02X", it) }
-                                Log.e(TAG, "[status-probe-wifi] Raw Response: [$hexResponse] dari $ip")
-                                
-                                // Ambil byte pertama sebagai penentu status kertas
-                                status = rawResponse[0].toInt() and 0xFF 
-                            }
-                            // ===============================================
-
+                            val status = socket.getInputStream().read()
                             when {
                                 status == -1 -> PaperStatusResult.NoResponse
                                 (status and 0x60) != 0 -> PaperStatusResult.PaperOut
@@ -395,7 +379,7 @@ class PrinterConnectionFactory(
                             watchdog.cancel()
                         }
                         val probeConnectMs = System.currentTimeMillis() - probeConnectStartMs
-                        Log.e(
+                        Log.d(
                             TAG,
                             "[status-probe] connect ${if (isConnected) "OK" else "GAGAL"} dalam ${probeConnectMs}ms " +
                                 "(\"${printer.label}\")",
@@ -409,22 +393,11 @@ class PrinterConnectionFactory(
                             socket.outputStream.write(cmd)
                             socket.outputStream.flush()
                             var status = -1
-                            
-                            // === PERUBAHAN BLUETOOTH: Membaca respon lengkap ===
-                            var hexResponseString = ""
                             supervisorScope {
                                 val readJob =
                                     async(Dispatchers.IO) {
                                         try {
-                                            val buffer = ByteArray(1024)
-                                            val bytesRead = socket.inputStream.read(buffer)
-                                            if (bytesRead != -1) {
-                                                val rawResponse = buffer.copyOf(bytesRead)
-                                                hexResponseString = rawResponse.joinToString(separator = " ") { String.format("%02X", it) }
-                                                
-                                                // Ambil byte pertama sebagai penentu status
-                                                status = rawResponse[0].toInt() and 0xFF
-                                            }
+                                            status = socket.inputStream.read()
                                         } catch (e: Exception) {
                                             Log.w(TAG, "[status-probe] read gagal untuk \"${printer.label}\": ${e.message}")
                                         }
@@ -440,8 +413,6 @@ class PrinterConnectionFactory(
                                 readJob.await()
                                 watchdog.cancel()
                             }
-                            // ====================================================
-                            
                             val probeReadMs = System.currentTimeMillis() - probeReadStartMs
                             val result =
                                 when {
@@ -450,10 +421,10 @@ class PrinterConnectionFactory(
                                     (status and 0x0C) != 0 -> PaperStatusResult.NearEnd
                                     else -> PaperStatusResult.Ok
                                 }
-                            Log.e(
+                            Log.d(
                                 TAG,
-                                "[status-probe] Raw: [$hexResponseString] | byte utama=$status (0x${status.toString(16)}) -> $result, respon ${probeReadMs}ms, " +
-                                    "socket status-probe ditutup (\"${printer.label}\")",
+                                "[status-probe] byte=$status (0x${status.toString(16)}) -> $result, respon ${probeReadMs}ms, " +
+                                    "socket status-probe akan ditutup sebelum koneksi print utama dibuka (\"${printer.label}\")",
                             )
                             result
                         } finally {
