@@ -251,6 +251,7 @@ private fun WarrantyClaimDialog(
     var qty by remember { mutableStateOf(1.0) }
     var note by remember { mutableStateOf("") }
     val step = if (product.stock % 1.0 == 0.0) 1.0 else 0.1
+    val maxQty = product.stock
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -265,7 +266,7 @@ private fun WarrantyClaimDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Jumlah Klaim:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                     Box(
                         modifier =
@@ -300,6 +301,30 @@ private fun WarrantyClaimDialog(
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Rounded.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp)) }
                 }
+                    Text(
+                        text = qty.toString(),
+                        modifier = Modifier.width(40.dp),
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold,
+                    )
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(
+                                    28.dp,
+                                ).clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (qty < maxQty) MaterialTheme.colorScheme.surfaceVariant
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                )
+                                .then(
+                                    if (qty < maxQty) Modifier.clickable { qty = (qty + step).coerceAtMost(maxQty) }
+                                    else Modifier
+                                ),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Rounded.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp)) }
+                }
 
                 OutlinedTextField(
                     value = note,
@@ -330,7 +355,6 @@ private fun WarrantyClaimDialog(
             }
         },
     )
-}
 
 @Composable
 private fun ExchangeClaimDialog(
@@ -344,6 +368,7 @@ private fun ExchangeClaimDialog(
     var qty by remember { mutableStateOf(1.0) }
     var note by remember { mutableStateOf(initialNote) }
     val step = if (replacementProduct.stock % 1.0 == 0.0) 1.0 else 0.1
+    val maxQty = replacementProduct.stock
 
     val totalBroken = kotlin.math.round(brokenProduct.price * brokenQty).toLong()
     val totalReplacement = kotlin.math.round(replacementProduct.price * qty).toLong()
@@ -378,7 +403,7 @@ private fun ExchangeClaimDialog(
 
                 Text("Barang Pengganti: ${replacementProduct.name}\nStok Tersedia: ${replacementProduct.stock}", fontSize = 12.sp)
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Jumlah Pengganti:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                     Box(
                         modifier =
@@ -410,6 +435,29 @@ private fun ExchangeClaimDialog(
                                 ).clickable(enabled = canIncrease) {
                                     qty = (qty + step).coerceAtMost(replacementProduct.stock)
                                 },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Rounded.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp)) }
+                }
+                    Text(
+                        text = qty.toString(),
+                        modifier = Modifier.width(40.dp),
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(
+                                    28.dp,
+                                ).clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (qty < maxQty) MaterialTheme.colorScheme.surfaceVariant
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                )
+                                .then(
+                                    if (qty < maxQty) Modifier.clickable { qty = (qty + step).coerceAtMost(maxQty) }
+                                    else Modifier
+                                ),
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Rounded.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp)) }
                 }
@@ -462,7 +510,7 @@ private fun ExchangeClaimDialog(
             }
         },
     )
-}
+
 @Composable
 private fun WarrantyProductRow(
     product: ProductEntity,

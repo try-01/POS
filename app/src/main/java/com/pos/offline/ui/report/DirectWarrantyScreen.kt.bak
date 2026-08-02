@@ -271,17 +271,10 @@ private fun WarrantyClaimDialog(
                     Box(
                         modifier =
                             Modifier
-                                .size(
-                                    28.dp,
-                                ).clip(RoundedCornerShape(6.dp))
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(6.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable {
-                                    if (qty >
-                                        step
-                                    ) {
-                                        qty -= step
-                                    }
-                                },
+                                .clickable(enabled = qty > step) { qty -= step },
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Rounded.Remove, contentDescription = "Kurangi", modifier = Modifier.size(16.dp)) }
 
@@ -292,20 +285,19 @@ private fun WarrantyClaimDialog(
                         fontWeight = FontWeight.Bold,
                     )
 
+                    val canIncrease = qty < product.stock
                     Box(
                         modifier =
                             Modifier
-                                .size(
-                                    28.dp,
-                                ).clip(RoundedCornerShape(6.dp))
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(6.dp))
                                 .background(
-                                    if (qty < maxQty) MaterialTheme.colorScheme.surfaceVariant
-                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                )
-                                .then(
-                                    if (qty < maxQty) Modifier.clickable { qty = (qty + step).coerceAtMost(maxQty) }
-                                    else Modifier
-                                ),
+                                    if (canIncrease) {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                    },
+                                ).clickable(enabled = canIncrease) { qty = (qty + step).coerceAtMost(product.stock) },
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Rounded.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp)) }
                 }
@@ -356,7 +348,7 @@ private fun ExchangeClaimDialog(
     val maxQty = replacementProduct.stock
 
     val totalBroken = kotlin.math.round(brokenProduct.price * brokenQty).toLong()
-    val totalReplacement = kotlin.math.round(replacementProduct.price * replacementQty).toLong()
+    val totalReplacement = kotlin.math.round(replacementProduct.price * qty).toLong()
     val delta = totalReplacement - totalBroken
 
     AlertDialog(
@@ -393,17 +385,10 @@ private fun ExchangeClaimDialog(
                     Box(
                         modifier =
                             Modifier
-                                .size(
-                                    28.dp,
-                                ).clip(RoundedCornerShape(6.dp))
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(6.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable {
-                                    if (qty >
-                                        step
-                                    ) {
-                                        qty -= step
-                                    }
-                                },
+                                .clickable(enabled = qty > step) { qty -= step },
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Rounded.Remove, contentDescription = "Kurangi", modifier = Modifier.size(16.dp)) }
                     Text(
@@ -412,20 +397,21 @@ private fun ExchangeClaimDialog(
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
                     )
+                    val canIncrease = qty < replacementProduct.stock
                     Box(
                         modifier =
                             Modifier
-                                .size(
-                                    28.dp,
-                                ).clip(RoundedCornerShape(6.dp))
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(6.dp))
                                 .background(
-                                    if (qty < maxQty) MaterialTheme.colorScheme.surfaceVariant
-                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                )
-                                .then(
-                                    if (qty < maxQty) Modifier.clickable { qty = (qty + step).coerceAtMost(maxQty) }
-                                    else Modifier
-                                ),
+                                    if (canIncrease) {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                    },
+                                ).clickable(enabled = canIncrease) {
+                                    qty = (qty + step).coerceAtMost(replacementProduct.stock)
+                                },
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Rounded.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp)) }
                 }
@@ -479,7 +465,6 @@ private fun ExchangeClaimDialog(
         },
     )
 }
-
 @Composable
 private fun WarrantyProductRow(
     product: ProductEntity,
