@@ -668,14 +668,13 @@ object ExcelManager {
         // 1. Mencegah error jika kolom yang diminta di luar batas
         if (col < 0 || col >= row.cellCount) return ""
         
-        // 2. Ambil sel menggunakan cara yang lebih ramah Kotlin (menghindari orElse)
-        val optionalCell = row.getCell(col)
-        if (!optionalCell.isPresent) return ""
+        // 2. Ambil sel secara langsung.
+        // FastExcel getCell() mengembalikan objek Cell secara langsung, bukan Optional.
+        // Jika sel kosong (null), kita kembalikan teks kosong dengan Elvis operator (?:).
+        val cell = row.getCell(col) ?: return ""
         
-        val cell = optionalCell.get()
-        
-        // 3. Coba ambil teks format asli dari Excel (getText). 
-        // Jika gagal, ambil nilai mentahnya (getValue) lalu ubah ke String.
+        // 3. Coba ambil teks format asli dari Excel (text). 
+        // Jika gagal/kosong, ambil nilai mentahnya (value) lalu ubah ke String.
         val textValue = cell.text ?: cell.value?.toString() ?: ""
         
         // 4. Jika Excel mengubah angka bulat jadi desimal (contoh SKU "1234" dibaca "1234.0"), 
