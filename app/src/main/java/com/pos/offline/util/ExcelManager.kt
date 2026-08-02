@@ -668,8 +668,11 @@ object ExcelManager {
         // 1. Mencegah error jika kolom yang diminta di luar batas
         if (col < 0 || col >= row.cellCount) return ""
         
-        // 2. Ambil sel. Jika kosong, kembalikan teks kosong
-        val cell = row.getCell(col).orElse(null) ?: return ""
+        // 2. Ambil sel menggunakan cara yang lebih ramah Kotlin (menghindari orElse)
+        val optionalCell = row.getCell(col)
+        if (!optionalCell.isPresent) return ""
+        
+        val cell = optionalCell.get()
         
         // 3. Coba ambil teks format asli dari Excel (getText). 
         // Jika gagal, ambil nilai mentahnya (getValue) lalu ubah ke String.
