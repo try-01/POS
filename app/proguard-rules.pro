@@ -27,11 +27,11 @@
 # 2. HAPUS LOG & DEBUG
 # =========================================================
 
--assumenosideeffects class android.util.Log {
-    public static int v(...);
-    public static int d(...);
-    public static int i(...);
-}
+# -assumenosideeffects class android.util.Log {
+#     public static int v(...);
+#     public static int d(...);
+#     public static int i(...);
+# }
 
 -assumenosideeffects class java.io.PrintStream {
     public void println(...);
