@@ -120,8 +120,12 @@ dependencies {
     implementation("com.fasterxml:aalto-xml:1.4.0") 
     implementation("javax.xml.stream:stax-api:1.0-2")
 
-    // ===== TESTING =====
+// ===== TESTING =====
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("io.mockk:mockk:1.13.13")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     androidTestImplementation("androidx.room:room-testing:2.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }

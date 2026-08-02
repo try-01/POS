@@ -266,41 +266,25 @@ private fun WarrantyClaimDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
-Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Jumlah Klaim:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                     Box(
                         modifier =
                             Modifier
-                                .size(28.dp)
-                                .clip(RoundedCornerShape(6.dp))
+                                .size(
+                                    28.dp,
+                                ).clip(RoundedCornerShape(6.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable(enabled = qty > step) { qty -= step },
+                                .clickable {
+                                    if (qty >
+                                        step
+                                    ) {
+                                        qty -= step
+                                    }
+                                },
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Rounded.Remove, contentDescription = "Kurangi", modifier = Modifier.size(16.dp)) }
 
-                    Text(
-                        text = qty.toString(),
-                        modifier = Modifier.width(40.dp),
-                        textAlign = TextAlign.Center,
-                        fontWeight = FontWeight.Bold,
-                    )
-
-                    val canIncrease = qty < product.stock
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(28.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(
-                                    if (canIncrease) {
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                    },
-                                ).clickable(enabled = canIncrease) { qty = (qty + step).coerceAtMost(product.stock) },
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Rounded.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp)) }
-                }
                     Text(
                         text = qty.toString(),
                         modifier = Modifier.width(40.dp),
@@ -355,6 +339,7 @@ Row(verticalAlignment = Alignment.CenterVertically) {
             }
         },
     )
+}
 
 @Composable
 private fun ExchangeClaimDialog(
@@ -371,7 +356,7 @@ private fun ExchangeClaimDialog(
     val maxQty = replacementProduct.stock
 
     val totalBroken = kotlin.math.round(brokenProduct.price * brokenQty).toLong()
-    val totalReplacement = kotlin.math.round(replacementProduct.price * qty).toLong()
+    val totalReplacement = kotlin.math.round(replacementProduct.price * replacementQty).toLong()
     val delta = totalReplacement - totalBroken
 
     AlertDialog(
@@ -403,41 +388,24 @@ private fun ExchangeClaimDialog(
 
                 Text("Barang Pengganti: ${replacementProduct.name}\nStok Tersedia: ${replacementProduct.stock}", fontSize = 12.sp)
 
-Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Jumlah Pengganti:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                     Box(
                         modifier =
                             Modifier
-                                .size(28.dp)
-                                .clip(RoundedCornerShape(6.dp))
+                                .size(
+                                    28.dp,
+                                ).clip(RoundedCornerShape(6.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable(enabled = qty > step) { qty -= step },
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Rounded.Remove, contentDescription = "Kurangi", modifier = Modifier.size(16.dp)) }
-                    Text(
-                        text = qty.toString(),
-                        modifier = Modifier.width(40.dp),
-                        textAlign = TextAlign.Center,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    val canIncrease = qty < replacementProduct.stock
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(28.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(
-                                    if (canIncrease) {
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                    },
-                                ).clickable(enabled = canIncrease) {
-                                    qty = (qty + step).coerceAtMost(replacementProduct.stock)
+                                .clickable {
+                                    if (qty >
+                                        step
+                                    ) {
+                                        qty -= step
+                                    }
                                 },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Rounded.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp)) }
-                }
+                    ) { Icon(Icons.Rounded.Remove, contentDescription = "Kurangi", modifier = Modifier.size(16.dp)) }
                     Text(
                         text = qty.toString(),
                         modifier = Modifier.width(40.dp),
@@ -510,6 +478,7 @@ Row(verticalAlignment = Alignment.CenterVertically) {
             }
         },
     )
+}
 
 @Composable
 private fun WarrantyProductRow(

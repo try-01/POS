@@ -374,15 +374,6 @@ object Migrations {
             }
         }
 
-    val MIGRATION_16_17 =
-        object : Migration(16, 17) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    "ALTER TABLE transactions ADD COLUMN isWarrantyExchange INTEGER NOT NULL DEFAULT 0",
-                )
-            }
-        }
-
     val ALL: Array<Migration> =
         arrayOf(
             MIGRATION_1_2,
@@ -400,6 +391,5 @@ object Migrations {
             MIGRATION_13_14,
             MIGRATION_14_15,
             MIGRATION_15_16,
-            MIGRATION_16_17,
         )
 }

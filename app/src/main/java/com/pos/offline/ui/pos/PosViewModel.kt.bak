@@ -23,7 +23,6 @@ import com.pos.offline.util.CashDrawerResult
 import com.pos.offline.util.PrintCoordinator
 import com.pos.offline.util.PrinterConnectionFactory
 import com.pos.offline.util.roundToRupiah
-import com.pos.offline.util.sanitizeScannedCode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -424,6 +423,15 @@ class PosViewModel(
             _uiEvents.emit(PosUiEvent.ShowMessage("${product.name} ditambahkan ke keranjang"))
         }
         return success
+    }
+
+    private fun sanitizeScannedCode(raw: String): String? {
+        val cleaned =
+            raw
+                .trim()
+                .filter { c -> c.isLetterOrDigit() || c in "-_./: #" }
+                .take(128)
+        return cleaned.ifBlank { null }
     }
 
     private suspend fun tryAddToCart(product: ProductEntity): Boolean {

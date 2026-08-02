@@ -15,6 +15,9 @@ interface TransactionDao {
     @Insert
     suspend fun insertItems(items: List<TransactionItemEntity>)
 
+    @Query("SELECT * FROM transactions ORDER BY createdAt DESC")
+    fun observeAll(): Flow<List<TransactionEntity>>
+
     @Query(
         """
         SELECT * FROM transactions

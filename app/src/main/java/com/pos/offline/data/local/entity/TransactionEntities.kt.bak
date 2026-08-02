@@ -37,8 +37,6 @@ data class TransactionEntity(
     val voidedAt: Long? = null,
     val voidReason: String? = null,
     val returnId: Long? = null,
-    @ColumnInfo(name = "isWarrantyExchange", defaultValue = "0")
-    val isWarrantyExchange: Boolean = false,
 )
 
 @Entity(

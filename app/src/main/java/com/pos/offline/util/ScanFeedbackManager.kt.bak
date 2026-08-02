@@ -84,19 +84,14 @@ class ScanFeedbackManager(
         }
     }
 
-private var currentToneVolume: Int? = null
-
     fun playBeep(
         volume: Int,
         durationMs: Int,
     ) {
         try {
+            toneGenerator?.release()
             val validVol = volume.coerceIn(0, 100)
-            if (toneGenerator == null || currentToneVolume != validVol) {
-                toneGenerator?.release()
-                toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, validVol)
-                currentToneVolume = validVol
-            }
+            toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, validVol)
             toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, durationMs.coerceIn(50, 300))
         } catch (e: Exception) {
         }

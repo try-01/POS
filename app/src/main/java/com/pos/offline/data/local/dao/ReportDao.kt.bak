@@ -41,7 +41,7 @@ data class ProductSalesRow(
 interface ReportDao {
     @Query(
         """
-        SELECT COUNT(CASE WHEN isWarrantyExchange = 0 THEN 1 END) as transactionCount,
+        SELECT COUNT(*) as transactionCount,
                COALESCE(SUM(subtotal), 0) as subtotalSum,
                COALESCE(SUM(tax), 0) as taxSum,
                COALESCE(SUM(total), 0) as totalSum,
@@ -98,7 +98,7 @@ interface ReportDao {
         """
         SELECT paymentMethod,
                COALESCE(SUM(total), 0) as total,
-               COUNT(CASE WHEN isWarrantyExchange = 0 THEN 1 END) as count,
+               COUNT(*) as count,
                COALESCE(SUM(
                    CASE
                        WHEN paymentMethod = 'CASH' THEN paidAmount - changeGiven

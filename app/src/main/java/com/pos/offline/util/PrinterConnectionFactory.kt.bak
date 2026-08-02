@@ -264,13 +264,7 @@ class PrinterConnectionFactory(
                     }
                     delay(1200)
                 }
-                val printConnectStartMs = System.currentTimeMillis()
                 val connected = connectWithTimeout(ready.connection)
-                Log.d(
-                    TAG,
-                    "[print-connect] ${if (connected) "OK" else "GAGAL"} dalam ${System.currentTimeMillis() - printConnectStartMs}ms " +
-                        "(percobaan ke-${attempt + 1}, \"${printer.label}\")",
-                )
                 if (!connected) {
                     return@repeat
                 }
@@ -356,7 +350,6 @@ class PrinterConnectionFactory(
                         val socket = device.createRfcommSocketToServiceRecord(uuid)
                         adapter.cancelDiscovery()
                         var isConnected = false
-                        val probeConnectStartMs = System.currentTimeMillis()
                         supervisorScope {
                             val connectJob =
                                 async(Dispatchers.IO) {
@@ -364,7 +357,6 @@ class PrinterConnectionFactory(
                                         socket.connect()
                                         isConnected = true
                                     } catch (e: Exception) {
-                                        Log.w(TAG, "[status-probe] connect gagal untuk \"${printer.label}\": ${e.message}")
                                     }
                                 }
                             val watchdog =
@@ -378,18 +370,11 @@ class PrinterConnectionFactory(
                             connectJob.await()
                             watchdog.cancel()
                         }
-                        val probeConnectMs = System.currentTimeMillis() - probeConnectStartMs
-                        Log.d(
-                            TAG,
-                            "[status-probe] connect ${if (isConnected) "OK" else "GAGAL"} dalam ${probeConnectMs}ms " +
-                                "(\"${printer.label}\")",
-                        )
                         if (!isConnected) {
                             runCatching { socket.close() }
                             return@withContext PaperStatusResult.NoResponse
                         }
                         try {
-                            val probeReadStartMs = System.currentTimeMillis()
                             socket.outputStream.write(cmd)
                             socket.outputStream.flush()
                             var status = -1
@@ -399,7 +384,6 @@ class PrinterConnectionFactory(
                                         try {
                                             status = socket.inputStream.read()
                                         } catch (e: Exception) {
-                                            Log.w(TAG, "[status-probe] read gagal untuk \"${printer.label}\": ${e.message}")
                                         }
                                     }
                                 val watchdog =
@@ -413,20 +397,12 @@ class PrinterConnectionFactory(
                                 readJob.await()
                                 watchdog.cancel()
                             }
-                            val probeReadMs = System.currentTimeMillis() - probeReadStartMs
-                            val result =
-                                when {
-                                    status == -1 -> PaperStatusResult.NoResponse
-                                    (status and 0x60) != 0 -> PaperStatusResult.PaperOut
-                                    (status and 0x0C) != 0 -> PaperStatusResult.NearEnd
-                                    else -> PaperStatusResult.Ok
-                                }
-                            Log.d(
-                                TAG,
-                                "[status-probe] byte=$status (0x${status.toString(16)}) -> $result, respon ${probeReadMs}ms, " +
-                                    "socket status-probe akan ditutup sebelum koneksi print utama dibuka (\"${printer.label}\")",
-                            )
-                            result
+                            when {
+                                status == -1 -> PaperStatusResult.NoResponse
+                                (status and 0x60) != 0 -> PaperStatusResult.PaperOut
+                                (status and 0x0C) != 0 -> PaperStatusResult.NearEnd
+                                else -> PaperStatusResult.Ok
+                            }
                         } finally {
                             runCatching { socket.close() }
                         }

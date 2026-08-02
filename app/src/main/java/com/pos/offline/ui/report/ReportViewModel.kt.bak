@@ -577,44 +577,16 @@ class ReportViewModel(
         }
     }
 
-    fun processDirectWarranty(
-        product: ProductEntity,
-        qty: Double,
-        note: String,
-    ) {
-        viewModelScope.launch {
-            try {
-                val openShift = shiftRepository.getOpenShift()
-                val shiftId = openShift?.id
-                val cashierId = openShift?.cashierId
-                val cashierName = openShift?.cashierName ?: "Kasir (Tidak Diketahui)"
-
-                val outcome =
-                    returnRepository.processManualWarrantyClaim(
-                        productName = product.name,
-                        productId = product.id,
-                        quantity = qty,
-                        refundAmount = 0L,
-                        refundMethod = PaymentMethod.OTHER,
-                        shiftId = shiftId,
-                        cashierId = cashierId,
-                        cashierName = cashierName,
-                        note = note,
-                    )
-
-                if (outcome is ReturnOutcome.Success) {
-                    productRepository.decrementStock(product.id, qty)
-                    _messages.emit(ReportMessage("Klaim garansi berhasil diproses.", isError = false))
-                } else {
-                    _messages.emit(ReportMessage("Gagal memproses klaim garansi.", isError = true))
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                viewModelScope.launch {
-                    _messages.emit(ReportMessage("Terjadi kesalahan sistem: ${e.message}", isError = true))
-                }
-            }
-        }
+    fun processDirectWarranty(product: ProductEntity, qty: Double, note: String) {
+        // Kita cukup memanggil fungsi Tukar Guling yang sudah terbukti akurat 100%
+        // dengan menjadikan barang rusak dan barang pengganti sebagai produk yang sama!
+        prosesTukarGulingGaransi(
+            barangRusak = product,
+            qtyRusak = qty,
+            barangPengganti = product,
+            qtyPengganti = qty,
+            catatan = note
+        )
     }
 
     fun hitungSelisihHarga(

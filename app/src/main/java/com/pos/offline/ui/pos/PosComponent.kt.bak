@@ -1274,8 +1274,7 @@ internal fun DiscountField(
     }
     LaunchedEffect(type, rawValue) {
         val parsed = text.toDoubleOrNull() ?: 0.0
-        val isDifferent = kotlin.math.abs(parsed - rawValue) > 1e-9
-        if (isDifferent && (rawValue == 0.0 || !text.endsWith("."))) {
+        if (kotlin.math.abs(parsed - rawValue) > 1e-9 && (rawValue == 0.0 || !text.endsWith("."))) {
             text =
                 when {
                     rawValue <= 0.0 -> ""

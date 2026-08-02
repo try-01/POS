@@ -36,7 +36,7 @@ class PosApplication : Application() {
         installRestoreCrashGuard()
     }
 
-private fun installRestoreCrashGuard() {
+    private fun installRestoreCrashGuard() {
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             if (RestoreGuard.isInProgress) {
@@ -45,15 +45,9 @@ private fun installRestoreCrashGuard() {
                     "Crash tertangkap di window restore, dialihkan ke restart terkendali",
                     throwable,
                 )
-                val restarted =
-                    try {
-                        BackupManager.restartApp(applicationContext)
-                    } catch (t: Throwable) {
-                        false
-                    }
-                if (!restarted) {
-                    // restartApp gagal (mis. tidak ada launch intent) — jangan telan crash,
-                    // teruskan ke default handler agar tetap tercatat di crash reporter/Vitals.
+                try {
+                    BackupManager.restartApp(applicationContext)
+                } catch (t: Throwable) {
                     defaultHandler?.uncaughtException(thread, throwable)
                 }
             } else {

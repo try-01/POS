@@ -45,6 +45,8 @@ class TransactionRepository(
     private val productDao: ProductDao,
     private val shiftRepository: ShiftRepository,
 ) {
+    val transactions: Flow<List<TransactionEntity>> = transactionDao.observeAll()
+
     fun dailyTransactions(
         startOfDay: Long,
         endOfDay: Long,

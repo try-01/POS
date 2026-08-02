@@ -96,6 +96,11 @@ object BackupManager {
         writable.query("PRAGMA wal_checkpoint(TRUNCATE)").use { it.moveToFirst() }
     }
 
+    private fun checkpointWalTruncate(context: Context) {
+        val writable = PosDatabase.getInstance(context).openHelper.writableDatabase
+        writable.query("PRAGMA wal_checkpoint(TRUNCATE)").use { it.moveToFirst() }
+    }
+
     suspend fun validateAndRestore(
         context: Context,
         sourceUri: Uri,
@@ -138,7 +143,7 @@ object BackupManager {
                     FileOutputStream(quarantineFile).use { out -> inp.copyTo(out) }
                 }
                 try {
-                    checkpointWal(context)
+                    checkpointWalTruncate(context)
                 } catch (_: Throwable) {
                 }
                 PosDatabase.closeActiveInstance()

@@ -6,7 +6,6 @@ import com.pos.offline.data.local.entity.ProductEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.coroutineContext
 import org.dhatim.fastexcel.BorderSide
 import org.dhatim.fastexcel.BorderStyle
 import org.dhatim.fastexcel.Workbook

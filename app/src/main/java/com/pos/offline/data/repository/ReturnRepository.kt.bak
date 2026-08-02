@@ -208,7 +208,6 @@ private object ReturnConflictRollback : RuntimeException() {
                 discountType = com.pos.offline.data.local.entity.DiscountType.NOMINAL.name,
                 discountValue = 0.0,
                 status = com.pos.offline.data.local.entity.TransactionStatus.COMPLETED.name,
-                isWarrantyExchange = true,
             )
 
         val transactionItem =

@@ -589,17 +589,6 @@ class ReportViewModel(
         )
     }
 
-    fun hitungSelisihHarga(
-        hargaRusak: Long,
-        qtyRusak: Double,
-        hargaPengganti: Long,
-        qtyPengganti: Double,
-    ): Long {
-        val totalRusak = (hargaRusak * qtyRusak).toLong()
-        val totalPengganti = (hargaPengganti * qtyPengganti).toLong()
-        return totalPengganti - totalRusak
-    }
-
     fun prosesTukarGulingGaransi(
         barangRusak: ProductEntity,
         qtyRusak: Double,
