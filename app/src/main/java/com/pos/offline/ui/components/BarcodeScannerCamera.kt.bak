@@ -59,6 +59,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import android.view.WindowManager
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -387,6 +392,20 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                 decorFitsSystemWindows = false,
             ),
     ) {
+        // --- FIX: paksa window benar-benar MATCH_PARENT x MATCH_PARENT ---
+        // Compose Dialog secara default selalu WRAP_CONTENT untuk tinggi,
+        // walau usePlatformDefaultWidth = false (itu cuma pengaruhi lebar).
+        val view = LocalView.current
+        SideEffect {
+            (view.parent as? DialogWindowProvider)?.window?.let { window ->
+                window.setLayout(
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                )
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+            }
+        }
+
         BackHandler { showScanner = false }
         Box(
             modifier =

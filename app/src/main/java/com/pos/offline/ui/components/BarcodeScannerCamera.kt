@@ -59,11 +59,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import android.app.Activity
+import android.content.ContextWrapper
+import androidx.compose.ui.platform.LocalDensity
+import androidx.core.view.WindowInsetsCompat
 import android.view.WindowManager
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
+androidx.core.view.ViewCompat
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -407,6 +412,7 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
         }
 
         BackHandler { showScanner = false }
+        val (statusBarHeight, navBarHeight) = rememberRealSystemBarInsets()
         Box(
             modifier =
                 Modifier
@@ -454,7 +460,7 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                 modifier =
                     Modifier
                         .align(Alignment.TopStart)
-                        .statusBarsPadding()
+                        .padding(top = statusBarHeight)
                         .padding(start = 16.dp, top = 12.dp),
             ) {
                 Surface(
@@ -489,7 +495,7 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                 modifier =
                     Modifier
                         .align(Alignment.TopStart)
-                        .statusBarsPadding()
+                        .padding(top = statusBarHeight)
                         .padding(start = 16.dp, top = 12.dp, end = 60.dp),
             ) {
                 Surface(
@@ -523,7 +529,7 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                 modifier =
                     Modifier
                         .align(Alignment.TopEnd)
-                        .statusBarsPadding()
+                        .padding(top = statusBarHeight)
                         .padding(16.dp),
             ) {
                 Icon(Icons.Rounded.Close, contentDescription = "Tutup", tint = Color.White)
@@ -534,7 +540,7 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
-                        .navigationBarsPadding()
+                        .padding(bottom = navBarHeight)
                         .padding(bottom = 12.dp, top = 4.dp),
                 shape = RoundedCornerShape(20.dp),
                 colors =
@@ -643,6 +649,28 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                 requestPermission()
             }
         }
+    }
+}
+
+private fun Context.findActivity(): Activity? {
+    var ctx = this
+    while (ctx is ContextWrapper) {
+        if (ctx is Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
+
+@Composable
+private fun rememberRealSystemBarInsets(): Pair<Dp, Dp> {
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    return remember {
+        val activity = context.findActivity()
+        val insets = activity?.window?.decorView?.let { ViewCompat.getRootWindowInsets(it) }
+        val statusPx = insets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
+        val navPx = insets?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+        with(density) { statusPx.toDp() to navPx.toDp() }
     }
 }
 
