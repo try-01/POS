@@ -89,7 +89,7 @@ import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 import com.pos.offline.ui.components.rememberBarcodeScanner
-import com.pos.offline.ui.inventory.sanitizeScannedCode
+import com.pos.offline.util.sanitizeScannedCode
 import com.pos.offline.util.ExcelManager
 import com.pos.offline.util.formatQuantity
 import com.pos.offline.util.toRupiah
