@@ -104,7 +104,7 @@ interface ReportDao {
         LEFT JOIN products p ON ri.productId = p.id
         INNER JOIN returns r ON r.id = ri.returnId
         WHERE r.returnedAt >= :start AND r.returnedAt < :end
-          AND (ri.restocked = 1 OR ri.transactionItemId = 0)
+          AND ri.restocked = 1
     """,
     )
     suspend fun getRestockedReturnsCost(
@@ -132,7 +132,12 @@ interface ReportDao {
         end: Long,
     ): List<PaymentMethodSummary>
 
-    @Query("SELECT COALESCE(SUM(refundAmount), 0) FROM returns WHERE returnedAt >= :start AND returnedAt < :end")
+    @Query(
+        """
+        SELECT COALESCE(SUM(refundAmount), 0) FROM returns
+        WHERE returnedAt >= :start AND returnedAt < :end AND isWarrantyExchange = 0
+        """,
+    )
     suspend fun getReturnsTotal(
         start: Long,
         end: Long,

@@ -8,18 +8,20 @@ data class ShiftSummary(
     val cashRevenue: Long,
     val qrisRevenue: Long,
     val totalCost: Long,
-    val restockedReturnsCost: Long, // <-- Tambahan parameter modal retur
+    val restockedReturnsCost: Long,
     val cashRefunds: Long,
     val qrisCashChangeOut: Long = 0L,
+    val warrantyExchangeCost: Long = 0L,
 ) {
     val totalRevenue: Long get() = cashRevenue + qrisRevenue
-    
-    // Perhitungan modal bersih: Total Modal Barang Keluar - Modal Barang Retur Masuk
-    val netCost: Long get() = (totalCost - restockedReturnsCost).coerceAtLeast(0L)
-    
-    // Laba kotor kini akurat dikurangi modal barang retur
+
+    // warrantyExchangeCost ditambahkan kembali agar grossProfit tetap identik dengan
+    // sebelum pemisahan biaya garansi (totalCost kini sudah exclude biaya garansi di
+    // level query) — murni breakdown visibilitas, bukan perubahan nilai laba.
+    val netCost: Long get() = (totalCost - restockedReturnsCost + warrantyExchangeCost).coerceAtLeast(0L)
+
     val grossProfit: Long get() = totalRevenue - netCost
-    
+
     val expectedCashInDrawer: Long get() = startingCash + cashRevenue - cashRefunds - qrisCashChangeOut
 }
 
@@ -82,9 +84,10 @@ class ShiftRepository(
             cashRevenue = shiftDao.cashRevenueForShift(shiftId),
             qrisRevenue = shiftDao.qrisRevenueForShift(shiftId),
             totalCost = shiftDao.totalCostForShift(shiftId),
-            restockedReturnsCost = shiftDao.restockedReturnsCostForShift(shiftId), // <-- Ambil data dari DAO
+            restockedReturnsCost = shiftDao.restockedReturnsCostForShift(shiftId),
             cashRefunds = shiftDao.cashRefundsForShift(shiftId),
             qrisCashChangeOut = shiftDao.qrisCashChangeOutForShift(shiftId),
+            warrantyExchangeCost = shiftDao.warrantyExchangeCostForShift(shiftId),
         )
     }
 
@@ -101,9 +104,10 @@ class ShiftRepository(
                 cashRevenue = shiftDao.cashRevenueForShift(shiftId),
                 qrisRevenue = shiftDao.qrisRevenueForShift(shiftId),
                 totalCost = shiftDao.totalCostForShift(shiftId),
-                restockedReturnsCost = shiftDao.restockedReturnsCostForShift(shiftId), // <-- Ambil data dari DAO
+                restockedReturnsCost = shiftDao.restockedReturnsCostForShift(shiftId),
                 cashRefunds = shiftDao.cashRefundsForShift(shiftId),
                 qrisCashChangeOut = shiftDao.qrisCashChangeOutForShift(shiftId),
+                warrantyExchangeCost = shiftDao.warrantyExchangeCostForShift(shiftId),
             )
         val updated =
             shiftDao.endIfOpen(

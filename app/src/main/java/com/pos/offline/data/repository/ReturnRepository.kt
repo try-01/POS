@@ -199,6 +199,9 @@ private object ReturnConflictRollback : RuntimeException() {
             refundAmount = actualRefundCash,
             refundMethod = PaymentMethod.CASH.name,
             note = "Tukar Guling Garansi: $note",
+            // Baris ini cash-neutral (murni bookkeeping) HANYA bila bukan refund riil —
+            // sinkron dengan actualRefundCash yang di atas: 0 bila !isRealRefund.
+            isWarrantyExchange = !isRealRefund,
         )
 
         // ---------------------------------------------------------

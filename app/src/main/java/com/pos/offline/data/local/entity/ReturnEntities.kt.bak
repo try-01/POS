@@ -2,7 +2,6 @@ package com.pos.offline.data.local.entity
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import androidx.room.ColumnInfo
 
 @Entity(
     tableName = "returns",
@@ -23,13 +22,6 @@ data class ReturnEntity(
     val refundAmount: Long,
     val refundMethod: String,
     val note: String = "",
-    // true = baris pembukuan sintetis dari klaim garansi (refundAmount selalu 0,
-    //        tidak pernah memengaruhi kas riil — mis. EXC-RET-).
-    // false = retur riil (via struk) ATAU retur tunai riil dari tukar-guling
-    //        garansi beda harga (RET-DIR-) — keduanya harus terhitung normal
-    //        di cashRefundsForShift/getReturnsTotal.
-    @ColumnInfo(name = "isWarrantyExchange", defaultValue = "0")
-    val isWarrantyExchange: Boolean = false,
 )
 
 @Entity(

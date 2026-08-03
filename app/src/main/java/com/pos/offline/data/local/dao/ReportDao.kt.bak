@@ -42,9 +42,9 @@ interface ReportDao {
     @Query(
         """
         SELECT COUNT(CASE WHEN isWarrantyExchange = 0 THEN 1 END) as transactionCount,
-               COALESCE(SUM(subtotal), 0) as subtotalSum,
-               COALESCE(SUM(tax), 0) as taxSum,
-               COALESCE(SUM(total), 0) as totalSum,
+               COALESCE(SUM(CASE WHEN isWarrantyExchange = 0 THEN subtotal ELSE 0 END), 0) as subtotalSum,
+               COALESCE(SUM(CASE WHEN isWarrantyExchange = 0 THEN tax ELSE 0 END), 0) as taxSum,
+               COALESCE(SUM(CASE WHEN isWarrantyExchange = 0 THEN total ELSE 0 END), 0) as totalSum,
                COALESCE(SUM(
                    CASE
                        WHEN paymentMethod = 'CASH' THEN paidAmount - changeGiven
@@ -104,7 +104,7 @@ interface ReportDao {
         LEFT JOIN products p ON ri.productId = p.id
         INNER JOIN returns r ON r.id = ri.returnId
         WHERE r.returnedAt >= :start AND r.returnedAt < :end
-          AND (ri.restocked = 1 OR ri.transactionItemId = 0)
+          AND ri.restocked = 1
     """,
     )
     suspend fun getRestockedReturnsCost(
