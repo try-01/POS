@@ -42,9 +42,9 @@ interface ReportDao {
     @Query(
         """
         SELECT COUNT(CASE WHEN isWarrantyExchange = 0 THEN 1 END) as transactionCount,
-               COALESCE(SUM(subtotal), 0) as subtotalSum,
-               COALESCE(SUM(tax), 0) as taxSum,
-               COALESCE(SUM(total), 0) as totalSum,
+               COALESCE(SUM(CASE WHEN isWarrantyExchange = 0 THEN subtotal ELSE 0 END), 0) as subtotalSum,
+               COALESCE(SUM(CASE WHEN isWarrantyExchange = 0 THEN tax ELSE 0 END), 0) as taxSum,
+               COALESCE(SUM(CASE WHEN isWarrantyExchange = 0 THEN total ELSE 0 END), 0) as totalSum,
                COALESCE(SUM(
                    CASE
                        WHEN paymentMethod = 'CASH' THEN paidAmount - changeGiven
@@ -63,9 +63,10 @@ interface ReportDao {
         """
         SELECT COALESCE(SUM(ti.quantity), 0) as itemsSoldSum,
                COALESCE(SUM(ti.lineTotal), 0) as revenueSum,
-               COALESCE(SUM(ti.quantity * ti.unitCost), 0) as costSum
+               COALESCE(SUM(CAST(ROUND(ti.quantity * ti.unitCost) AS INTEGER)), 0) as costSum
         FROM transaction_items ti INNER JOIN transactions t ON t.id = ti.transactionId
         WHERE t.createdAt >= :start AND t.createdAt < :end AND t.status = 'COMPLETED'
+          AND t.isWarrantyExchange = 0
     """,
     )
     suspend fun getProfitAndItemsSummary(
@@ -73,13 +74,30 @@ interface ReportDao {
         end: Long,
     ): ProfitAndItemsSummary
 
+    // Biaya modal barang pengganti pada transaksi tukar-guling garansi, dipisah
+    // dari COGS penjualan murni agar terlihat sebagai baris "Biaya Klaim Garansi" tersendiri.
+    @Query(
+        """
+        SELECT COALESCE(SUM(CAST(ROUND(ti.quantity * ti.unitCost) AS INTEGER)), 0)
+        FROM transaction_items ti INNER JOIN transactions t ON t.id = ti.transactionId
+        WHERE t.createdAt >= :start AND t.createdAt < :end AND t.status = 'COMPLETED'
+          AND t.isWarrantyExchange = 1
+    """,
+    )
+    suspend fun getWarrantyExchangeCost(
+        start: Long,
+        end: Long,
+    ): Long
+
     @Query(
         """
         SELECT COALESCE(SUM(
-            CASE
-                WHEN ri.transactionItemId = 0 THEN COALESCE(p.cost, 0)
-                ELSE ti.unitCost
-            END * ri.quantityReturned
+            CAST(ROUND(
+                CASE
+                    WHEN ri.transactionItemId = 0 THEN COALESCE(p.cost, 0)
+                    ELSE ti.unitCost
+                END * ri.quantityReturned
+            ) AS INTEGER)
         ), 0)
         FROM return_items ri
         LEFT JOIN transaction_items ti ON ri.transactionItemId = ti.id

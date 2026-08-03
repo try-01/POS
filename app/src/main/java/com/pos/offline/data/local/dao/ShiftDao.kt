@@ -100,13 +100,25 @@ interface ShiftDao {
 
     @Query(
         """
-        SELECT COALESCE(SUM(ti.unitCost * ti.quantity), 0)
+        SELECT COALESCE(SUM(CAST(ROUND(ti.unitCost * ti.quantity) AS INTEGER)), 0)
         FROM transaction_items ti
         INNER JOIN transactions t ON t.id = ti.transactionId
-        WHERE t.shiftId = :shiftId AND t.status = 'COMPLETED'
+        WHERE t.shiftId = :shiftId AND t.status = 'COMPLETED' AND t.isWarrantyExchange = 0
         """,
     )
     suspend fun totalCostForShift(shiftId: Long): Long
+
+    // Biaya modal barang pengganti pada transaksi tukar-guling garansi dalam shift ini,
+    // dipisah dari totalCostForShift agar tampil sebagai baris "Biaya Klaim Garansi" tersendiri.
+    @Query(
+        """
+        SELECT COALESCE(SUM(CAST(ROUND(ti.unitCost * ti.quantity) AS INTEGER)), 0)
+        FROM transaction_items ti
+        INNER JOIN transactions t ON t.id = ti.transactionId
+        WHERE t.shiftId = :shiftId AND t.status = 'COMPLETED' AND t.isWarrantyExchange = 1
+        """,
+    )
+    suspend fun warrantyExchangeCostForShift(shiftId: Long): Long
 
     @Query(
         """
@@ -119,16 +131,18 @@ interface ShiftDao {
     @Query(
         """
         SELECT COALESCE(SUM(
-            CASE 
-                WHEN ri.transactionItemId = 0 THEN COALESCE(p.cost, 0)
-                ELSE ti.unitCost 
-            END * ri.quantityReturned
+            CAST(ROUND(
+                CASE
+                    WHEN ri.transactionItemId = 0 THEN COALESCE(p.cost, 0)
+                    ELSE ti.unitCost
+                END * ri.quantityReturned
+            ) AS INTEGER)
         ), 0)
         FROM return_items ri
         LEFT JOIN transaction_items ti ON ri.transactionItemId = ti.id
         LEFT JOIN products p ON ri.productId = p.id
         INNER JOIN returns r ON r.id = ri.returnId
-        WHERE r.shiftId = :shiftId 
+        WHERE r.shiftId = :shiftId
           AND (ri.restocked = 1 OR ri.transactionItemId = 0)
         """,
     )

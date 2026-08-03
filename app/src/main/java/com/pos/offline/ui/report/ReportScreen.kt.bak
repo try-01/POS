@@ -2716,13 +2716,6 @@ private fun ClosedShiftDetailDialog(
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Total Pendapatan", summary.totalRevenue.toRupiah(), emphasize = true)
                 SummaryLine("Laba Kotor", summary.grossProfit.toRupiah(), color = MaterialTheme.colorScheme.primary)
-                if (summary.warrantyExchangeCost > 0L) {
-                    SummaryLine(
-                        "Biaya Klaim Garansi",
-                        "- ${summary.warrantyExchangeCost.toRupiah()}",
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
                 Spacer(Modifier.height(14.dp))
                 Text("💵 Rekonsiliasi Laci", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))

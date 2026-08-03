@@ -323,12 +323,15 @@ object ReceiptManager {
         if (printedBy != null) lines += ReceiptLine(left = "Kasir: $printedBy", right = shiftId?.let { "Shift: $it" } ?: "")
         if (includeSalesSummary) {
             lines += divider()
-            lines += ReceiptLine(left = "Total Transaksi", right = "${data.summary.transactionCount} struk")
-            lines += ReceiptLine(left = "Penjualan (sblm diskon)", right = data.summary.subtotalSum.toRupiah())
+            lines += ReceiptLine(left = "Jumlah Transaksi", right = "${data.summary.transactionCount}x")
+            lines += ReceiptLine(left = "Penjualan Kotor", right = data.summary.subtotalSum.toRupiah())
             if (data.diskon > 0) lines += ReceiptLine(left = "Diskon", right = "- ${data.diskon.toRupiah()}")
             if (data.summary.taxSum > 0) lines += ReceiptLine(left = "Pajak", right = data.summary.taxSum.toRupiah())
             lines += ReceiptLine(left = "PENDAPATAN BERSIH", right = data.pendapatanBersih.toRupiah(), bold = true)
-            if (data.returnsTotal > 0) lines += ReceiptLine(left = "  (Termasuk Retur)", right = "- ${data.returnsTotal.toRupiah()}")
+            if (data.returnsTotal > 0) lines += ReceiptLine(left = "  Dikurangi Retur", right = "- ${data.returnsTotal.toRupiah()}")
+            if (data.biayaGaransi > 0) {
+                lines += ReceiptLine(left = "  Biaya Klaim Garansi", right = "- ${data.biayaGaransi.toRupiah()}")
+            }
             lines += ReceiptLine(left = "Laba Bersih", right = data.labaBersih.toRupiah(), bold = true)
             lines += divider()
             lines += ReceiptLine(left = "Metode Pembayaran", align = ReceiptAlign.CENTER, bold = true)

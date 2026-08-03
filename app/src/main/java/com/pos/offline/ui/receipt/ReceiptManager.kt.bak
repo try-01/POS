@@ -37,10 +37,13 @@ data class ReceiptLine(
 
 object ReceiptManager {
     private val dateFmt = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("id-ID"))
+    private const val DEFAULT_DIVIDER_WIDTH = 32
+    private val RESERVED_MARKUP_CHARS = Regex("[\\[\\]<>]")
 
     fun buildLines(
         result: CheckoutResult,
         storeProfile: StoreProfileEntity? = null,
+        dividerWidth: Int = DEFAULT_DIVIDER_WIDTH,
     ): List<ReceiptLine> {
         val tx = result.transaction
         val lines = mutableListOf<ReceiptLine>()
@@ -57,7 +60,7 @@ object ReceiptManager {
                 }
             }
         }
-        lines += divider()
+        lines += divider(dividerWidth)
         val dateStr = dateFmt.format(Date(tx.createdAt))
         val invStr = tx.id
         lines += ReceiptLine(left = dateStr, right = invStr)
@@ -77,7 +80,7 @@ object ReceiptManager {
         if (tx.isVoid) {
             lines += ReceiptLine(left = "*** TRANSAKSI DIBATALKAN ***", align = ReceiptAlign.CENTER, bold = true)
         }
-        lines += divider()
+        lines += divider(dividerWidth)
         for (item in result.items) {
             val name = item.productName.trim().ifEmpty { "(Tanpa nama)" }
             if (item.quantity > 1.0) {
@@ -93,7 +96,7 @@ object ReceiptManager {
         }
         lines += ReceiptLine(left = "")
         lines += ReceiptLine(left = "TOTAL: ${tx.total.toRupiah()}", align = ReceiptAlign.CENTER, bold = true, large = true)
-        lines += divider()
+        lines += divider(dividerWidth)
         val gridItems = mutableListOf<Pair<String, String>>()
         val payLabel = paymentMethodLabel(tx.paymentMethod)
         gridItems.add(Pair(payLabel, tx.paidAmount.toRupiah()))
@@ -111,7 +114,7 @@ object ReceiptManager {
                 lines += ReceiptLine(left = "${chunk[0].first}: ${chunk[0].second}")
             }
         }
-        lines += divider()
+        lines += divider(dividerWidth)
         val footerNote = storeProfile?.footerNote?.trim()
         if (!footerNote.isNullOrEmpty()) {
             footerNote.split("\n").forEach { rawLine ->
@@ -125,7 +128,8 @@ object ReceiptManager {
         return lines
     }
 
-    private fun divider(): ReceiptLine = ReceiptLine(left = "--------------------------------", align = ReceiptAlign.CENTER)
+    private fun divider(width: Int = DEFAULT_DIVIDER_WIDTH): ReceiptLine =
+        ReceiptLine(left = "-".repeat(width.coerceAtLeast(1)), align = ReceiptAlign.CENTER)
 
     suspend fun exportToPdf(
         context: Context,
@@ -286,10 +290,15 @@ object ReceiptManager {
             val boldEnd = if (line.bold) "</b>" else ""
             val sizeTag = if (line.large) "<font size='big'>" else ""
             val sizeEnd = if (line.large) "</font>" else ""
-            if (line.right.isNotEmpty()) {
-                sb.append("[L]$boldTag$sizeTag${line.left}$sizeEnd$boldEnd[R]$boldTag$sizeTag${line.right}$sizeEnd$boldEnd\n")
+            // Strip karakter kontrol markup dari input dinamis (nama toko/produk/catatan)
+            // agar tidak merusak parser ESC/POS — sebelumnya hanya EscPosReceiptFormatter
+            // yang melakukan ini; sekarang berlaku juga untuk cetak laporan penjualan.
+            val left = line.left.replace(RESERVED_MARKUP_CHARS, "")
+            val right = line.right.replace(RESERVED_MARKUP_CHARS, "")
+            if (right.isNotEmpty()) {
+                sb.append("[L]$boldTag$sizeTag$left$sizeEnd$boldEnd[R]$boldTag$sizeTag$right$sizeEnd$boldEnd\n")
             } else {
-                sb.append("$alignTag$boldTag$sizeTag${line.left}$sizeEnd$boldEnd\n")
+                sb.append("$alignTag$boldTag$sizeTag$left$sizeEnd$boldEnd\n")
             }
         }
         return sb.toString()
@@ -320,6 +329,9 @@ object ReceiptManager {
             if (data.summary.taxSum > 0) lines += ReceiptLine(left = "Pajak", right = data.summary.taxSum.toRupiah())
             lines += ReceiptLine(left = "PENDAPATAN BERSIH", right = data.pendapatanBersih.toRupiah(), bold = true)
             if (data.returnsTotal > 0) lines += ReceiptLine(left = "  (Termasuk Retur)", right = "- ${data.returnsTotal.toRupiah()}")
+            if (data.biayaGaransi > 0) {
+                lines += ReceiptLine(left = "  Biaya Klaim Garansi", right = "- ${data.biayaGaransi.toRupiah()}")
+            }
             lines += ReceiptLine(left = "Laba Bersih", right = data.labaBersih.toRupiah(), bold = true)
             lines += divider()
             lines += ReceiptLine(left = "Metode Pembayaran", align = ReceiptAlign.CENTER, bold = true)

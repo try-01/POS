@@ -13,7 +13,6 @@ data class SalesReportData(
     val diskon: Long,
     val pendapatanBersih: Long,
     val labaBersih: Long,
-    val biayaGaransi: Long = 0L,
     val products: List<ProductSalesRow> = emptyList(),
 )
 
@@ -26,20 +25,16 @@ class ReportRepository(
         includeProducts: Boolean = false,
     ): SalesReportData {
         val summary = reportDao.getSalesSummary(start, end)
-        val profitItems = reportDao.getProfitAndItemsSummary(start, end) // sudah exclude transaksi tukar-garansi
+        val profitItems = reportDao.getProfitAndItemsSummary(start, end)
         val payments = reportDao.getPaymentMethodSummary(start, end)
         val returns = reportDao.getReturnsTotal(start, end)
         val diskon = summary.subtotalSum + summary.taxSum - summary.totalSum
         val pendapatanBersih = summary.actualReceivedSum - returns
         val restockedCost = reportDao.getRestockedReturnsCost(start, end)
-        val biayaGaransi = reportDao.getWarrantyExchangeCost(start, end)
-        // biayaGaransi ditambahkan kembali ke netCogs agar labaBersih TIDAK berubah
-        // nilainya dibanding Pendekatan Margin Netral — ini murni memisah breakdown,
-        // bukan mengubah hasil akhir laba.
-        val netCogs = profitItems.costSum - restockedCost + biayaGaransi
+        val netCogs = profitItems.costSum - restockedCost
         val labaBersih = pendapatanBersih - netCogs
         val products = if (includeProducts) reportDao.getTopSellingProducts(start, end, activeOnly = false) else emptyList()
-        return SalesReportData(summary, profitItems, payments, returns, diskon, pendapatanBersih, labaBersih, biayaGaransi, products)
+        return SalesReportData(summary, profitItems, payments, returns, diskon, pendapatanBersih, labaBersih, products)
     }
 
     fun observeProductsByTopSales(
