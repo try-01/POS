@@ -196,80 +196,48 @@ object ReceiptManager {
         return bmp
     }
 
-private fun drawLine(
-    canvas: Canvas,
-    line: ReceiptLine,
-    pageWidth: Float,
-    margin: Float,
-    y: Float,
-    scale: Float = 1f,
-) {
-    // Menggunakan TextPaint agar mendukung TextUtils.ellipsize
-    val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = AndroidColor.BLACK
-        textSize = (if (line.large) 16f else 11f) * scale
-        typeface = if (line.bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-    }
-
-    val availableWidth = pageWidth - (margin * 2f)
-
-    if (line.right.isNotEmpty()) {
-        val rightPaint = if (line.bold) {
-            TextPaint(textPaint).apply { typeface = Typeface.DEFAULT }
+    private fun drawLine(
+        canvas: Canvas,
+        line: ReceiptLine,
+        pageWidth: Float,
+        margin: Float,
+        y: Float,
+        scale: Float = 1f,
+    ) {
+        val paint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = AndroidColor.BLACK
+                textSize = (if (line.large) 16f else 11f) * scale
+                typeface = if (line.bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            }
+        val rightPaint =
+            if (line.bold && line.right.isNotEmpty()) {
+                Paint(paint).apply { typeface = Typeface.DEFAULT }
+            } else {
+                paint
+            }
+        if (line.right.isNotEmpty()) {
+            canvas.drawText(line.left, margin, y, paint)
+            val rightW = rightPaint.measureText(line.right)
+            canvas.drawText(line.right, pageWidth - margin - rightW, y, rightPaint)
         } else {
-            textPaint
-        }
+            when (line.align) {
+                ReceiptAlign.LEFT -> {
+                    canvas.drawText(line.left, margin, y, paint)
+                }
 
-        val rightW = rightPaint.measureText(line.right)
-        val spacing = 8f * scale // Jarak aman minimum antara teks kiri & kanan
-        val maxLeftWidth = (availableWidth - rightW - spacing).coerceAtLeast(0f)
+                ReceiptAlign.CENTER -> {
+                    val tw = paint.measureText(line.left)
+                    canvas.drawText(line.left, (pageWidth - tw) / 2f, y, paint)
+                }
 
-        // Potong teks kiri dengan '...' jika melebihi lebar maksimum agar tidak menabrak teks kanan
-        val truncatedLeft = TextUtils.ellipsize(
-            line.left,
-            textPaint,
-            maxLeftWidth,
-            TextUtils.TruncateAt.END
-        ).toString()
-
-        canvas.drawText(truncatedLeft, margin, y, textPaint)
-        canvas.drawText(line.right, pageWidth - margin - rightW, y, rightPaint)
-    } else {
-        when (line.align) {
-            ReceiptAlign.LEFT -> {
-                val truncatedText = TextUtils.ellipsize(
-                    line.left,
-                    textPaint,
-                    availableWidth,
-                    TextUtils.TruncateAt.END
-                ).toString()
-                canvas.drawText(truncatedText, margin, y, textPaint)
-            }
-
-            ReceiptAlign.CENTER -> {
-                val truncatedText = TextUtils.ellipsize(
-                    line.left,
-                    textPaint,
-                    availableWidth,
-                    TextUtils.TruncateAt.END
-                ).toString()
-                val tw = textPaint.measureText(truncatedText)
-                canvas.drawText(truncatedText, (pageWidth - tw) / 2f, y, textPaint)
-            }
-
-            ReceiptAlign.RIGHT -> {
-                val truncatedText = TextUtils.ellipsize(
-                    line.left,
-                    textPaint,
-                    availableWidth,
-                    TextUtils.TruncateAt.END
-                ).toString()
-                val tw = textPaint.measureText(truncatedText)
-                canvas.drawText(truncatedText, pageWidth - margin - tw, y, textPaint)
+                ReceiptAlign.RIGHT -> {
+                    val tw = paint.measureText(line.left)
+                    canvas.drawText(line.left, pageWidth - margin - tw, y, paint)
+                }
             }
         }
     }
-}
 
     fun buildShareIntent(
         context: Context,

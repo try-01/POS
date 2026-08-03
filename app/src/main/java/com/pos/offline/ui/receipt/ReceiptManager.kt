@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.text.TextPaint
+import android.text.TextUtils
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
 import com.pos.offline.data.local.entity.PaymentMethod
@@ -204,7 +206,6 @@ private fun drawLine(
     y: Float,
     scale: Float = 1f,
 ) {
-    // Menggunakan TextPaint agar mendukung TextUtils.ellipsize
     val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = AndroidColor.BLACK
         textSize = (if (line.large) 16f else 11f) * scale
@@ -221,10 +222,10 @@ private fun drawLine(
         }
 
         val rightW = rightPaint.measureText(line.right)
-        val spacing = 8f * scale // Jarak aman minimum antara teks kiri & kanan
+        val spacing = 8f * scale // Spasi aman minimum antara teks kiri & kanan
         val maxLeftWidth = (availableWidth - rightW - spacing).coerceAtLeast(0f)
 
-        // Potong teks kiri dengan '...' jika melebihi lebar maksimum agar tidak menabrak teks kanan
+        // Memotong teks kiri secara otomatis jika terlalu panjang agar tidak bertabrakan
         val truncatedLeft = TextUtils.ellipsize(
             line.left,
             textPaint,
@@ -235,35 +236,24 @@ private fun drawLine(
         canvas.drawText(truncatedLeft, margin, y, textPaint)
         canvas.drawText(line.right, pageWidth - margin - rightW, y, rightPaint)
     } else {
+        val truncatedText = TextUtils.ellipsize(
+            line.left,
+            textPaint,
+            availableWidth,
+            TextUtils.TruncateAt.END
+        ).toString()
+
         when (line.align) {
             ReceiptAlign.LEFT -> {
-                val truncatedText = TextUtils.ellipsize(
-                    line.left,
-                    textPaint,
-                    availableWidth,
-                    TextUtils.TruncateAt.END
-                ).toString()
                 canvas.drawText(truncatedText, margin, y, textPaint)
             }
 
             ReceiptAlign.CENTER -> {
-                val truncatedText = TextUtils.ellipsize(
-                    line.left,
-                    textPaint,
-                    availableWidth,
-                    TextUtils.TruncateAt.END
-                ).toString()
                 val tw = textPaint.measureText(truncatedText)
                 canvas.drawText(truncatedText, (pageWidth - tw) / 2f, y, textPaint)
             }
 
             ReceiptAlign.RIGHT -> {
-                val truncatedText = TextUtils.ellipsize(
-                    line.left,
-                    textPaint,
-                    availableWidth,
-                    TextUtils.TruncateAt.END
-                ).toString()
                 val tw = textPaint.measureText(truncatedText)
                 canvas.drawText(truncatedText, pageWidth - margin - tw, y, textPaint)
             }
