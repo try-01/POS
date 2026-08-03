@@ -608,6 +608,7 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
             }
         }
     }
+    }
     return {
         when (permState) {
             CameraPermissionState.GRANTED -> {
