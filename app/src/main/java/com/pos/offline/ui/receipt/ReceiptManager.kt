@@ -12,6 +12,7 @@ import com.pos.offline.data.local.entity.StoreProfileEntity
 import com.pos.offline.data.local.entity.isVoid
 import com.pos.offline.data.repository.CheckoutResult
 import com.pos.offline.data.repository.SalesReportData
+import com.pos.offline.data.repository.ReturnDetail
 import com.pos.offline.ui.components.paymentMethodLabel
 import com.pos.offline.util.formatQuantity
 import com.pos.offline.util.toRupiah
@@ -368,6 +369,73 @@ object ReceiptManager {
             lines += divider()
         }
         lines += ReceiptLine(left = "")
+        return lines
+    }
+
+    fun buildReturnReceiptLines(
+        returnDetail: ReturnDetail,
+        storeProfile: StoreProfileEntity?,
+        dividerWidth: Int = DEFAULT_DIVIDER_WIDTH,
+    ): List<ReceiptLine> {
+        val lines = mutableListOf<ReceiptLine>()
+        val header = returnDetail.header
+        
+        // 1. Header Toko
+        val storeName = storeProfile?.storeName?.trim()?.ifBlank { "Kasir Offline" } ?: "Kasir Offline"
+        lines += ReceiptLine(left = storeName, align = ReceiptAlign.CENTER, bold = true, large = true)
+        
+        val address = storeProfile?.address?.trim()
+        if (!address.isNullOrEmpty()) {
+            address.split("\n").forEach { rawLine ->
+                val line = rawLine.trim()
+                if (line.isNotEmpty()) lines += ReceiptLine(left = line, align = ReceiptAlign.CENTER)
+            }
+        }
+        lines += divider(dividerWidth)
+
+        // 2. Info Retur / Garansi
+        val isGaransi = header.note.contains("Tukar Guling Garansi", ignoreCase = true)
+        val title = if (isGaransi) "BUKTI KLAIM GARANSI" else "BUKTI RETUR BARANG"
+        lines += ReceiptLine(left = title, align = ReceiptAlign.CENTER, bold = true)
+        
+        lines += ReceiptLine(left = dateFmt.format(Date(header.returnedAt)), right = header.transactionId)
+        val cashier = header.cashierName.trim()
+        if (cashier.isNotEmpty()) {
+            lines += ReceiptLine(left = "Kasir: $cashier")
+        }
+        lines += divider(dividerWidth)
+
+        // 3. Daftar Item yang Dikembalikan
+        for (item in returnDetail.items) {
+            val name = item.productName.trim().ifEmpty { "(Tanpa nama)" }
+            val lineTotal = kotlin.math.round(item.unitPrice * item.quantityReturned).toLong()
+            if (item.quantityReturned > 1.0) {
+                lines += ReceiptLine(left = name, bold = true)
+                lines += ReceiptLine(
+                    left = "  ${item.quantityReturned.formatQuantity()} x ${item.unitPrice.toRupiah()}",
+                    right = lineTotal.toRupiah()
+                )
+            } else {
+                lines += ReceiptLine(left = name, right = lineTotal.toRupiah(), bold = true)
+            }
+        }
+        lines += divider(dividerWidth)
+        
+        // 4. Total dan Metode Pengembalian Uang
+        lines += ReceiptLine(left = "TOTAL PENGEMBALIAN", right = header.refundAmount.toRupiah(), bold = true)
+        lines += ReceiptLine(left = "Metode", right = paymentMethodLabel(header.refundMethod))
+        
+        // 5. Catatan Kasir (Jika ada)
+        if (header.note.isNotEmpty()) {
+            lines += divider(dividerWidth)
+            lines += ReceiptLine(left = "Catatan:", bold = true)
+            lines += ReceiptLine(left = header.note)
+        }
+        
+        lines += divider(dividerWidth)
+        lines += ReceiptLine(left = "Terima Kasih", align = ReceiptAlign.CENTER)
+        lines += ReceiptLine(left = "")
+        
         return lines
     }
 }

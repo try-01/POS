@@ -313,20 +313,26 @@ private fun WarrantyClaimDialog(
         },
         confirmButton = {
             Column(
-                horizontalAlignment = Alignment.End,
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // Tombol 1: Tukar Barang Sejenis (Warna Penuh)
                 Button(onClick = { onSubmitSameItem(qty, note) }, modifier = Modifier.fillMaxWidth()) {
                     Text("Tukar Barang Sejenis", fontSize = 13.sp)
                 }
+                
+                // Tombol 2: Tukar dengan Produk Lain (Garis Tepi)
                 OutlinedButton(onClick = { onSelectDifferentItem(qty, note) }, modifier = Modifier.fillMaxWidth()) {
                     Text("Tukar dengan Produk Lain...", fontSize = 13.sp)
                 }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Batal", fontSize = 13.sp)
+                
+                // Tombol 3: Batal (Teks Saja) - Dipindah ke sini agar susunannya rapi ke bawah
+                TextButton(
+                    onClick = onDismiss, 
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) {
+                    Text("Batal", fontSize = 13.sp)
+                }
             }
         },
     )

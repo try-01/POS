@@ -251,7 +251,6 @@ private fun WarrantyClaimDialog(
     var qty by remember { mutableStateOf(1.0) }
     var note by remember { mutableStateOf("") }
     val step = if (product.stock % 1.0 == 0.0) 1.0 else 0.1
-    val maxQty = product.stock
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -345,7 +344,6 @@ private fun ExchangeClaimDialog(
     var qty by remember { mutableStateOf(1.0) }
     var note by remember { mutableStateOf(initialNote) }
     val step = if (replacementProduct.stock % 1.0 == 0.0) 1.0 else 0.1
-    val maxQty = replacementProduct.stock
 
     val totalBroken = kotlin.math.round(brokenProduct.price * brokenQty).toLong()
     val totalReplacement = kotlin.math.round(replacementProduct.price * qty).toLong()
