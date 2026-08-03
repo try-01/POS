@@ -76,8 +76,11 @@ interface ShiftDao {
     @Query(
         """
         SELECT COALESCE(SUM(paidAmount - changeGiven), 0) FROM transactions
-        WHERE shiftId = :shiftId AND paymentMethod = 'CASH' AND status = 'COMPLETED'
-        """,
+        WHERE shiftId = :shiftId 
+          AND paymentMethod = 'CASH' 
+          AND status = 'COMPLETED'
+          AND isWarrantyExchange = 0 
+        """
     )
     suspend fun cashRevenueForShift(shiftId: Long): Long
 
@@ -123,8 +126,10 @@ interface ShiftDao {
     @Query(
         """
         SELECT COALESCE(SUM(refundAmount), 0) FROM returns
-        WHERE shiftId = :shiftId AND refundMethod = 'CASH'
-        """,
+        WHERE shiftId = :shiftId 
+          AND refundMethod = 'CASH'
+          AND transactionId NOT LIKE 'EXC-%'
+        """
     )
     suspend fun cashRefundsForShift(shiftId: Long): Long
 

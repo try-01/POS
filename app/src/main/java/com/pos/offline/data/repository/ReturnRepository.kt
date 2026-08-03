@@ -169,82 +169,112 @@ private object ReturnConflictRollback : RuntimeException() {
         note: String,
     ): ReturnOutcome {
         val now = System.currentTimeMillis()
-
+        
+        // LAPISAN PENGAMAN 1: Kunci histori harga saat transaksi terjadi
         val totalBroken = kotlin.math.round(brokenProduct.price * brokenQty).toLong()
         val totalReplacement = kotlin.math.round(replacementProduct.price * replacementQty).toLong()
-
+        
+        // Hitung selisih harga (Delta)
+        val delta = totalReplacement - totalBroken
         val idSuffix = (100..999).random()
-        val syntheticReturnId = "EXC-RET-$now-$idSuffix"
-        val syntheticInvoiceId = "EXC-INV-$now-$idSuffix"
 
-        val returnHeader =
-            ReturnEntity(
-                transactionId = syntheticReturnId,
-                returnedAt = now,
-                shiftId = shiftId,
-                cashierId = cashierId,
-                cashierName = cashierName,
-                refundAmount = totalBroken,
-                refundMethod = PaymentMethod.CASH.name,
-                note = "Tukar Guling Garansi (Rusak): $note",
-            )
+        // ---------------------------------------------------------
+        // SISI 1: LOGIKA RETUR (Mencatat barang rusak yang kembali)
+        // ---------------------------------------------------------
+        // Jika delta < 0 (Toko mengembalikan uang), ini adalah retur RIIL yang memotong kas laci.
+        // Jika tidak, ini retur SINTETIS (EXC-RET) yang akan diabaikan oleh laci kas.
+        val isRealRefund = delta < 0
+        val returnIdPrefix = if (isRealRefund) "RET-DIR-" else "EXC-RET-"
+        val syntheticReturnId = "$returnIdPrefix$now-$idSuffix"
+        
+        // Hanya catat pengeluaran uang jika memang ada kembalian ke pelanggan
+        val actualRefundCash = if (isRealRefund) kotlin.math.abs(delta) else 0L
 
-        val transactionHeader =
-            com.pos.offline.data.local.entity.TransactionEntity(
-                id = syntheticInvoiceId,
-                createdAt = now,
-                subtotal = totalReplacement,
-                discount = 0L,
-                tax = 0L,
-                total = totalReplacement,
-                paidAmount = totalReplacement,
-                change = 0L,
-                changeGiven = 0L,
-                changeGivenInCash = true,
-                paymentMethod = PaymentMethod.CASH.name,
-                cashierId = cashierId,
-                cashierName = cashierName,
-                shiftId = shiftId,
-                discountType = com.pos.offline.data.local.entity.DiscountType.NOMINAL.name,
-                discountValue = 0.0,
-                status = com.pos.offline.data.local.entity.TransactionStatus.COMPLETED.name,
-                isWarrantyExchange = true,
-            )
+        val returnHeader = ReturnEntity(
+            transactionId = syntheticReturnId,
+            returnedAt = now,
+            shiftId = shiftId,
+            cashierId = cashierId,
+            cashierName = cashierName,
+            refundAmount = actualRefundCash,
+            refundMethod = PaymentMethod.CASH.name,
+            note = "Tukar Guling Garansi: $note",
+        )
 
-        val transactionItem =
-            com.pos.offline.data.local.entity.TransactionItemEntity(
-                transactionId = syntheticInvoiceId,
-                productName = replacementProduct.name,
-                unitPrice = replacementProduct.price,
-                quantity = replacementQty,
-                lineTotal = totalReplacement,
-                unitCost = replacementProduct.cost,
-                productId = replacementProduct.id,
-            )
+        // ---------------------------------------------------------
+        // SISI 2: LOGIKA INVOICE (Mencatat barang pengganti yang keluar)
+        // ---------------------------------------------------------
+        // Jika delta > 0 (Pelanggan nambah uang), ini adalah invoice RIIL yang menambah kas laci.
+        val isRealSale = delta > 0
+        val invoiceIdPrefix = if (isRealSale) "INV-EXC-" else "EXC-INV-"
+        val syntheticInvoiceId = "$invoiceIdPrefix$now-$idSuffix"
+        
+        // Uang masuk riil ke laci kasir hanyalah kekurangannya saja (delta)
+        val actualSaleCash = if (isRealSale) delta else 0L
+        
+        // Jadikan nilai barang rusak sebagai "Diskon/Kredit" untuk memotong total invoice
+        val discountApplied = if (isRealSale) totalBroken else totalReplacement
 
+        val transactionHeader = com.pos.offline.data.local.entity.TransactionEntity(
+            id = syntheticInvoiceId,
+            createdAt = now,
+            subtotal = totalReplacement,
+            discount = discountApplied,
+            tax = 0L,
+            total = actualSaleCash,
+            paidAmount = actualSaleCash,
+            change = 0L,
+            changeGiven = 0L,
+            changeGivenInCash = true,
+            paymentMethod = PaymentMethod.CASH.name,
+            cashierId = cashierId,
+            cashierName = cashierName,
+            shiftId = shiftId,
+            discountType = com.pos.offline.data.local.entity.DiscountType.NOMINAL.name,
+            discountValue = discountApplied.toDouble(),
+            status = com.pos.offline.data.local.entity.TransactionStatus.COMPLETED.name,
+            // Jika penjualan riil, isWarrantyExchange = false agar terhitung di laci kasir
+            isWarrantyExchange = !isRealSale, 
+        )
+
+        val transactionItem = com.pos.offline.data.local.entity.TransactionItemEntity(
+            transactionId = syntheticInvoiceId,
+            productName = replacementProduct.name,
+            unitPrice = replacementProduct.price, // Harga terkunci di sini
+            quantity = replacementQty,
+            lineTotal = totalReplacement,
+            unitCost = replacementProduct.cost,
+            productId = replacementProduct.id,
+        )
+
+        // LAPISAN PENGAMAN 2: Gunakan Database Transaction agar jika satu proses gagal, semua dibatalkan
         database.withTransaction {
             val newReturnId = returnDao.insertReturn(returnHeader)
-            val returnItem =
-                ReturnItemEntity(
-                    returnId = newReturnId,
-                    transactionItemId = 0L,
-                    productId = brokenProduct.id,
-                    productName = brokenProduct.name,
-                    unitPrice = brokenProduct.price,
-                    quantityReturned = brokenQty,
-                    restocked = false,
-                )
+            
+            val returnItem = ReturnItemEntity(
+                returnId = newReturnId,
+                transactionItemId = 0L,
+                productId = brokenProduct.id,
+                productName = brokenProduct.name,
+                unitPrice = brokenProduct.price,
+                quantityReturned = brokenQty,
+                restocked = false,
+            )
             returnDao.insertItems(listOf(returnItem))
+            
+            // Tambah stok ke gudang rusak
             productDao.incrementDamagedStock(brokenProduct.id, brokenQty, now)
-
+            
+            // Masukkan data penjualan pengganti
             transactionDao.checkout(transactionHeader, listOf(transactionItem))
+            
+            // Potong stok barang pengganti, tolak jika stok tidak cukup
             val affected = productDao.decrementStock(replacementProduct.id, replacementQty, now)
-
             if (affected == 0) {
                 throw RuntimeException("Stok ${replacementProduct.name} tidak mencukupi untuk penukaran.")
             }
         }
-
+        
         return ReturnOutcome.Success(0L)
     }
 }
