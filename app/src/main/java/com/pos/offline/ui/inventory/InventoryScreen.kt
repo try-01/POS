@@ -856,35 +856,27 @@ private fun ProductFormDialog(
     var isCheckingBarcode by remember(state.id) { mutableStateOf(false) }
     var isCheckingSku by remember(state.id) { mutableStateOf(false) }
     var showReturnDamagedDialog by remember(state.id) { mutableStateOf(false) }
-    
-    // State khusus kontrol tampilan scanner kamera
-    var isScanning by remember { mutableStateOf(false) }
-
     val context = LocalContext.current
-    val hasCamera = remember {
-        context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
-    }
-
-    val launchScanner = rememberBarcodeScanner(
-        onScanned = { code ->
-            isScanning = false
-            val sanitized = sanitizeScannedCode(code)
-            if (sanitized != null) {
-                barcode = sanitized
-                true
-            } else {
-                onScanError("Gagal memindai kode. Coba pindai ulang.")
-                false
-            }
+    val hasCamera =
+        remember {
+            context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
         }
-    )
-
+    val launchScanner =
+        rememberBarcodeScanner(
+            onScanned = { code ->
+                val sanitized = sanitizeScannedCode(code)
+                if (sanitized != null) {
+                    barcode = sanitized
+                    true
+                } else {
+                    onScanError("Gagal memindai kode. Coba pindai ulang.")
+                    false
+                }
+            },
+        )
     val configuration = LocalConfiguration.current
-    val maxContentHeight = remember(configuration.screenHeightDp) {
-        (configuration.screenHeightDp * 0.75f).dp
-    }
+    val maxContentHeight = (configuration.screenHeightDp * 0.75f).dp
     val scrollState = rememberScrollState()
-
     LaunchedEffect(barcode) {
         val trimmed = barcode.trim()
         if (trimmed.isBlank()) {
@@ -897,7 +889,6 @@ private fun ProductFormDialog(
         barcodeConflict = checkBarcodeConflict(trimmed, state.id)
         isCheckingBarcode = false
     }
-
     LaunchedEffect(sku) {
         val trimmed = sku.trim()
         if (trimmed.isBlank()) {
@@ -910,38 +901,37 @@ private fun ProductFormDialog(
         skuConflict = checkSkuConflict(trimmed, state.id)
         isCheckingSku = false
     }
-
-    // Tampilkan Dialog Form HANYA ketika tidak sedang aktif scanning
-    if (!isScanning) {
-        AlertDialog(
-            onDismissRequest = { if (!isSaving) onDismiss() },
-            title = { Text(if (state.isNew) "Tambah Produk" else "Edit Produk", style = MaterialTheme.typography.titleMedium) },
-            text = {
-                val priceLong = price.toLongOrNull() ?: 0L
-                val costLong = cost.toLongOrNull() ?: 0L
-                Column(
-                    modifier = Modifier
+    AlertDialog(
+        onDismissRequest = { if (!isSaving) onDismiss() },
+        title = { Text(if (state.isNew) "Tambah Produk" else "Edit Produk", style = MaterialTheme.typography.titleMedium) },
+        text = {
+            val priceLong = price.toLongOrNull() ?: 0L
+            val costLong = cost.toLongOrNull() ?: 0L
+            Column(
+                modifier =
+                    Modifier
                         .heightIn(max = maxContentHeight)
                         .verticalScroll(scrollState),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Nama Produk *", style = MaterialTheme.typography.bodySmall) },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        label = { Text("Nama Produk *", style = MaterialTheme.typography.bodySmall) },
+                        value = sku,
+                        onValueChange = { sku = it },
+                        label = { Text("SKU", style = MaterialTheme.typography.bodySmall) },
                         singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = sku,
-                            onValueChange = { sku = it },
-                            label = { Text("SKU", style = MaterialTheme.typography.bodySmall) },
-                            singleLine = true,
-                            isError = skuConflict != null,
-                            supportingText = if (skuConflict != null) {
+                        isError = skuConflict != null,
+                        supportingText =
+                            if (skuConflict != null) {
                                 {
                                     Text(
                                         "Dipakai oleh: $skuConflict",
@@ -949,18 +939,21 @@ private fun ProductFormDialog(
                                         color = MaterialTheme.colorScheme.error,
                                     )
                                 }
-                            } else null,
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f),
-                        )
-                        OutlinedTextField(
-                            value = barcode,
-                            onValueChange = { barcode = it },
-                            label = { Text("Barcode", style = MaterialTheme.typography.bodySmall) },
-                            singleLine = true,
-                            isError = barcodeConflict != null,
-                            supportingText = if (barcodeConflict != null) {
+                            } else {
+                                null
+                            },
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = barcode,
+                        onValueChange = { barcode = it },
+                        label = { Text("Barcode", style = MaterialTheme.typography.bodySmall) },
+                        singleLine = true,
+                        isError = barcodeConflict != null,
+                        supportingText =
+                            if (barcodeConflict != null) {
                                 {
                                     Text(
                                         "Dipakai oleh: $barcodeConflict",
@@ -968,144 +961,146 @@ private fun ProductFormDialog(
                                         color = MaterialTheme.colorScheme.error,
                                     )
                                 }
-                            } else null,
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1.2f),
-                            trailingIcon = {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 4.dp)) {
-                                    if (barcode.isNotEmpty()) {
-                                        IconButton(onClick = { barcode = "" }, modifier = Modifier.size(24.dp)) {
-                                            Icon(Icons.Rounded.Close, contentDescription = "Hapus", modifier = Modifier.size(14.dp))
-                                        }
-                                    }
-                                    if (hasCamera) {
-                                        IconButton(
-                                            onClick = {
-                                                isScanning = true
-                                                launchScanner()
-                                            },
-                                            modifier = Modifier.size(24.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Rounded.QrCodeScanner,
-                                                contentDescription = "Scan",
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(14.dp),
-                                            )
-                                        }
-                                    }
-                                }
+                            } else {
+                                null
                             },
-                        )
-                    }
-                    CategoryField(
-                        value = category,
-                        suggestions = categories,
-                        onValueChange = { category = it },
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1.2f),
+                        trailingIcon = {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 4.dp)) {
+                                if (barcode.isNotEmpty()) {
+                                    IconButton(onClick = { barcode = "" }, modifier = Modifier.size(24.dp)) {
+                                        Icon(Icons.Rounded.Close, contentDescription = "Hapus", modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                                if (hasCamera) {
+                                    IconButton(onClick = launchScanner, modifier = Modifier.size(24.dp)) {
+                                        Icon(
+                                            Icons.Rounded.QrCodeScanner,
+                                            contentDescription = "Scan",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(14.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        },
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        MoneyNumberField(price, { price = it }, "Harga Jual", Modifier.weight(1f))
-                        MoneyNumberField(cost, { cost = it }, "Modal", Modifier.weight(1f))
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DecimalNumberField(stock, { stock = it }, "Stok", Modifier.weight(1f))
-                        OutlinedTextField(
-                            value = (priceLong - costLong).toRupiah(),
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Laba/Unit", style = MaterialTheme.typography.bodySmall) },
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+                }
+                CategoryField(
+                    value = category,
+                    suggestions = categories,
+                    onValueChange = { category = it },
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MoneyNumberField(price, { price = it }, "Harga Jual", Modifier.weight(1f))
+                    MoneyNumberField(cost, { cost = it }, "Modal", Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DecimalNumberField(stock, { stock = it }, "Stok", Modifier.weight(1f))
+                    OutlinedTextField(
+                        value = (priceLong - costLong).toRupiah(),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Laba/Unit", style = MaterialTheme.typography.bodySmall) },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
 
-                    if (!state.isNew && state.damagedStock > 0.0) {
-                        Spacer(Modifier.height(4.dp))
-                        Surface(
-                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth(),
+                if (!state.isNew && state.damagedStock > 0.0) {
+                    Spacer(Modifier.height(4.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "Stok Rusak/Garansi",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                                Text(
+                                    "${state.damagedStock.formatQuantity()} item tidak layak jual",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                            }
+                            Button(
+                                onClick = { showReturnDamagedDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                             ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        "Stok Rusak/Garansi",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                    )
-                                    Text(
-                                        "${state.damagedStock.formatQuantity()} item tidak layak jual",
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                    )
-                                }
-                                Button(
-                                    onClick = { showReturnDamagedDialog = true },
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                ) {
-                                    Text("Retur Pabrik", fontSize = 11.sp, color = MaterialTheme.colorScheme.onError)
-                                }
+                                Text("Retur Pabrik", fontSize = 11.sp, color = MaterialTheme.colorScheme.onError)
                             }
                         }
                     }
-                    Spacer(Modifier.height(2.dp))
                 }
-            },
-            dismissButton = if (!state.isNew) {
+                Spacer(Modifier.height(2.dp))
+            }
+        },
+        dismissButton =
+            if (!state.isNew) {
                 {
                     Button(
                         enabled = !isSaving,
                         onClick = onDeleteRequest,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                            ),
                     ) {
                         Text("Hapus", color = MaterialTheme.colorScheme.onError)
                     }
                 }
-            } else null,
-            confirmButton = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onDismiss, enabled = !isSaving) { Text("Batal") }
-                    Spacer(Modifier.width(4.dp))
-                    Button(
-                        enabled = !isSaving && !isCheckingBarcode && !isCheckingSku &&
-                                name.isNotBlank() && barcodeConflict == null && skuConflict == null,
-                        onClick = {
-                            onSave(
-                                ProductFormState(
-                                    id = state.id,
-                                    name = name,
-                                    sku = sku,
-                                    barcode = barcode.trim(),
-                                    category = category.trim(),
-                                    price = price.toLongOrNull() ?: 0L,
-                                    cost = cost.toLongOrNull() ?: 0L,
-                                    stock = stock.toDoubleOrNull() ?: 0.0,
-                                    createdAt = state.createdAt,
-                                ),
-                            )
-                        },
-                    ) {
-                        if (isSaving) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                            )
-                        } else {
-                            Text("Simpan")
-                        }
+            } else {
+                null
+            },
+        confirmButton = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onDismiss, enabled = !isSaving) { Text("Batal") }
+                Spacer(Modifier.width(4.dp))
+                Button(
+                    enabled =
+                        !isSaving && !isCheckingBarcode && !isCheckingSku &&
+                            name.isNotBlank() && barcodeConflict == null && skuConflict == null,
+                    onClick = {
+                        onSave(
+                            ProductFormState(
+                                id = state.id,
+                                name = name,
+                                sku = sku,
+                                barcode = barcode.trim(),
+                                category = category.trim(),
+                                price = price.toLongOrNull() ?: 0L,
+                                cost = cost.toLongOrNull() ?: 0L,
+                                stock = stock.toDoubleOrNull() ?: 0.0,
+                                createdAt = state.createdAt,
+                            ),
+                        )
+                    },
+                ) {
+                    if (isSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    } else {
+                        Text("Simpan")
                     }
                 }
-            },
-        )
-    }
+            }
+        },
+    )
 
     if (showReturnDamagedDialog) {
         var returnQtyStr by remember { mutableStateOf(state.damagedStock.formatQuantity()) }
