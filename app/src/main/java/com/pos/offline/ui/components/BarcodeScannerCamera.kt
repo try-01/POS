@@ -4,7 +4,6 @@ import android.app.Activity
 import androidx.core.view.WindowCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.OnApplyWindowInsetsListener
 import androidx.core.content.ContextCompat
 import android.view.WindowManager
 import android.content.ContextWrapper
@@ -543,7 +542,7 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
-                        .padding(bottom = navBarHeight)
+                        .padding(bottom = navBarHeight + 6.dp)
                         .padding(bottom = 12.dp, top = 4.dp),
                 shape = RoundedCornerShape(20.dp),
                 colors =
@@ -668,43 +667,15 @@ private fun Context.findActivity(): Activity? {
 private fun rememberRealSystemBarInsets(): Pair<Dp, Dp> {
     val context = LocalContext.current
     val density = LocalDensity.current
-    var statusBarHeight by remember { mutableStateOf(0.dp) }
-    var navBarHeight by remember { mutableStateOf(0.dp) }
+    val configuration = LocalConfiguration.current
 
-    DisposableEffect(context, density) {
-        val decorView = context.findActivity()?.window?.decorView
-
-        fun applyInsets(insets: WindowInsetsCompat) {
-            val statusPx = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-            val navPx = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-            with(density) {
-                statusBarHeight = statusPx.toDp()
-                navBarHeight = navPx.toDp()
-            }
-        }
-
-        // Ambil nilai yang sudah tersedia lebih dulu (biar tidak menunggu callback pertama)
-        decorView?.let { dv ->
-            ViewCompat.getRootWindowInsets(dv)?.let { applyInsets(it) }
-        }
-
-        val listener =
-            OnApplyWindowInsetsListener { _, insets ->
-                applyInsets(insets)
-                insets
-            }
-
-        if (decorView != null) {
-            ViewCompat.setOnApplyWindowInsetsListener(decorView, listener)
-            ViewCompat.requestApplyInsets(decorView)
-        }
-
-        onDispose {
-            decorView?.let { ViewCompat.setOnApplyWindowInsetsListener(it, null) }
-        }
+    return remember(configuration, density) {
+        val activity = context.findActivity()
+        val insets = activity?.window?.decorView?.let { ViewCompat.getRootWindowInsets(it) }
+        val statusPx = insets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
+        val navPx = insets?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+        with(density) { statusPx.toDp() to navPx.toDp() }
     }
-
-    return statusBarHeight to navBarHeight
 }
 
 @Composable
