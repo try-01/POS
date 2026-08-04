@@ -408,22 +408,23 @@ class PosViewModel(
         }
     }
 
-    suspend fun onBarcodeScanned(raw: String): Boolean {
+    suspend fun onBarcodeScanned(raw: String): String? { // Ubah Boolean menjadi String?
         val barcode = sanitizeScannedCode(raw)
         if (barcode == null) {
             _uiEvents.emit(PosUiEvent.ShowMessage("Gagal memindai kode. Coba pindai ulang."))
-            return false
+            return null // Ubah false menjadi null
         }
         val product = productRepository.getProductByBarcode(barcode)
         if (product == null) {
             _uiEvents.emit(PosUiEvent.ShowMessage("Produk tidak ditemukan!"))
-            return false
+            return null // Ubah false menjadi null
         }
         val success = tryAddToCart(product)
         if (success) {
             _uiEvents.emit(PosUiEvent.ShowMessage("${product.name} ditambahkan ke keranjang"))
+            return product.name // Kembalikan NAMA PRODUK sebagai tanda sukses
         }
-        return success
+        return null
     }
 
     private suspend fun tryAddToCart(product: ProductEntity): Boolean {

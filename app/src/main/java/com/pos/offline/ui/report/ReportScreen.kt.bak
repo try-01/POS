@@ -1622,6 +1622,8 @@ private fun ReturnDetailDialog(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
                 Spacer(Modifier.height(4.dp))
+                val isSynthetic = header.transactionId.startsWith("EXC-") || header.transactionId.startsWith("RET-DIR-")
+                if (!isSynthetic) {
                 TextButton(
                     onClick = { onViewOriginalTransaction(header.transactionId) },
                     contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
@@ -1635,6 +1637,7 @@ private fun ReturnDetailDialog(
                     Text("Lihat Transaksi Asal", style = MaterialTheme.typography.labelSmall)
                 }
                 Spacer(Modifier.height(6.dp))
+            }
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Kasir", header.cashierName.ifBlank { "Tanpa kasir" })
                 SummaryLine("Shift", header.shiftId?.let { "#$it" } ?: "Tanpa shift")

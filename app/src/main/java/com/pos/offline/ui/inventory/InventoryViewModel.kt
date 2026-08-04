@@ -329,33 +329,33 @@ class InventoryViewModel(
         }
     }
 
-    suspend fun onBarcodeScanned(raw: String?): Boolean {
+    suspend fun onBarcodeScanned(raw: String?): String? { // Ubah Boolean menjadi String?
         val sanitized = sanitizeScannedCode(raw)
         if (sanitized == null) {
             notify("Gagal memindai kode. Coba pindai ulang.")
-            return false
+            return null // Ubah false menjadi null
         }
         return try {
             val product = productRepository.getProductByBarcodeAny(sanitized)
             when {
                 product == null -> {
                     _scanNotFound.value = ScanNotFoundState(sanitized)
-                    false
+                    null // Ubah false menjadi null
                 }
 
                 product.active -> {
                     startEdit(product)
-                    true
+                    product.name // Kembalikan NAMA PRODUK
                 }
 
                 else -> {
                     _deletedProductFound.value = DeletedProductFoundState(product)
-                    true
+                    product.name // Kembalikan NAMA PRODUK
                 }
             }
         } catch (e: Exception) {
             notify("Gagal memindai: ${e.message ?: "kesalahan tak dikenal"}.")
-            false
+            null // Ubah false menjadi null
         }
     }
 
