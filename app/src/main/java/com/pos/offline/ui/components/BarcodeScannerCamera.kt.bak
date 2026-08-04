@@ -203,8 +203,8 @@ fun BarcodeScannerCamera(
                                     // AREA KETAT DIPERBARUI: 
                                     // Sumbu X diperketat menjadi 25% (0.25f) hingga 75% (0.75f)
                                     // Sumbu Y tetap 35% (0.35f) hingga 65% (0.65f)
-                                    normLeft >= 0.25f && normRight <= 0.75f &&
-                                        normTop >= 0.35f && normBottom <= 0.65f
+                                    normLeft >= 0.35f && normRight <= 0.65f &&
+                                        normTop >= 0.40f && normBottom <= 0.60f
                                 }
 
                             if (targetBarcode != null) {

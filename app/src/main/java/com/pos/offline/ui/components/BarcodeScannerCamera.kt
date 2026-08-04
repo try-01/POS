@@ -195,16 +195,46 @@ fun BarcodeScannerCamera(
                                     val raw = barcode.rawValue
                                     if (raw.isNullOrBlank()) return@firstOrNull false
                                     val rect = barcode.boundingBox ?: return@firstOrNull false
-                                    val normLeft = rect.left / imgW
-                                    val normRight = rect.right / imgW
-                                    val normTop = rect.top / imgH
-                                    val normBottom = rect.bottom / imgH
-                                    
-                                    // AREA KETAT DIPERBARUI: 
-                                    // Sumbu X diperketat menjadi 25% (0.25f) hingga 75% (0.75f)
-                                    // Sumbu Y tetap 35% (0.35f) hingga 65% (0.65f)
-                                    normLeft >= 0.35f && normRight <= 0.65f &&
-                                        normTop >= 0.40f && normBottom <= 0.60f
+
+                                    // 1. Ambil ukuran layar fisik (PreviewView) saat ini
+                                    val viewW = previewView.width.toFloat()
+                                    val viewH = previewView.height.toFloat()
+                                    // Cegah pembagian dengan nol jika layar belum selesai dirender
+                                    if (viewW == 0f || viewH == 0f) return@firstOrNull false
+
+                                    // 2. Ambil ukuran gambar mentah dari sensor kamera
+                                    val isRotated = rotationDegrees == 90 || rotationDegrees == 270
+                                    val imgW = if (isRotated) proxy.height.toFloat() else proxy.width.toFloat()
+                                    val imgH = if (isRotated) proxy.width.toFloat() else proxy.height.toFloat()
+
+                                    // 3. Hitung rasio skala (Center-Crop)
+                                    // Kamera akan memperbesar gambar sampai sisi terkecilnya menutupi layar
+                                    val scale = maxOf(viewW / imgW, viewH / imgH)
+                                    val scaledImgW = imgW * scale
+                                    val scaledImgH = imgH * scale
+
+                                    // 4. Hitung Offset (Area gambar yang meluber keluar layar dan dipotong)
+                                    val offsetX = (scaledImgW - viewW) / 2f
+                                    val offsetY = (scaledImgH - viewH) / 2f
+
+                                    // 5. Konversi koordinat barcode dari kamera ke koordinat layar fisik
+                                    val screenLeft = (rect.left * scale) - offsetX
+                                    val screenRight = (rect.right * scale) - offsetX
+                                    val screenTop = (rect.top * scale) - offsetY
+                                    val screenBottom = (rect.bottom * scale) - offsetY
+
+                                    // 6. Hitung batas kotak visual kita
+                                    // Lebar kotak adalah 75% layar, berarti tersisa 25% (12.5% Kiri, 12.5% Kanan)
+                                    // Tinggi kotak adalah 35% layar, berarti tersisa 65% (32.5% Atas, 32.5% Bawah)
+                                    // Kita beri toleransi 2.5% agar pengguna tidak kesulitan jika tangan sedikit gemetar
+                                    val boxLeft = viewW * 0.10f
+                                    val boxRight = viewW * 0.90f
+                                    val boxTop = viewH * 0.30f
+                                    val boxBottom = viewH * 0.70f
+
+                                    // 7. Syarat Mutlak: Barcode harus ada di DALAM kotak visual secara adaptif!
+                                    screenLeft >= boxLeft && screenRight <= boxRight &&
+                                        screenTop >= boxTop && screenBottom <= boxBottom
                                 }
 
                             if (targetBarcode != null) {
