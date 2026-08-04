@@ -22,6 +22,10 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
+      # Memberikan izin eksekusi
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
       # 3. Menjalankan Unit Test murni secara terisolasi
       - name: Run Pure Unit Tests
         run: ./gradlew testDebugUnitTest
