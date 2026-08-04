@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.core.view.WindowCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.OnApplyWindowInsetsListener
 import androidx.core.content.ContextCompat
 import android.view.WindowManager
 import android.content.ContextWrapper
@@ -654,28 +655,33 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
     }
 }
 
-private fun Context.findActivity(): Activity? {
-    var ctx = this
-    while (ctx is ContextWrapper) {
-        if (ctx is Activity) return ctx
-        ctx = ctx.baseContext
-    }
-    return null
-}
-
 @Composable
 private fun rememberRealSystemBarInsets(): Pair<Dp, Dp> {
-    val context = LocalContext.current
+    val view = LocalView.current
     val density = LocalDensity.current
-    val configuration = LocalConfiguration.current // Untuk mendeteksi perubahan konfigurasi (rotasi layar)
+    var statusBarHeight by remember { mutableStateOf(0.dp) }
+    var navBarHeight by remember { mutableStateOf(0.dp) }
 
-    return remember(configuration, density) {
-        val activity = context.findActivity()
-        val insets = activity?.window?.decorView?.let { ViewCompat.getRootWindowInsets(it) }
-        val statusPx = insets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
-        val navPx = insets?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
-        with(density) { statusPx.toDp() to navPx.toDp() }
+    DisposableEffect(view) {
+        val listener =
+            OnApplyWindowInsetsListener { _, windowInsets ->
+                val insets = WindowInsetsCompat.toWindowInsetsCompat(windowInsets, view)
+                val statusPx = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+                val navPx = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+                with(density) {
+                    statusBarHeight = statusPx.toDp()
+                    navBarHeight = navPx.toDp()
+                }
+                windowInsets
+            }
+        ViewCompat.setOnApplyWindowInsetsListener(view, listener)
+        ViewCompat.requestApplyInsets(view)
+        onDispose {
+            ViewCompat.setOnApplyWindowInsetsListener(view, null)
+        }
     }
+
+    return statusBarHeight to navBarHeight
 }
 
 @Composable

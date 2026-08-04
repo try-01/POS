@@ -664,15 +664,14 @@ private fun rememberRealSystemBarInsets(): Pair<Dp, Dp> {
 
     DisposableEffect(view) {
         val listener =
-            OnApplyWindowInsetsListener { _, windowInsets ->
-                val insets = WindowInsetsCompat.toWindowInsetsCompat(windowInsets, view)
+            OnApplyWindowInsetsListener { _, insets ->
                 val statusPx = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
                 val navPx = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
                 with(density) {
                     statusBarHeight = statusPx.toDp()
                     navBarHeight = navPx.toDp()
                 }
-                windowInsets
+                insets
             }
         ViewCompat.setOnApplyWindowInsetsListener(view, listener)
         ViewCompat.requestApplyInsets(view)
