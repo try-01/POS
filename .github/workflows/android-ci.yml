@@ -3,39 +3,47 @@ name: Android CI Tests
 on:
   workflow_dispatch:
 
+# Membatalkan tes lama yang masih berjalan jika ada push kode baru (menghemat kuota)
+concurrency:
+  group: ci-test-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Run Unit & UI Tests
-    # Menggunakan macOS agar emulator Android bisa berjalan dengan lancar dan cepat
-    runs-on: macos-latest 
+    runs-on: ubuntu-latest # Menggunakan Ubuntu seperti tes lamamu yang berhasil
 
     steps:
-      # 1. Mengambil kode aplikasimu dari repositori
       - name: Checkout project code
         uses: actions/checkout@v4
 
-      # 2. Menyiapkan Java Development Kit (JDK)
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17' # Kamu bisa mengubah angka ini jika projectmu menggunakan Java 11 atau 21
+          java-version: '17' 
           distribution: 'temurin'
           cache: gradle
 
-      # Memberikan izin eksekusi
+      # 1. Memberikan izin eksekusi Gradle
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      # 3. Menjalankan Unit Test murni secara terisolasi
+      # 2. Menjalankan Unit Test (ShiftSummaryTest)
+      # Menambahkan --parallel dan --build-cache untuk mempercepat proses build
       - name: Run Pure Unit Tests
-        run: ./gradlew testDebugUnitTest
+        run: ./gradlew testDebugUnitTest --parallel --build-cache --stacktrace
 
-      # 4. Menjalankan Android Instrumented Test menggunakan Emulator Virtual
+      # 3. Mengaktifkan akselerasi perangkat keras di mesin Ubuntu
+      - name: Enable KVM permissions
+        run: sudo chown $USER /dev/kvm
+
+      # 4. Menjalankan Android Instrumented Test (AccountingWalkthroughTest)
       - name: Run Android Instrumented Tests
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
-          api-level: 29 # Menjalankan emulator dengan Android 10 (API 29)
-          target: default
+          api-level: 30
+          target: aosp_atd # Menggunakan Android Test Device agar booting sangat cepat
           arch: x86_64
-          profile: Nexus 6
-          script: ./gradlew connectedDebugAndroidTest
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: ./gradlew connectedDebugAndroidTest --parallel --build-cache --stacktrace
