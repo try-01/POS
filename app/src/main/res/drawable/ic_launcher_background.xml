@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- res/drawable/ic_launcher_background.xml -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Background Base: Navy Deep -->
+    <path
+        android:fillColor="#0A1628"
+        android:pathData="M0,0h108v108H0z" />
+
+    <!-- Gradient Layer 1: Teal area kanan atas -->
+    <!-- Simulasi gradient diagonal dengan layer transparan -->
+    <path
+        android:fillColor="#0E7490"
+        android:fillAlpha="0.85"
+        android:pathData="M108,0 L108,108 L0,108 Z" />
+
+    <!-- Gradient Layer 2: Transisi tengah lebih halus -->
+    <path
+        android:fillColor="#0E7490"
+        android:fillAlpha="0.45"
+        android:pathData="M108,0 L108,108 L54,108 L0,54 L0,0 Z" />
+
+    <!-- Gradient Layer 3: Teal atas tipis -->
+    <path
+        android:fillColor="#0E7490"
+        android:fillAlpha="0.25"
+        android:pathData="M30,0 L108,0 L108,78 Z" />
+
+</vector>

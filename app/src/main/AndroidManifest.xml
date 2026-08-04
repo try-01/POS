@@ -26,8 +26,9 @@
         android:allowBackup="false"
         android:label="Kasir Offline"
         android:supportsRtl="true"
-        android:icon="@android:drawable/ic_menu_manage"
-        android:theme="@android:style/Theme.Material.NoActionBar">
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/Theme.KasirOffline">
 
         <activity
             android:name=".MainActivity"

@@ -1,10 +1,8 @@
 # Konfigurasi Gradle & JVM untuk performa build Android yang optimal
 # gradle.properties
 
-# 1. Alokasi Memori JVM (Disesuaikan untuk keseimbangan Gradle dan Emulator di CI)
-# -Xmx3g : Batas RAM utama 3 GB (menyisakan ruang untuk OS dan Emulator di GitHub Actions)
-# -XX:MaxMetaspaceSize=1g : Metaspace 1 GB (menghindari error Metaspace OutOfMemory)
-org.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8 -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC -XX:+HeapDumpOnOutOfMemoryError
+# 1. Alokasi Memori JVM (Ini adalah kunci utama agar GitHub Actions tidak error OOM)
+org.gradle.jvmargs=-Xmx4120m -Dfile.encoding=UTF-8 -XX:MaxMetaspaceSize=512m -XX:+UseParallelGC -XX:+HeapDumpOnOutOfMemoryError
 
 # 2. Batasi jumlah pekerja (worker) paralel
 org.gradle.workers.max=2

@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- res/drawable/ic_launcher_monochrome.xml -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!--
+        Monochrome: semua putih, tanpa opacity berbeda
+        Android 13+ akan mewarnai sesuai tema wallpaper
+    -->
+
+    <!-- Body laci kasir -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="
+            M30,50
+            C30,47.24 32.24,45 35,45
+            L73,45
+            C75.76,45 78,47.24 78,50
+            L78,66
+            C78,68.76 75.76,71 73,71
+            L35,71
+            C32.24,71 30,68.76 30,66
+            Z" />
+
+    <!-- Garis pembatas atas (cutout) -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="
+            M30,49
+            L78,49
+            L78,50.5
+            L30,50.5
+            Z" />
+
+    <!-- Slot uang 1 (cutout) -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="
+            M40,52
+            C40,51.45 40.45,51 41,51
+            L67,51
+            C67.55,51 68,51.45 68,52
+            L68,55
+            C68,55.55 67.55,56 67,56
+            L41,56
+            C40.45,56 40,55.55 40,55
+            Z" />
+
+    <!-- Slot uang 2 (cutout) -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="
+            M43,57
+            C43,56.45 43.45,56 44,56
+            L64,56
+            C64.55,56 65,56.45 65,57
+            L65,59
+            C65,59.55 64.55,60 64,60
+            L44,60
+            C43.45,60 43,59.55 43,59
+            Z" />
+
+    <!-- Pembagi slot vertikal -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="
+            M49.5,51 L50.5,51 L50.5,56 L49.5,56 Z
+            M54,51 L55,51 L55,56 L54,56 Z
+            M54,56 L55,56 L55,60 L54,60 Z" />
+
+    <!-- Coin tray (cutout) -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="
+            M69,50
+            A3.5,3.5 0 1,1 76,50
+            A3.5,3.5 0 1,1 69,50
+            Z" />
+
+    <path
+        android:fillColor="#000000"
+        android:pathData="
+            M69.5,57
+            A2.5,2.5 0 1,1 74.5,57
+            A2.5,2.5 0 1,1 69.5,57
+            Z" />
+
+    <!-- Handle laci -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="
+            M51,62
+            A4,4 0 1,1 59,62
+            A4,4 0 1,1 51,62
+            Z" />
+
+    <!-- Handle inner (cutout) -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="
+            M52.5,62
+            A2.5,2.5 0 1,1 57.5,62
+            A2.5,2.5 0 1,1 52.5,62
+            Z" />
+
+    <!-- LED indicator -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="
+            M74,43
+            A2.5,2.5 0 1,1 79,43
+            A2.5,2.5 0 1,1 74,43
+            Z" />
+
+    <!-- Receipt/struk kecil -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="
+            M35,37
+            L43,37
+            L43,46
+            L42,47
+            L41,46
+            L40,47
+            L39,46
+            L38,47
+            L37,46
+            L36,47
+            L35,46
+            Z" />
+
+    <!-- Garis di struk (cutout) -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="
+            M36.5,39.5 L41.5,39.5 L41.5,40.5 L36.5,40.5 Z
+            M36.5,41.5 L40,41.5 L40,42.5 L36.5,42.5 Z
+            M36.5,43.5 L41,43.5 L41,44.3 L36.5,44.3 Z" />
+
+</vector>
