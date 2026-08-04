@@ -2,8 +2,8 @@ package com.pos.offline.ui.components
 
 import android.app.Activity
 import androidx.core.view.WindowCompat
-// import androidx.core.view.ViewCompat
-// import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.content.ContextCompat
 import android.view.WindowManager
 import android.content.ContextWrapper
@@ -84,13 +84,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-// import androidx.compose.ui.platform.LocalConfiguration
-// import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-// import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.viewinterop.AndroidView
@@ -200,9 +200,10 @@ fun BarcodeScannerCamera(
                                     val normTop = rect.top / imgH
                                     val normBottom = rect.bottom / imgH
                                     
-                                    // AREA KETAT: Margin dalam (padding) dipersempit.
-                                    // Barcode harus 100% berada di dalam batas persentase ini.
-                                    normLeft >= 0.15f && normRight <= 0.85f &&
+                                    // AREA KETAT DIPERBARUI: 
+                                    // Sumbu X diperketat menjadi 25% (0.25f) hingga 75% (0.75f)
+                                    // Sumbu Y tetap 35% (0.35f) hingga 65% (0.65f)
+                                    normLeft >= 0.25f && normRight <= 0.75f &&
                                         normTop >= 0.35f && normBottom <= 0.65f
                                 }
 
@@ -467,6 +468,7 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
 
 
         BackHandler { showScanner = false }
+        val (statusBarHeight, navBarHeight) = rememberRealSystemBarInsets()
         Box(
             modifier =
                 Modifier
@@ -593,8 +595,7 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                     Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 24.dp),
+                        .padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = navBarHeight + 30.dp),
                 shape = RoundedCornerShape(20.dp),
                 colors =
                     CardDefaults.cardColors(
@@ -713,7 +714,7 @@ private fun Context.findActivity(): Activity? {
     }
     return null
 }
-/**
+
 @Composable
 private fun rememberRealSystemBarInsets(): Pair<Dp, Dp> {
     val context = LocalContext.current
@@ -728,7 +729,7 @@ private fun rememberRealSystemBarInsets(): Pair<Dp, Dp> {
         with(density) { statusPx.toDp() to navPx.toDp() }
     }
 }
-**/
+
 @Composable
 private fun ScannerViewfinder(
     scanState: ScanVisualState,
