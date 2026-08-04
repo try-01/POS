@@ -66,7 +66,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogWindowProvider
@@ -83,10 +82,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.viewinterop.AndroidView
@@ -665,7 +667,9 @@ private fun Context.findActivity(): Activity? {
 private fun rememberRealSystemBarInsets(): Pair<Dp, Dp> {
     val context = LocalContext.current
     val density = LocalDensity.current
-    return remember {
+    val configuration = LocalConfiguration.current // Untuk mendeteksi perubahan konfigurasi (rotasi layar)
+
+    return remember(configuration, density) {
         val activity = context.findActivity()
         val insets = activity?.window?.decorView?.let { ViewCompat.getRootWindowInsets(it) }
         val statusPx = insets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
