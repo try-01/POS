@@ -189,7 +189,25 @@ fun BarcodeScannerCamera(
                             val isRotated = rotationDegrees == 90 || rotationDegrees == 270
                             val imgW = if (isRotated) proxy.height.toFloat() else proxy.width.toFloat()
                             val imgH = if (isRotated) proxy.width.toFloat() else proxy.height.toFloat()
-                            
+
+                            /**
+                            val targetBarcode =
+                                barcodes.firstOrNull { barcode ->
+                                    val raw = barcode.rawValue
+                                    if (raw.isNullOrBlank()) return@firstOrNull false
+                                    val rect = barcode.boundingBox ?: return@firstOrNull false
+                                    val normLeft = rect.left / imgW
+                                    val normRight = rect.right / imgW
+                                    val normTop = rect.top / imgH
+                                    val normBottom = rect.bottom / imgH
+                                    
+                                    // AREA KETAT DIPERBARUI: 
+                                    // Sumbu X diperketat menjadi 25% (0.25f) hingga 75% (0.75f)
+                                    // Sumbu Y tetap 35% (0.35f) hingga 65% (0.65f)
+                                    normLeft >= 0.35f && normRight <= 0.65f &&
+                                        normTop >= 0.40f && normBottom <= 0.60f
+                                }
+                            **/
                             val targetBarcode =
                                 barcodes.firstOrNull { barcode ->
                                     val raw = barcode.rawValue
@@ -227,10 +245,10 @@ fun BarcodeScannerCamera(
                                     // Lebar kotak adalah 75% layar, berarti tersisa 25% (12.5% Kiri, 12.5% Kanan)
                                     // Tinggi kotak adalah 35% layar, berarti tersisa 65% (32.5% Atas, 32.5% Bawah)
                                     // Kita beri toleransi 2.5% agar pengguna tidak kesulitan jika tangan sedikit gemetar
-                                    val boxLeft = viewW * 0.10f
-                                    val boxRight = viewW * 0.90f
-                                    val boxTop = viewH * 0.30f
-                                    val boxBottom = viewH * 0.70f
+                                    val boxLeft = viewW * 0.135f
+                                    val boxRight = viewW * 0.865f
+                                    val boxTop = viewH * 0.335f
+                                    val boxBottom = viewH * 0.665f
 
                                     // 7. Syarat Mutlak: Barcode harus ada di DALAM kotak visual secara adaptif!
                                     screenLeft >= boxLeft && screenRight <= boxRight &&

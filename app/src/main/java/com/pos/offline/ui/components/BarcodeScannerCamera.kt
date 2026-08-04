@@ -245,10 +245,10 @@ fun BarcodeScannerCamera(
                                     // Lebar kotak adalah 75% layar, berarti tersisa 25% (12.5% Kiri, 12.5% Kanan)
                                     // Tinggi kotak adalah 35% layar, berarti tersisa 65% (32.5% Atas, 32.5% Bawah)
                                     // Kita beri toleransi 2.5% agar pengguna tidak kesulitan jika tangan sedikit gemetar
-                                    val boxLeft = viewW * 0.135f
-                                    val boxRight = viewW * 0.865f
-                                    val boxTop = viewH * 0.335f
-                                    val boxBottom = viewH * 0.665f
+                                    val boxLeft = viewW * 0.15f
+                                    val boxRight = viewW * 0.85f
+                                    val boxTop = viewH * 0.35f
+                                    val boxBottom = viewH * 0.65f
 
                                     // 7. Syarat Mutlak: Barcode harus ada di DALAM kotak visual secara adaptif!
                                     screenLeft >= boxLeft && screenRight <= boxRight &&
