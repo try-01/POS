@@ -324,7 +324,7 @@ fun BarcodeScannerCamera(
 }
 
 @Composable
-fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
+fun rememberBarcodeScanner(onScanned: suspend (String) -> String?): () -> Unit {
     val context = LocalContext.current
     val onScannedState = rememberUpdatedState(onScanned)
     val feedbackManager = remember { ScanFeedbackManager(context) }
@@ -478,7 +478,9 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
             BarcodeScannerCamera(
                 isMultiScanMode = isMultiScanMode,
                 onBarcodeScanned = { code ->
-                    val isSuccess = onScannedState.value(code)
+                    val scannedName = onScannedState.value(code)
+                    val isSuccess = scannedName != null
+                    // val isSuccess = onScannedState.value(code)
                     if (isSuccess) {
                         scanErrorMessage = null
 
@@ -491,7 +493,8 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                             vibrationDurationMs = vibrationDurationMs,
                         )
                         scannedCountBatch++
-                        lastScannedCodeText = code
+                        lastScannedCodeText = scannedName!! 
+                        
                         if (!isMultiScanMode) {
                             showScanner = false
                         }
