@@ -22,6 +22,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -133,6 +136,11 @@ fun BarcodeScannerCamera(
         }
     var lastScannedCode by remember { mutableStateOf<String?>(null) }
     var lastScannedTime by remember { mutableLongStateOf(0L) }
+    // Tambahkan 3 baris ini:
+    var pendingCode by remember { mutableStateOf<String?>(null) }
+    var pendingCodeCount by remember { mutableIntStateOf(0) }
+    var scanVisualState by remember { mutableStateOf(ScanVisualState.IDLE) }
+
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
     var cameraError by remember { mutableStateOf<String?>(null) }
@@ -181,6 +189,7 @@ fun BarcodeScannerCamera(
                             val isRotated = rotationDegrees == 90 || rotationDegrees == 270
                             val imgW = if (isRotated) proxy.height.toFloat() else proxy.width.toFloat()
                             val imgH = if (isRotated) proxy.width.toFloat() else proxy.height.toFloat()
+                            
                             val targetBarcode =
                                 barcodes.firstOrNull { barcode ->
                                     val raw = barcode.rawValue
@@ -190,20 +199,46 @@ fun BarcodeScannerCamera(
                                     val normRight = rect.right / imgW
                                     val normTop = rect.top / imgH
                                     val normBottom = rect.bottom / imgH
-                                    normLeft >= 0.125f && normRight <= 0.875f &&
-                                        normTop >= 0.325f && normBottom <= 0.675f
+                                    
+                                    // AREA KETAT: Margin dalam (padding) dipersempit.
+                                    // Barcode harus 100% berada di dalam batas persentase ini.
+                                    normLeft >= 0.15f && normRight <= 0.85f &&
+                                        normTop >= 0.35f && normBottom <= 0.65f
                                 }
-                            targetBarcode?.rawValue?.let { code ->
-                                val currentTime = System.currentTimeMillis()
-                                val isSameCode = (code == lastScannedCode)
-                                val isTimeElapsed = (currentTime - lastScannedTime) > 1500L
-                                if (!isSameCode || isTimeElapsed) {
-                                    lastScannedCode = code
-                                    lastScannedTime = currentTime
-                                    coroutineScope.launch {
-                                        onBarcodeScanned(code)
+
+                            if (targetBarcode != null) {
+                                val code = targetBarcode.rawValue!!
+                                
+                                // ATURAN 2-FRAME: Pastikan kode yang terbaca konsisten
+                                if (code == pendingCode) {
+                                    pendingCodeCount++
+                                    // Jika kamera membaca teks yang persis sama 2x berturut-turut (fokus sudah stabil)
+                                    if (pendingCodeCount >= 2) { 
+                                        val currentTime = System.currentTimeMillis()
+                                        val isSameCode = (code == lastScannedCode)
+                                        // Waktu jeda (cooldown) untuk kode yang sama: 2 detik (2000L)
+                                        val isTimeElapsed = (currentTime - lastScannedTime) > 2000L
+                                        
+                                        if (!isSameCode || isTimeElapsed) {
+                                            lastScannedCode = code
+                                            lastScannedTime = currentTime
+                                            coroutineScope.launch {
+                                                val isSuccess = onBarcodeScanned(code)
+                                                scanVisualState = if (isSuccess) ScanVisualState.SUCCESS else ScanVisualState.ERROR
+                                                delay(400L)
+                                                scanVisualState = ScanVisualState.IDLE
+                                            }
+                                        }
                                     }
+                                } else {
+                                    // Jika kode terbaca berbeda (misal karena blur), reset sistem antrean
+                                    pendingCode = code
+                                    pendingCodeCount = 1
                                 }
+                            } else {
+                                // Jika tidak ada barcode di dalam kotak visual, bersihkan antrean
+                                pendingCode = null
+                                pendingCodeCount = 0
                             }
                         }.addOnCompleteListener {
                             proxy.close()
@@ -228,12 +263,15 @@ fun BarcodeScannerCamera(
     DisposableEffect(Unit) {
         lastScannedCode = null
         lastScannedTime = 0L
+        pendingCode = null
+        pendingCodeCount = 0
         onDispose {
             lastScannedCode = null
             lastScannedTime = 0L
             cameraProvider?.unbindAll()
             executor.shutdown()
             scanner.close()
+            scanVisualState = ScanVisualState.IDLE
         }
     }
 
@@ -258,7 +296,10 @@ fun BarcodeScannerCamera(
                 previewView
             },
         )
-        ScannerViewfinder(modifier = Modifier.fillMaxSize())
+        ScannerViewfinder(
+            scanState = scanVisualState, // Kirimkan status animasi
+            modifier = Modifier.fillMaxSize()
+        )
         cameraError?.let { message ->
             Box(
                 modifier =
@@ -689,46 +730,96 @@ private fun rememberRealSystemBarInsets(): Pair<Dp, Dp> {
 }
 **/
 @Composable
-private fun ScannerViewfinder(modifier: Modifier = Modifier) {
-    Box(
-        modifier =
-            modifier.drawWithCache {
-                val boxWidth = size.width * 0.75f
-                val boxHeight = size.height * 0.35f
-                val left = (size.width - boxWidth) / 2f
-                val top = (size.height - boxHeight) / 2f
-                val right = left + boxWidth
-                val bottom = top + boxHeight
-                val cornerRadiusPx = 16.dp.toPx()
-                val strokeWidthPx = 3.dp.toPx()
-                val outerRect = Rect(0f, 0f, size.width, size.height)
-                val boxRect =
-                    RoundRect(
-                        rect = Rect(left, top, right, bottom),
-                        cornerRadius = CornerRadius(cornerRadiusPx),
-                    )
-                val overlayPath = Path().apply { addRect(outerRect) }
-                val cutoutPath = Path().apply { addRoundRect(boxRect) }
-                val dimmedPath =
-                    Path.combine(
-                        operation = PathOperation.Difference,
-                        path1 = overlayPath,
-                        path2 = cutoutPath,
-                    )
-                val boxOffset = Offset(left, top)
-                val boxSize = GeometrySize(boxWidth, boxHeight)
-                val strokeStyle = Stroke(width = strokeWidthPx)
-                onDrawWithContent {
-                    drawContent()
-                    drawPath(dimmedPath, Color.Black.copy(alpha = 0.55f))
-                    drawRoundRect(
-                        color = Color.White,
-                        topLeft = boxOffset,
-                        size = boxSize,
-                        cornerRadius = CornerRadius(cornerRadiusPx),
-                        style = strokeStyle,
-                    )
-                }
-            },
+private fun ScannerViewfinder(
+    scanState: ScanVisualState,
+    modifier: Modifier = Modifier
+) {
+    // Animasi Warna: Transisi mulus antara Putih, Hijau, dan Merah
+    val animatedColor by animateColorAsState(
+        targetValue = when (scanState) {
+            ScanVisualState.IDLE -> Color.White
+            ScanVisualState.SUCCESS -> Color(0xFF4CAF50) // Warna Hijau Sukses
+            ScanVisualState.ERROR -> Color(0xFFF44336) // Warna Merah Gagal
+        },
+        animationSpec = tween(durationMillis = 200),
+        label = "colorAnimation"
     )
+
+    // Animasi Ketebalan: Berubah dari 4.dp ke 9.dp menciptakan efek "berkedut"
+    val animatedStrokeDp by animateDpAsState(
+        targetValue = when (scanState) {
+            ScanVisualState.IDLE -> 4.dp
+            else -> 9.dp // Menebal saat sukses/gagal
+        },
+        animationSpec = tween(durationMillis = 200),
+        label = "strokeAnimation"
+    )
+
+    Box(
+        modifier = modifier.drawWithCache {
+            val boxWidth = size.width * 0.75f
+            val boxHeight = size.height * 0.35f
+            val left = (size.width - boxWidth) / 2f
+            val top = (size.height - boxHeight) / 2f
+            val right = left + boxWidth
+            val bottom = top + boxHeight
+            
+            val cornerRadiusPx = 16.dp.toPx()
+            val cornerLength = 40.dp.toPx()
+            
+            val outerRect = Rect(0f, 0f, size.width, size.height)
+            val boxRect = RoundRect(
+                rect = Rect(left, top, right, bottom),
+                cornerRadius = CornerRadius(cornerRadiusPx)
+            )
+            
+            val overlayPath = Path().apply { addRect(outerRect) }
+            val cutoutPath = Path().apply { addRoundRect(boxRect) }
+            val dimmedPath = Path.combine(
+                operation = PathOperation.Difference,
+                path1 = overlayPath,
+                path2 = cutoutPath,
+            )
+
+            onDrawWithContent {
+                drawContent()
+                drawPath(dimmedPath, Color.Black.copy(alpha = 0.55f))
+                
+                // Ambil nilai animasi saat ini
+                val color = animatedColor
+                val strokeWidthPx = animatedStrokeDp.toPx()
+                val strokeStyle = Stroke(width = strokeWidthPx)
+                
+                // --- Gambar Sudut Kiri Atas ---
+                drawLine(color, Offset(left, top + cornerRadiusPx), Offset(left, top + cornerLength), strokeWidthPx)
+                drawLine(color, Offset(left + cornerRadiusPx, top), Offset(left + cornerLength, top), strokeWidthPx)
+                drawArc(color, startAngle = 180f, sweepAngle = 90f, useCenter = false,
+                    topLeft = Offset(left, top), size = GeometrySize(cornerRadiusPx * 2, cornerRadiusPx * 2), style = strokeStyle)
+
+                // --- Gambar Sudut Kanan Atas ---
+                drawLine(color, Offset(right, top + cornerRadiusPx), Offset(right, top + cornerLength), strokeWidthPx)
+                drawLine(color, Offset(right - cornerRadiusPx, top), Offset(right - cornerLength, top), strokeWidthPx)
+                drawArc(color, startAngle = 270f, sweepAngle = 90f, useCenter = false,
+                    topLeft = Offset(right - cornerRadiusPx * 2, top), size = GeometrySize(cornerRadiusPx * 2, cornerRadiusPx * 2), style = strokeStyle)
+
+                // --- Gambar Sudut Kiri Bawah ---
+                drawLine(color, Offset(left, bottom - cornerRadiusPx), Offset(left, bottom - cornerLength), strokeWidthPx)
+                drawLine(color, Offset(left + cornerRadiusPx, bottom), Offset(left + cornerLength, bottom), strokeWidthPx)
+                drawArc(color, startAngle = 90f, sweepAngle = 90f, useCenter = false,
+                    topLeft = Offset(left, bottom - cornerRadiusPx * 2), size = GeometrySize(cornerRadiusPx * 2, cornerRadiusPx * 2), style = strokeStyle)
+
+                // --- Gambar Sudut Kanan Bawah ---
+                drawLine(color, Offset(right, bottom - cornerRadiusPx), Offset(right, bottom - cornerLength), strokeWidthPx)
+                drawLine(color, Offset(right - cornerRadiusPx, bottom), Offset(right - cornerLength, bottom), strokeWidthPx)
+                drawArc(color, startAngle = 0f, sweepAngle = 90f, useCenter = false,
+                    topLeft = Offset(right - cornerRadiusPx * 2, bottom - cornerRadiusPx * 2), size = GeometrySize(cornerRadiusPx * 2, cornerRadiusPx * 2), style = strokeStyle)
+            }
+        }
+    )
+}
+
+enum class ScanVisualState {
+    IDLE,
+    SUCCESS,
+    ERROR
 }
