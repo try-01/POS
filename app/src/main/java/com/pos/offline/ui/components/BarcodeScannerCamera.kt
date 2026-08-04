@@ -542,7 +542,7 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> Boolean): () -> Unit {
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
-                        .padding(bottom = navBarHeight + 6.dp)
+                        .padding(bottom = navBarHeight + 12.dp)
                         .padding(bottom = 12.dp, top = 4.dp),
                 shape = RoundedCornerShape(20.dp),
                 colors =
