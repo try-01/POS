@@ -1,0 +1,28 @@
+package com.pos.offline.data.local.entity
+import androidx.room3.Entity
+import androidx.room3.Index
+import androidx.room3.PrimaryKey
+@Entity(
+    tableName = "shifts",
+    indices = [Index(value = ["cashierId"]), Index(value = ["endedAt"])],
+)
+data class ShiftEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val cashierId: Long,
+    val cashierName: String,
+    val startingCash: Long,
+    val startedAt: Long,
+    val endingCashExpected: Long? = null,
+    val endingCashActual: Long? = null,
+    val endedAt: Long? = null,
+    val note: String = "",
+) {
+    val isOpen: Boolean get() = endedAt == null
+    val cashDifference: Long?
+        get() =
+            if (endingCashActual != null && endingCashExpected != null) {
+                endingCashActual - endingCashExpected
+            } else {
+                null
+            }
+}

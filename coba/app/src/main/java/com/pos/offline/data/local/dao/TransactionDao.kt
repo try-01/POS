@@ -1,0 +1,104 @@
+package com.pos.offline.data.local.dao
+import androidx.room3.Dao
+import androidx.room3.Insert
+import androidx.room3.Query
+import androidx.room3.Transaction
+import com.pos.offline.data.local.entity.TransactionEntity
+import com.pos.offline.data.local.entity.TransactionItemEntity
+import kotlinx.coroutines.flow.Flow
+@Dao
+interface TransactionDao {
+    @Insert
+    suspend fun insertTransaction(tx: TransactionEntity)
+    @Insert
+    suspend fun insertItems(items: List<TransactionItemEntity>)
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE createdAt >= :startOfDay AND createdAt < :endOfDay
+        ORDER BY createdAt DESC
+        """,
+    )
+    fun observeByDateRange(
+        startOfDay: Long,
+        endOfDay: Long,
+    ): Flow<List<TransactionEntity>>
+    @Query(
+        """
+        SELECT COALESCE(SUM(total), 0) FROM transactions
+        WHERE createdAt >= :startOfDay AND createdAt < :endOfDay AND status = 'COMPLETED'
+        """,
+    )
+    fun observeDailyRevenue(
+        startOfDay: Long,
+        endOfDay: Long,
+    ): Flow<Long>
+    @Query("SELECT * FROM transactions WHERE id = :invoiceId")
+    suspend fun getById(invoiceId: String): TransactionEntity?
+    @Query("SELECT * FROM transaction_items WHERE transactionId = :invoiceId")
+    suspend fun getItems(invoiceId: String): List<TransactionItemEntity>
+    @Query("SELECT * FROM transactions WHERE shiftId = :shiftId ORDER BY createdAt ASC")
+    fun observeByShift(shiftId: Long): Flow<List<TransactionEntity>>
+    @Query(
+        """
+        UPDATE transactions
+        SET status = :status, voidedAt = :voidedAt, voidReason = :reason
+        WHERE id = :id
+        """,
+    )
+    suspend fun setStatus(
+        id: String,
+        status: String,
+        voidedAt: Long?,
+        reason: String?,
+    )
+@Query("UPDATE transactions SET returnId = :returnId WHERE id = :id")
+suspend fun setReturnId(
+    id: String,
+    returnId: Long,
+)
+@Query(
+    """
+    UPDATE transactions
+    SET status = :status, voidedAt = :voidedAt, voidReason = :reason
+    WHERE id = :id
+      AND status != 'VOID'
+      AND returnId IS NULL
+      AND (shiftId IS NULL OR shiftId NOT IN (SELECT id FROM shifts WHERE endedAt IS NOT NULL))
+    """,
+)
+suspend fun voidIfEligible(
+    id: String,
+    status: String,
+    voidedAt: Long,
+    reason: String?,
+): Int
+@Query(
+    """
+    UPDATE transactions SET returnId = :returnId
+    WHERE id = :id AND returnId IS NULL AND status != 'VOID'
+    """,
+)
+suspend fun setReturnIdIfAbsent(
+    id: String,
+    returnId: Long,
+): Int
+    @Transaction
+    suspend fun checkout(
+        tx: TransactionEntity,
+        items: List<TransactionItemEntity>,
+    ) {
+        insertTransaction(tx)
+        insertItems(items)
+    }
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE id LIKE '%' || :query || '%'
+           OR cashierName LIKE '%' || :query || '%'
+        ORDER BY createdAt DESC
+        LIMIT 50
+        """,
+    )
+    suspend fun searchGlobalTransactions(query: String): List<TransactionEntity>
+}

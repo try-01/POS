@@ -1,0 +1,100 @@
+package com.pos.offline.data.local.dao
+import androidx.room3.Dao
+import androidx.room3.Delete
+import androidx.room3.Insert
+import androidx.room3.OnConflictStrategy
+import androidx.room3.Query
+import androidx.room3.Transaction
+import androidx.room3.Upsert
+import com.pos.offline.data.local.entity.ProductEntity
+import kotlinx.coroutines.flow.Flow
+@Dao
+interface ProductDao {
+    @Query("SELECT * FROM products WHERE active = 1 ORDER BY updatedAt DESC")
+    fun observeAll(): Flow<List<ProductEntity>>
+    @Query(
+        """
+        SELECT * FROM products
+        WHERE active = 1
+          AND (name LIKE '%' || :query || '%' OR sku LIKE '%' || :query || '%' OR barcode LIKE '%' || :query || '%')
+        ORDER BY name ASC
+        """,
+    )
+    fun search(query: String): Flow<List<ProductEntity>>
+    @Query("SELECT * FROM products WHERE id = :id")
+    suspend fun getById(id: Long): ProductEntity?
+    @Upsert
+    suspend fun upsert(product: ProductEntity): Long
+    @Delete
+    suspend fun delete(product: ProductEntity)
+    @Query(
+        """
+        UPDATE products
+        SET stock = stock - :qty, updatedAt = :now
+        WHERE id = :id
+        """,
+    )
+    suspend fun decrementStock(
+        id: Long,
+        qty: Double,
+        now: Long,
+    ): Int
+    @Query(
+        """
+        UPDATE products
+        SET stock = stock + :qty, updatedAt = :now
+        WHERE id = :id
+        """,
+    )
+    suspend fun incrementStock(
+        id: Long,
+        qty: Double,
+        now: Long,
+    )
+    @Query("UPDATE products SET active = :active, updatedAt = :now WHERE id = :id")
+    suspend fun setActive(
+        id: Long,
+        active: Boolean,
+        now: Long,
+    )
+    @Query("SELECT * FROM products WHERE barcode = :barcode AND active = 1 LIMIT 1")
+    suspend fun getByBarcode(barcode: String): ProductEntity?
+    @Query("SELECT * FROM products WHERE barcode = :barcode LIMIT 1")
+    suspend fun getByBarcodeAny(barcode: String): ProductEntity?
+    @Query(
+        """
+        SELECT DISTINCT category FROM products
+        WHERE active = 1 AND category != ''
+        ORDER BY category ASC
+        """,
+    )
+    fun observeDistinctCategories(): Flow<List<String>>
+    @Query("SELECT * FROM products WHERE sku = :sku LIMIT 1")
+    suspend fun getBySku(sku: String): ProductEntity?
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertAll(products: List<ProductEntity>)
+    @Query(
+        """
+        UPDATE products
+        SET damagedStock = damagedStock + :qty, updatedAt = :now
+        WHERE id = :id
+        """,
+    )
+    suspend fun incrementDamagedStock(
+        id: Long,
+        qty: Double,
+        now: Long,
+    )
+    @Query(
+        """
+        UPDATE products
+        SET damagedStock = MAX(0, damagedStock - :qty), updatedAt = :now
+        WHERE id = :id
+        """,
+    )
+    suspend fun decrementDamagedStock(
+        id: Long,
+        qty: Double,
+        now: Long,
+    )
+}

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="icon_navy_deep">#0A1628</color>
+    <color name="icon_teal_core">#0E7490</color>
+    <color name="icon_white_body">#E6FFFFFF</color>
+    <color name="icon_teal_slot">#B30E7490</color>
+    <color name="icon_cyan_handle">#22D3EE</color>
+    <color name="icon_green_led">#10B981</color>
+    <color name="icon_glass_highlight">#1FFFFFFF</color>
+    <color name="icon_white_pure">#FFFFFF</color>
+</resources>

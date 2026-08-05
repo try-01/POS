@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path name="shared_receipts" path="shared_receipts/" />
+    <cache-path name="shared_backups" path="shared_backups/" />
+    <external-files-path name="reports" path="reports/" />
+    <files-path name="reports_internal" path="reports/" />
+</paths>
