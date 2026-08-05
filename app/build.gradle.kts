@@ -121,7 +121,10 @@ dependencies {
     implementation("com.fasterxml:aalto-xml:1.4.0") 
     implementation("javax.xml.stream:stax-api:1.0-2")
 
-    implementation("com.github.iamjosephmj:flinger:2.0.0")
+    implementation("com.github.iamjosephmj:flinger:2.0.0") {
+        // Perintah ini akan menyaring dan membuang versi debug yang menyebabkan duplikat
+        exclude(module = "flinger-debug")
+    }
 
 // ===== TESTING =====
     testImplementation("junit:junit:4.13.2")
