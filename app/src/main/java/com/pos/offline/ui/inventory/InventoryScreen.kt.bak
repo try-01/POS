@@ -85,6 +85,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.iamjosephmj.flinger.behaviours.FlingPresets
 import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.ThousandsSeparatorTransformation
@@ -237,6 +238,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                     LazyColumn(
                         contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 96.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
+                        flingBehavior = FlingPresets.quickStop()
                     ) {
                         items(
                             items = products,
@@ -867,10 +869,10 @@ private fun ProductFormDialog(
                 val sanitized = sanitizeScannedCode(code)
                 if (sanitized != null) {
                     barcode = sanitized
-                    true
+                    sanitized
                 } else {
                     onScanError("Gagal memindai kode. Coba pindai ulang.")
-                    false
+                    null
                 }
             },
         )

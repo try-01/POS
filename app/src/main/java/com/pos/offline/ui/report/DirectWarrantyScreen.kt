@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.iamjosephmj.flinger.behaviours.FlingPresets
 import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.ui.inventory.InventoryViewModel
 import com.pos.offline.util.toRupiah
@@ -153,6 +154,7 @@ fun DirectWarrantyScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
+                flingBehavior = FlingPresets.quickStop()
             ) {
                 if (searchQuery.isEmpty()) {
                     item {

@@ -278,7 +278,7 @@ internal fun ManageShiftsDialog(
                     Modifier
                         .fillMaxWidth()
                         .heightIn(max = 380.dp)
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (shifts.isEmpty()) {
@@ -489,7 +489,7 @@ internal fun EndShiftDialog(
         title = { Text("Tutup Shift") },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
+                modifier = Modifier.verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
@@ -502,6 +502,13 @@ internal fun EndShiftDialog(
                 SummaryLine("Penjualan QRIS", summary.qrisRevenue.toRupiah())
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Total Pendapatan", summary.totalRevenue.toRupiah(), emphasize = true)
+                if (summary.qrisRefunds > 0L) {
+                    SummaryLine(
+                        "Refund via QRIS",
+                        "- ${summary.qrisRefunds.toRupiah()}",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 SummaryLine(
                     "Laba Kotor",
                     summary.grossProfit.toRupiah(),

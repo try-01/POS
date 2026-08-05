@@ -109,6 +109,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.iamjosephmj.flinger.behaviours.FlingPresets
 import com.pos.offline.data.local.entity.PaymentMethod
 import com.pos.offline.data.local.entity.ReturnEntity
 import com.pos.offline.data.local.entity.ReturnItemEntity
@@ -268,6 +269,7 @@ fun ReportScreen(
                 modifier = Modifier.fillMaxSize().padding(inner).imePadding(),
                 contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
+                flingBehavior = FlingPresets.iOSStyle()
             ) {
                 item(key = "unified_search_actions") {
                     Row(
@@ -1612,7 +1614,7 @@ private fun ReturnDetailDialog(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(header.transactionId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
@@ -1904,7 +1906,7 @@ private fun TransactionDetailDialog(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 banner?.let { msg ->
@@ -2239,7 +2241,7 @@ private fun ReturnItemDialog(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 message?.let { msg ->
@@ -2695,7 +2697,7 @@ private fun ClosedShiftDetailDialog(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(shift.cashierName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)

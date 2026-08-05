@@ -75,6 +75,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.iamjosephmj.flinger.behaviours.FlingPresets
 import com.pos.offline.data.local.entity.CartItemEntity
 import com.pos.offline.data.local.entity.DiscountType
 import com.pos.offline.data.local.entity.PaymentMethod
@@ -232,7 +233,10 @@ internal fun CategoryChipsRow(
     selected: String?,
     onSelect: (String?) -> Unit,
 ) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        flingBehavior = FlingPresets.bouncy()
+    ) {
         item(key = "__all__") {
             CategoryChip(label = "Semua", selected = selected == null, onClick = { onSelect(null) })
         }
@@ -520,7 +524,11 @@ internal fun CartPaneContent(
                             .fillMaxWidth()
                             .clipToBounds(),
                 ) {
-                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        flingBehavior = FlingPresets.quickStop
+                    ) {
                         if (cart.isEmpty) {
                             item(key = "empty_cart") {
                                 Box(

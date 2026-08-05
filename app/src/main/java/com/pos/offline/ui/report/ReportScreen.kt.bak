@@ -109,6 +109,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.iamjosephmj.flinger.behaviours.FlingPresets
 import com.pos.offline.data.local.entity.PaymentMethod
 import com.pos.offline.data.local.entity.ReturnEntity
 import com.pos.offline.data.local.entity.ReturnItemEntity
@@ -268,6 +269,7 @@ fun ReportScreen(
                 modifier = Modifier.fillMaxSize().padding(inner).imePadding(),
                 contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
+                flingBehavior = FlingPresets.iOSStyle()
             ) {
                 item(key = "unified_search_actions") {
                     Row(
@@ -2718,6 +2720,13 @@ private fun ClosedShiftDetailDialog(
                 SummaryLine("Penjualan QRIS", summary.qrisRevenue.toRupiah())
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Total Pendapatan", summary.totalRevenue.toRupiah(), emphasize = true)
+                if (summary.qrisRefunds > 0L) {
+                    SummaryLine(
+                        "Refund via QRIS",
+                        "- ${summary.qrisRefunds.toRupiah()}",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 SummaryLine("Laba Kotor", summary.grossProfit.toRupiah(), color = MaterialTheme.colorScheme.primary)
                 if (summary.warrantyExchangeCost > 0L) {
                     SummaryLine(

@@ -64,6 +64,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.iamjosephmj.flinger.behaviours.FlingPresets
 import com.pos.offline.data.local.entity.CartItemEntity
 import com.pos.offline.data.local.entity.CashierEntity
 import com.pos.offline.data.local.entity.PaymentMethod
@@ -278,7 +279,7 @@ internal fun ManageShiftsDialog(
                     Modifier
                         .fillMaxWidth()
                         .heightIn(max = 380.dp)
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (shifts.isEmpty()) {
@@ -489,7 +490,7 @@ internal fun EndShiftDialog(
         title = { Text("Tutup Shift") },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
+                modifier = Modifier.verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(

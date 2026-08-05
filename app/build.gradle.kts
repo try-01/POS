@@ -120,6 +120,8 @@ dependencies {
     implementation("com.fasterxml:aalto-xml:1.4.0") 
     implementation("javax.xml.stream:stax-api:1.0-2")
 
+    implementation("com.github.iamjosephmj:flinger:2.1.0")
+
 // ===== TESTING =====
     testImplementation("junit:junit:4.13.2")
     testImplementation("io.mockk:mockk:1.13.13")

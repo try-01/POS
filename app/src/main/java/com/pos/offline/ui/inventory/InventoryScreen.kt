@@ -85,6 +85,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.iamjosephmj.flinger.behaviours.FlingPresets
 import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.ui.components.ThousandsSeparatorTransformation
@@ -237,6 +238,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                     LazyColumn(
                         contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 96.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
+                        flingBehavior = FlingPresets.quickStop()
                     ) {
                         items(
                             items = products,
@@ -390,7 +392,7 @@ private fun ImportReviewDialog(
                     Modifier
                         .fillMaxWidth()
                         .heightIn(max = 400.dp)
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -911,7 +913,7 @@ private fun ProductFormDialog(
                 modifier =
                     Modifier
                         .heightIn(max = maxContentHeight)
-                        .verticalScroll(scrollState),
+                        .verticalScroll(state = scrollState, flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OutlinedTextField(

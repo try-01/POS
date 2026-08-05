@@ -45,7 +45,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import io.iamjosephmj.flinger.behaviours.FlingPresets
 import com.pos.offline.util.BluetoothDeviceInfo
 import com.pos.offline.util.PermissionUtils
 
@@ -113,7 +112,7 @@ fun BluetoothPickerDialog(
                 modifier =
                     Modifier
                         .heightIn(max = 420.dp)
-                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
+                        .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 when (permissionState) {
