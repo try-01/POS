@@ -44,10 +44,13 @@ android {
     }
 
     sourceSets {
-        getByName("androidTest").assets.directories.add(file("$projectDir/schemas"))
-        getByName("debug").assets.directories.add(file("$projectDir/schemas"))
+        named("androidTest") {
+            assets.directories.add("$projectDir/schemas")
+        }
+        named("debug") {
+            assets.directories.add("$projectDir/schemas")
+        }
     }
-
 
     packaging {
         resources {
