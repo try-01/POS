@@ -39,10 +39,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    
-    kotlinOptions { 
-        jvmTarget = "17"
-    }
 
     buildFeatures { 
         compose = true 
@@ -78,6 +74,12 @@ android {
                 "META-INF/services/org.codehaus.stax2.validation.XMLValidationSchemaFactory.W3C"
             )
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
