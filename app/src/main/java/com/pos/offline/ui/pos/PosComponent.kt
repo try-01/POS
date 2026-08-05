@@ -527,7 +527,7 @@ internal fun CartPaneContent(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        flingBehavior = FlingPresets.quickStop,
+                        flingBehavior = FlingPresets.quickStop(),
                     ) {
                         if (cart.isEmpty) {
                             item(key = "empty_cart") {

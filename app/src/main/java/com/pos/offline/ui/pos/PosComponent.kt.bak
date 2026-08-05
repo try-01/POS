@@ -235,7 +235,7 @@ internal fun CategoryChipsRow(
 ) {
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
-        flingBehavior = FlingPresets.bouncy()
+        flingBehavior = FlingPresets.bouncy(),
     ) {
         item(key = "__all__") {
             CategoryChip(label = "Semua", selected = selected == null, onClick = { onSelect(null) })
@@ -527,7 +527,7 @@ internal fun CartPaneContent(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        flingBehavior = FlingPresets.quickStop
+                        flingBehavior = FlingPresets.quickStop,
                     ) {
                         if (cart.isEmpty) {
                             item(key = "empty_cart") {
