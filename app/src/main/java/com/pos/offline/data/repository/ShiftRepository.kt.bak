@@ -13,15 +13,19 @@ data class ShiftSummary(
     val qrisCashChangeOut: Long = 0L,
     val warrantyExchangeCost: Long = 0L,
 ) {
+    // 1. Total Pendapatan Kotor (Sebelum dipotong Retur)
     val totalRevenue: Long get() = cashRevenue + qrisRevenue
+    
+    // 2. Total Pendapatan Bersih (Setelah dipotong Retur/Refund)
+    val netRevenue: Long get() = totalRevenue - cashRefunds 
 
-    // warrantyExchangeCost ditambahkan kembali agar grossProfit tetap identik dengan
-    // sebelum pemisahan biaya garansi (totalCost kini sudah exclude biaya garansi di
-    // level query) — murni breakdown visibilitas, bukan perubahan nilai laba.
+    // 3. Total Harga Pokok Penjualan (HPP)
     val netCost: Long get() = (totalCost - restockedReturnsCost + warrantyExchangeCost).coerceAtLeast(0L)
-
-    val grossProfit: Long get() = totalRevenue - netCost
-
+    
+    // 4. PERBAIKAN: Laba Kotor sekarang dihitung dari Pendapatan Bersih dikurangi HPP
+    val grossProfit: Long get() = netRevenue - netCost 
+    
+    // 5. Uang di Laci (Tetap aman!)
     val expectedCashInDrawer: Long get() = startingCash + cashRevenue - cashRefunds - qrisCashChangeOut
 }
 

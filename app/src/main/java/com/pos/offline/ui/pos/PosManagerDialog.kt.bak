@@ -501,7 +501,6 @@ internal fun EndShiftDialog(
                 SummaryLine("Penjualan Tunai", summary.cashRevenue.toRupiah())
                 SummaryLine("Penjualan QRIS", summary.qrisRevenue.toRupiah())
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
-                HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Total Pendapatan", summary.totalRevenue.toRupiah(), emphasize = true)
                 SummaryLine(
                     "Laba Kotor",

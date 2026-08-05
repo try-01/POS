@@ -126,9 +126,9 @@ interface ShiftDao {
     @Query(
         """
         SELECT COALESCE(SUM(refundAmount), 0) FROM returns
-        WHERE shiftId = :shiftId 
+        WHERE shiftId = :shiftId
           AND refundMethod = 'CASH'
-          AND transactionId NOT LIKE 'EXC-%'
+          AND isWarrantyExchange = 0
         """
     )
     suspend fun cashRefundsForShift(shiftId: Long): Long

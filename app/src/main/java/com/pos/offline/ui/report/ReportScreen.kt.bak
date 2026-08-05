@@ -178,14 +178,14 @@ fun ReportScreen(
     val warrantyScanner =
         rememberBarcodeScanner { scannedCode ->
             warrantySearchQuery = scannedCode
-            true
+            scannedCode // Ubah true menjadi scannedCode
         }
 
     val openScanner =
         rememberBarcodeScanner { scannedCode ->
             viewModel.searchProductHistory(scannedCode)
             viewModel.searchInvoice(scannedCode)
-            true
+            scannedCode // Ubah true menjadi scannedCode
         }
 
     LaunchedEffect(Unit) {

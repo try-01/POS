@@ -12,20 +12,25 @@ data class ShiftSummary(
     val cashRefunds: Long,
     val qrisCashChangeOut: Long = 0L,
     val warrantyExchangeCost: Long = 0L,
+    val qrisRefunds: Long = 0L,
 ) {
     // 1. Total Pendapatan Kotor (Sebelum dipotong Retur)
     val totalRevenue: Long get() = cashRevenue + qrisRevenue
-    
-    // 2. Total Pendapatan Bersih (Setelah dipotong Retur/Refund)
-    val netRevenue: Long get() = totalRevenue - cashRefunds 
+
+    // 2. Total Pendapatan Bersih (Setelah dipotong SEMUA metode Retur/Refund —
+    //    tunai maupun non-tunai. Refund via QRIS tetap mengurangi P&L walau
+    //    tidak menyentuh laci fisik.)
+    val netRevenue: Long get() = totalRevenue - cashRefunds - qrisRefunds
 
     // 3. Total Harga Pokok Penjualan (HPP)
     val netCost: Long get() = (totalCost - restockedReturnsCost + warrantyExchangeCost).coerceAtLeast(0L)
-    
-    // 4. PERBAIKAN: Laba Kotor sekarang dihitung dari Pendapatan Bersih dikurangi HPP
-    val grossProfit: Long get() = netRevenue - netCost 
-    
-    // 5. Uang di Laci (Tetap aman!)
+
+    // 4. Laba Kotor dihitung dari Pendapatan Bersih (SEMUA metode refund) dikurangi HPP —
+    //    sekarang selalu konsisten dengan labaBersih di Laporan Harian/Bulanan.
+    val grossProfit: Long get() = netRevenue - netCost
+
+    // 5. Uang di Laci — HANYA dipengaruhi arus kas fisik (tunai), refund QRIS
+    //    tidak boleh masuk sini karena tidak pernah menyentuh laci.
     val expectedCashInDrawer: Long get() = startingCash + cashRevenue - cashRefunds - qrisCashChangeOut
 }
 
@@ -92,6 +97,7 @@ class ShiftRepository(
             cashRefunds = shiftDao.cashRefundsForShift(shiftId),
             qrisCashChangeOut = shiftDao.qrisCashChangeOutForShift(shiftId),
             warrantyExchangeCost = shiftDao.warrantyExchangeCostForShift(shiftId),
+            qrisRefunds = shiftDao.qrisRefundsForShift(shiftId),
         )
     }
 
@@ -112,6 +118,7 @@ class ShiftRepository(
                 cashRefunds = shiftDao.cashRefundsForShift(shiftId),
                 qrisCashChangeOut = shiftDao.qrisCashChangeOutForShift(shiftId),
                 warrantyExchangeCost = shiftDao.warrantyExchangeCostForShift(shiftId),
+                qrisRefunds = shiftDao.qrisRefundsForShift(shiftId),
             )
         val updated =
             shiftDao.endIfOpen(

@@ -22,7 +22,7 @@ import org.junit.runner.RunWith
  * normal, QRIS dengan kembalian tunai, retur lintas-metode-bayar kedua arah).
  *
  * Semua skenario berjalan dalam SATU shift berkelanjutan (persis seperti pengujian
- * manual), sehingga setiap assertion adalah checkpoint kumulatif — bukan test
+ * manual Anda), sehingga setiap assertion adalah checkpoint kumulatif — bukan test
  * terisolasi. Ini disengaja: tujuannya membuktikan konsistensi rumus akuntansi
  * sepanjang alur nyata, bukan menguji fungsi satu-persatu.
  */
@@ -62,7 +62,7 @@ class AccountingWalkthroughTest {
         returnRepository = ReturnRepository(db, db.returnDao(), db.transactionDao(), db.productDao())
         reportRepository = ReportRepository(db.reportDao())
 
-        // --- Stok Awal (harga & modal sesuai skrip QA) ---
+        // --- Stok Awal (harga & modal sesuai skrip QA Anda) ---
         idA = productRepository.save(ProductEntity(name = "Produk A", sku = "A", price = 50_000, cost = 20_000, stock = 100.0))
         idB = productRepository.save(ProductEntity(name = "Produk B", sku = "B", price = 100_000, cost = 70_000, stock = 100.0))
         idC = productRepository.save(ProductEntity(name = "Produk C", sku = "C", price = 80_000, cost = 50_000, stock = 100.0))

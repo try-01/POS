@@ -2718,6 +2718,13 @@ private fun ClosedShiftDetailDialog(
                 SummaryLine("Penjualan QRIS", summary.qrisRevenue.toRupiah())
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
                 SummaryLine("Total Pendapatan", summary.totalRevenue.toRupiah(), emphasize = true)
+                if (summary.qrisRefunds > 0L) {
+                    SummaryLine(
+                        "Refund via QRIS",
+                        "- ${summary.qrisRefunds.toRupiah()}",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 SummaryLine("Laba Kotor", summary.grossProfit.toRupiah(), color = MaterialTheme.colorScheme.primary)
                 if (summary.warrantyExchangeCost > 0L) {
                     SummaryLine(

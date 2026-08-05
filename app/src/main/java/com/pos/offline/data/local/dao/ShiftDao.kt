@@ -133,6 +133,20 @@ interface ShiftDao {
     )
     suspend fun cashRefundsForShift(shiftId: Long): Long
 
+    // Refund non-tunai (mis. transfer/QRIS) tidak menyentuh laci fisik, tapi TETAP
+    // harus mengurangi P&L (grossProfit) — sebelumnya field ini tidak ada sama sekali,
+    // menyebabkan grossProfit di dialog Tutup Shift lebih tinggi dari kenyataan saat
+    // ada retur ber-refund-QRIS.
+    @Query(
+        """
+        SELECT COALESCE(SUM(refundAmount), 0) FROM returns
+        WHERE shiftId = :shiftId
+          AND refundMethod = 'QRIS'
+          AND isWarrantyExchange = 0
+        """
+    )
+    suspend fun qrisRefundsForShift(shiftId: Long): Long
+
     @Query(
         """
         SELECT COALESCE(SUM(

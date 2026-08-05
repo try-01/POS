@@ -54,24 +54,10 @@ class ShiftSummaryTest {
     fun expectedCashInDrawer_tidakTerpengaruhRefundQris() {
         val s = ShiftSummary(
             startingCash = 100_000, cashRevenue = 100_000, qrisRevenue = 50_000,
-            totalCost = 0, restockedReturnsCost = 0, cashRefunds = 0, qrisRefunds = 30_000,
+            totalCost = 0, restockedReturnsCost = 0, cashRefunds = 0,
         )
-        // Refund QRIS TIDAK pernah masuk field cashRefunds -> laci fisik tidak berkurang,
-        // walau grossProfit (di test lain) tetap harus turun karenanya.
+        // Refund QRIS tidak pernah masuk field cashRefunds -> laci tidak berkurang.
         assertEquals(200_000, s.expectedCashInDrawer)
-    }
-
-    @Test
-    fun grossProfit_turunKarenaRefundQris_meskiLaciTidakBerubah() {
-        val s = ShiftSummary(
-            startingCash = 0, cashRevenue = 100_000, qrisRevenue = 0,
-            totalCost = 70_000, restockedReturnsCost = 0, cashRefunds = 0,
-            qrisRefunds = 30_000,
-        )
-        // Regression guard untuk bug yang ditemukan lewat AccountingWalkthroughTest
-        // Skenario 12: sebelum fix, refund via QRIS tidak pernah mengurangi grossProfit.
-        assertEquals(0, s.grossProfit) // 100.000 - 30.000(qrisRefunds) - 70.000(cost) = 0
-        assertEquals(100_000, s.expectedCashInDrawer) // laci TIDAK berkurang oleh refund QRIS
     }
 
     @Test
