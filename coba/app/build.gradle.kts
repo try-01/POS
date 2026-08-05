@@ -11,7 +11,7 @@ room3 {
 
 android {
     namespace = "com.pos.offline"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.pos.offline"
@@ -44,8 +44,12 @@ android {
     }
 
     sourceSets {
-        getByName("androidTest").assets.srcDir("$projectDir/schemas")
-        getByName("debug").assets.srcDir("$projectDir/schemas")
+        getByName("androidTest") {
+            assets.srcDirs += "$projectDir/schemas"
+        }
+        getByName("debug") {
+            assets.srcDirs += "$projectDir/schemas"
+        }
     }
 
     packaging {
