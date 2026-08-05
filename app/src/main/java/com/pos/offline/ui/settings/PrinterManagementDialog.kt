@@ -97,7 +97,7 @@ fun PrinterManagementDialog(
                             .weight(1f)
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp)
-                            .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
+                            .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle()),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (printers.isEmpty()) {
@@ -268,7 +268,7 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
         },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
+                modifier = Modifier.verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 OutlinedTextField(

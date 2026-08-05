@@ -74,6 +74,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.iamjosephmj.flinger.behaviours.FlingPresets
 import com.pos.offline.data.backup.BackupManager
 import com.pos.offline.data.local.entity.CashierEntity
 import com.pos.offline.ui.components.GlassCard
@@ -201,7 +202,7 @@ fun SettingsScreen(
                     .padding(innerPadding)
                     .imePadding()
                     .padding(horizontal = 12.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Spacer(Modifier.height(4.dp))

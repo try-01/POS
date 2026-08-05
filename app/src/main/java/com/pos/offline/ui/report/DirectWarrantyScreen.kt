@@ -154,7 +154,7 @@ fun DirectWarrantyScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                flingBehavior = FlingPresets.quickStop()
+                flingBehavior = FlingPresets.quickStop(),
             ) {
                 if (searchQuery.isEmpty()) {
                     item {

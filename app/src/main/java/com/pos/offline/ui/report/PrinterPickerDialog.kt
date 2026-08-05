@@ -35,7 +35,7 @@ fun PrinterPickerDialog(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 )
                 LazyColumn(
-                   flingBehavior = FlingPresets.iOSStyle()
+                   flingBehavior = FlingPresets.iOSStyle(),
                 )  {
                     items(printers, key = { it.id }) { printer ->
                         Column(

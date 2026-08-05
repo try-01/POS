@@ -202,7 +202,7 @@ fun SettingsScreen(
                     .padding(innerPadding)
                     .imePadding()
                     .padding(horizontal = 12.dp)
-                    .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
+                    .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle()),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Spacer(Modifier.height(4.dp))

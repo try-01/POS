@@ -1614,7 +1614,7 @@ private fun ReturnDetailDialog(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(header.transactionId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
@@ -1906,7 +1906,7 @@ private fun TransactionDetailDialog(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 banner?.let { msg ->
@@ -2241,7 +2241,7 @@ private fun ReturnItemDialog(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 message?.let { msg ->
@@ -2697,7 +2697,7 @@ private fun ClosedShiftDetailDialog(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(shift.cashierName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)

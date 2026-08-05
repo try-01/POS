@@ -53,7 +53,7 @@ fun UsbPickerDialog(
                 modifier =
                     Modifier
                         .heightIn(max = 380.dp)
-                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
+                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(

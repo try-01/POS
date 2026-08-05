@@ -113,7 +113,7 @@ fun BluetoothPickerDialog(
                 modifier =
                     Modifier
                         .heightIn(max = 420.dp)
-                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
+                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 when (permissionState) {

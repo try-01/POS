@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.iamjosephmj.flinger.behaviours.FlingPresets
 import com.pos.offline.util.UsbDeviceInfo
 
 @Composable
@@ -52,7 +53,7 @@ fun UsbPickerDialog(
                 modifier =
                     Modifier
                         .heightIn(max = 380.dp)
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(

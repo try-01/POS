@@ -238,7 +238,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                     LazyColumn(
                         contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 96.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
-                        flingBehavior = FlingPresets.quickStop()
+                        flingBehavior = FlingPresets.quickStop(),
                     ) {
                         items(
                             items = products,
@@ -392,7 +392,7 @@ private fun ImportReviewDialog(
                     Modifier
                         .fillMaxWidth()
                         .heightIn(max = 400.dp)
-                        .verticalScroll(rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
+                        .verticalScroll(rememberScrollState(), flingBehavior = FlingPresets.iOSStyle()),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -913,7 +913,7 @@ private fun ProductFormDialog(
                 modifier =
                     Modifier
                         .heightIn(max = maxContentHeight)
-                        .verticalScroll(state = scrollState, flingBehavior = FlingPresets.iOSStyle())
+                        .verticalScroll(state = scrollState, flingBehavior = FlingPresets.iOSStyle()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OutlinedTextField(

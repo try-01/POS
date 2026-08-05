@@ -279,7 +279,7 @@ internal fun ManageShiftsDialog(
                     Modifier
                         .fillMaxWidth()
                         .heightIn(max = 380.dp)
-                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
+                        .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (shifts.isEmpty()) {
@@ -490,7 +490,7 @@ internal fun EndShiftDialog(
         title = { Text("Tutup Shift") },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
+                modifier = Modifier.verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle()),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(

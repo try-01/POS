@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import io.iamjosephmj.flinger.behaviours.FlingPresets
 import com.pos.offline.data.local.entity.PaperWidth
 import com.pos.offline.data.local.entity.PrinterConnectionType
 import com.pos.offline.data.local.entity.PrinterEntity
@@ -96,7 +97,7 @@ fun PrinterManagementDialog(
                             .weight(1f)
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp)
-                            .verticalScroll(rememberScrollState()),
+                            .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (printers.isEmpty()) {
@@ -267,7 +268,7 @@ private fun PrinterFormDialog(viewModel: PrinterViewModel) {
         },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
+                modifier = Modifier.verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 OutlinedTextField(
