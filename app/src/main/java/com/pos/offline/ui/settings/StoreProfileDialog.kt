@@ -104,7 +104,7 @@ fun StoreProfileDialog(
                             .weight(1f)
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
-                            .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle()),
+                            .verticalScroll(state = rememberScrollState(), flingBehavior = FlingPresets.iOSStyle())
                             .imePadding(),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
