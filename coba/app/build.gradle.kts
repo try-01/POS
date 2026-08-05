@@ -85,7 +85,7 @@ kotlin {
 
 dependencies {
     // ===== ROOM 3.0 =====
-    val room_version = "3.0.1"
+    val room_version = "3.0.0"
     implementation("androidx.room3:room3-runtime:$room_version")
     implementation("androidx.room3:room3-ktx:$room_version")
     ksp("androidx.room3:room3-compiler:$room_version")
