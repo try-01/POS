@@ -65,12 +65,12 @@
 -keep @androidx.room.Database class * { *; }
 
 -keepclassmembers class * {
-    @androidx.room.* <fields>;
-    @androidx.room.* <methods>;
+    @androidx.room3.* <fields>;
+    @androidx.room3.* <methods>;
 }
 
 -keep class * {
-    @androidx.room.TypeConverter <methods>;
+    @androidx.room3.ColumnTypeConverter <methods>;
 }
 
 
