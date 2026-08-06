@@ -100,7 +100,7 @@ interface ReportDao {
         SELECT paymentMethod,
                COALESCE(SUM(total), 0) as total,
                COUNT(CASE WHEN isWarrantyExchange = 0 THEN 1 END) as count,
-               COALESCE(SUM(paidAmount - changeGiven), 0) as actualReceivedSum
+               COALESCE(SUM(paidAmount - changeGiven), 0) as actualReceived
         FROM transactions WHERE createdAt >= :start AND createdAt < :end AND status = 'COMPLETED'
         GROUP BY paymentMethod
     """,
