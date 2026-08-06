@@ -1,4 +1,4 @@
-package com.pos.offline.util // Sesuaikan dengan package Anda
+package com.pos.offline.util // Sesuaikan dengan nama package utilitas Anda
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Modifier kustom untuk memberikan efek pantulan ujung (rubber-band) gaya iOS.
- * Harus digunakan bersamaan dengan [LocalOverscrollConfiguration provides null].
+ * Dipadukan dengan animasi membesar/mengecil (scale).
  */
 fun Modifier.bouncyOverscroll(
     orientation: Orientation = Orientation.Vertical
@@ -28,20 +28,28 @@ fun Modifier.bouncyOverscroll(
 
     val connection = remember(orientation) {
         object : NestedScrollConnection {
-            
+
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val current = translation.value
                 val availableDelta = if (orientation == Orientation.Vertical) available.y else available.x
-                // Jika sedang memantul (karet ditarik), gunakan scroll untuk melawan pantulan
-                if (translation.value != 0f) {
-                    val consumed = if (translation.value > 0) {
-                        availableDelta.coerceAtMost(0f)
-                    } else {
-                        availableDelta.coerceAtLeast(0f)
+                
+                // 1. Jika sedang memantul dan pengguna menggeser jari ke arah berlawanan (menuju 0)
+                if (current != 0f) {
+                    val sign = kotlin.math.sign(current)
+                    if (kotlin.math.sign(availableDelta) != sign) {
+                        // Kunci Perbaikan Bug: Gunakan proporsi 1:1 (tanpa dikali fraksi) 
+                        // agar layar mengikuti jari secara akurat dan tidak terlepas.
+                        val maxConsumed = if (current > 0) {
+                            availableDelta.coerceAtLeast(-current)
+                        } else {
+                            availableDelta.coerceAtMost(-current)
+                        }
+                        
+                        scope.launch {
+                            translation.snapTo(translation.value + maxConsumed)
+                        }
+                        return if (orientation == Orientation.Vertical) Offset(0f, maxConsumed) else Offset(maxConsumed, 0f)
                     }
-                    scope.launch { 
-                        translation.snapTo(translation.value + consumed * 0.3f) 
-                    }
-                    return if (orientation == Orientation.Vertical) Offset(0f, consumed) else Offset(consumed, 0f)
                 }
                 return Offset.Zero
             }
@@ -52,38 +60,63 @@ fun Modifier.bouncyOverscroll(
                 source: NestedScrollSource
             ): Offset {
                 val availableDelta = if (orientation == Orientation.Vertical) available.y else available.x
-                // Jika ada sisa scroll (menabrak ujung), ubah menjadi tarikan (translasi)
+                
+                // 2. Tangani saat ditarik paksa melebihi batas (menciptakan efek kelenturan)
                 if (availableDelta != 0f) {
-                    scope.launch { 
-                        translation.snapTo(translation.value + availableDelta * 0.2f) 
+                    val resistance = availableDelta * 0.25f // Tingkat kelenturan karet (0.25 = berat)
+                    scope.launch {
+                        // Batas absolut 350f menjamin konten TIDAK AKAN PERNAH bablas hilang dari layar
+                        val target = (translation.value + resistance).coerceIn(-350f, 350f)
+                        translation.snapTo(target)
                     }
-                    return if (orientation == Orientation.Vertical) Offset(0f, availableDelta) else Offset(availableDelta, 0f)
+                    return available
                 }
                 return Offset.Zero
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                // Saat jari dilepas, kembalikan posisi pantulan ke 0 menggunakan efek pegas
+                // 3. Saat jari dilepas, lepaskan karet agar memantul kembali ke posisi 0
                 if (translation.value != 0f) {
-                    scope.launch { 
-                        translation.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) 
+                    scope.launch {
+                        translation.animateTo(
+                            targetValue = 0f, 
+                            animationSpec = spring(
+                                dampingRatio = 0.5f, // Makin kecil = makin bouncy
+                                stiffness = Spring.StiffnessMediumLow
+                            )
+                        )
                     }
+                    // Beri tahu sistem bahwa kita "menelan" sisa momentum, agar list tidak lanjut scroll sendiri
+                    return available 
                 }
                 return Velocity.Zero
             }
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
                 val availableVelocity = if (orientation == Orientation.Vertical) available.y else available.x
-                // Jika masih ada sisa kecepatan Flinger saat menabrak ujung, buat pantulan benturan
+                
+                // 4. Jika list digulir kencang (fling) dan menabrak batas layar secara keras
                 if (availableVelocity != 0f) {
                     scope.launch {
+                        // Buat hentakan (membentur ujung)
+                        val bounceImpact = (availableVelocity * 0.04f).coerceIn(-120f, 120f)
                         translation.animateTo(
-                            targetValue = availableVelocity * 0.04f, 
-                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                            targetValue = bounceImpact,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy, 
+                                stiffness = Spring.StiffnessMedium
+                            )
                         )
-                        translation.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
+                        // Pantulkan kembali ke titik awal (0)
+                        translation.animateTo(
+                            targetValue = 0f, 
+                            animationSpec = spring(
+                                dampingRatio = 0.5f, 
+                                stiffness = Spring.StiffnessMediumLow
+                            )
+                        )
                     }
-                    return if (orientation == Orientation.Vertical) Velocity(x = 0f, y = availableVelocity) else Velocity(x = availableVelocity, y = 0f)
+                    return available
                 }
                 return Velocity.Zero
             }
@@ -93,10 +126,19 @@ fun Modifier.bouncyOverscroll(
     this
         .nestedScroll(connection)
         .graphicsLayer {
+            val current = translation.value
+            val absCurrent = kotlin.math.abs(current)
+            
+            // Animasi membesar dan mengecil (Maksimal membesar 3% dari ukuran asli)
+            val scaleFactor = 1f + (absCurrent * 0.00015f).coerceAtMost(0.03f)
+            scaleX = scaleFactor
+            scaleY = scaleFactor
+
+            // Animasi translasi (geser mengikuti jari/pantulan)
             if (orientation == Orientation.Vertical) {
-                translationY = translation.value
+                translationY = current
             } else {
-                translationX = translation.value
+                translationX = current
             }
         }
 }
