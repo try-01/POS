@@ -250,9 +250,9 @@ internal fun CategoryChipsRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             flingBehavior = flingBehavior(
                 scrollConfiguration = FlingConfiguration.Builder()
-                    .scrollViewFriction(0.006f)
-                    .decelerationFriction(0.4f)
-                    .splineInflection(0.5f)
+                    .scrollViewFriction(0.005f)
+                    .decelerationFriction(0.5f)
+                    .splineInflection(0.45f) // Efek lengkung pantul lebih agresif
                     .splineStartTension(0.3f)
                     .numberOfSplinePoints(150)
                     .build()
