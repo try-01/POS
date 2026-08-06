@@ -46,8 +46,9 @@ jobs:
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
           api-level: 30
-          target: aosp_atd # Menggunakan Android Test Device agar booting sangat cepat
+          target: aosp_atd 
           arch: x86_64
           disable-animations: true
+          working-directory: ./coba # <-- 1. Tambahkan parameter ini agar action berjalan di folder coba/
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
-          script: ./coba/gradlew connectedDebugAndroidTest --parallel --build-cache --stacktrace
+          script: ./gradlew connectedDebugAndroidTest --parallel --build-cache --stacktrace # <-- 2. Ubah pemanggilan menjadi ./gradlew

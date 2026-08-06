@@ -51,4 +51,4 @@ jobs:
           disable-animations: true
           working-directory: ./coba # <-- 1. Tambahkan parameter ini agar action berjalan di folder coba/
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
-          script: ./gradlew connectedDebugAndroidTest --parallel --build-cache --stacktrace # <-- 2. Ubah pemanggilan menjadi ./gradlew
+          script: ./gradlew clean connectedDebugAndroidTest --rerun-tasks --parallel --stacktrace # <-- 2. Ubah pemanggilan menjadi ./gradlew
