@@ -249,8 +249,8 @@ internal fun CategoryChipsRow(
         LocalOverscrollConfiguration provides null
     ) {
         LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.bouncyOverscroll(Orientation.Horizontal),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             flingBehavior = FlingPresets.smooth()
         ) {
             item(key = "__all__") {
@@ -316,8 +316,8 @@ internal fun ProductPane(
                 .padding(horizontal = 12.dp)
                 .bouncyOverscroll(),
             contentPadding = PaddingValues(bottom = 96.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             flingBehavior = FlingPresets.iOSStyle()
         ) {
             items(items = products, key = { it.id }, contentType = { "product" }) { product ->
@@ -564,8 +564,8 @@ internal fun CartPaneContent(
                     LocalOverscrollConfiguration provides null
                 ) {
                     LazyColumn(
-                        state = listState, 
                         modifier = Modifier.fillMaxSize(),
+                        state = listState, 
                         FlingPresets.quickStop()
                     ) {
                         if (cart.isEmpty) {

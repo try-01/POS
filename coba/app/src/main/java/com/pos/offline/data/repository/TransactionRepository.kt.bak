@@ -17,9 +17,9 @@ data class CheckoutResult(
     val transaction: TransactionEntity,
     val items: List<TransactionItemEntity>,
 )
-class ProductRemovedDuringCheckoutException(
+class InsufficientStockException(
     val productName: String,
-) : RuntimeException("Produk '$productName' tidak ditemukan (kemungkinan baru saja dihapus).")
+) : RuntimeException()
 sealed class VoidOutcome {
     data class Success(
         val restoredStockCount: Int,
@@ -114,8 +114,7 @@ class TransactionRepository(
             cart.forEach { item ->
                 val affected = productDao.decrementStock(item.productId, item.quantity, now)
                 if (affected == 0) {
-                    // Produk terhapus di tengah transaksi — BUKAN soal stok kurang
-                    throw ProductRemovedDuringCheckoutException(item.name)
+                    throw InsufficientStockException(item.name)
                 }
             }
             transactionDao.checkout(transaction, items)

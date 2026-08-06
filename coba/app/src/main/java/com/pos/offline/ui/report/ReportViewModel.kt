@@ -538,7 +538,13 @@ fun printReceipt(result: CheckoutResult) {
             } catch (e: ProductRemovedDuringCheckoutException) {
                 e.printStackTrace()
                 viewModelScope.launch {
-                    _messages.emit(ReportMessage("Gagal: ${e.message}", isError = true))
+                    // Sesuaikan pesan error menggunakan e.productName seperti di PosViewModel
+                    _messages.emit(
+                        ReportMessage(
+                            text = "Produk '${e.productName}' tidak ditemukan (kemungkinan baru saja dihapus). Proses tukar guling dibatalkan.",
+                            isError = true
+                        )
+                    )
                 }
             }
         }

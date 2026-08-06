@@ -268,7 +268,7 @@ db.execSQL(
     )
     """.trimIndent(),
 )
-                    )
+
                     db.execSQL(
                         """
                         INSERT INTO `cart_items_new` (`id`, `productId`, `name`, `unitPrice`, `quantity`)
