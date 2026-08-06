@@ -45,6 +45,7 @@ import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -84,6 +85,7 @@ import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 import com.pos.offline.ui.components.formatPercentTrim
 import com.pos.offline.util.formatQuantity
 import com.pos.offline.util.toRupiah
+import com.pos.offline.util.bouncyOverscroll
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.runtime.CompositionLocalProvider
@@ -248,6 +250,7 @@ internal fun CategoryChipsRow(
     ) {
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.bouncyOverscroll(Orientation.Horizontal),
             flingBehavior = flingBehavior(
                 scrollConfiguration = FlingConfiguration.Builder()
                     .scrollViewFriction(0.005f)
@@ -317,7 +320,9 @@ internal fun ProductPane(
     ) {
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 104.dp),
-            modifier = modifier.padding(horizontal = 12.dp),
+            modifier = modifier
+                .padding(horizontal = 12.dp)
+                .bouncyOverscroll(),
             contentPadding = PaddingValues(bottom = 96.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -348,11 +353,13 @@ internal fun ProductPane(
         )
     }
 }
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ProductCard(
     product: ProductEntity,
     remainingStock: Double,
     onAdd: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
     val outOfStock = remainingStock <= 0.0
     GlassCard(

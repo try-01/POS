@@ -131,6 +131,7 @@ import com.pos.offline.ui.receipt.forTransaction
 import com.pos.offline.util.ReceiptPrintOutcome
 import com.pos.offline.util.formatQuantity
 import com.pos.offline.util.toRupiah
+import com.pos.offline.util.bouncyOverscroll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -274,6 +275,7 @@ fun ReportScreen(
                     .fillMaxSize()
                     .padding(inner)
                     .consumeWindowInsets(inner)
+                    .bouncyOverscroll()
                     .imePadding(),
                 contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),

@@ -78,6 +78,7 @@ import com.pos.offline.data.backup.BackupManager
 import com.pos.offline.data.local.entity.CashierEntity
 import com.pos.offline.ui.components.GlassCard
 import com.pos.offline.util.VibrationLevel
+import com.pos.offline.util.bouncyOverscroll
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.runtime.CompositionLocalProvider
@@ -210,6 +211,7 @@ fun SettingsScreen(
                         .padding(innerPadding)
                         .imePadding()
                         .padding(horizontal = 12.dp)
+                        .bouncyOverscroll()
                         .verticalScroll(
                             state = rememberScrollState(),
                             flingBehavior = flingBehavior(

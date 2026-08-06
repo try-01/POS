@@ -94,6 +94,7 @@ import com.pos.offline.util.sanitizeScannedCode
 import com.pos.offline.util.ExcelManager
 import com.pos.offline.util.formatQuantity
 import com.pos.offline.util.toRupiah
+import com.pos.offline.util.bouncyOverscroll
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
@@ -248,6 +249,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                     LazyColumn(
                         contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 96.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.bouncyOverscroll(),
                         flingBehavior = flingBehavior(
                             scrollConfiguration = FlingConfiguration.Builder()
                                 .scrollViewFriction(0.006f)
