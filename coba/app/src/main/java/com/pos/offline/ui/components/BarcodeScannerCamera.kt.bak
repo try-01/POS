@@ -212,7 +212,7 @@ fun BarcodeScannerCamera(
                                         screenTop >= boxTop && screenBottom <= boxBottom
                                 }
                             if (targetBarcode != null) {
-                                val code = targetBarcode.rawValue!!
+                                val code = targetBarcode.rawValue
                                 if (code == pendingCode) {
                                     pendingCodeCount++
                                     if (pendingCodeCount >= 2) {
@@ -433,8 +433,8 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> String?): () -> Unit {
                 )
                 WindowCompat.setDecorFitsSystemWindows(window, false)
                 window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-                window.statusBarColor = android.graphics.Color.TRANSPARENT
-                window.navigationBarColor = android.graphics.Color.TRANSPARENT
+                // window.statusBarColor = android.graphics.Color.TRANSPARENT
+                // window.navigationBarColor = android.graphics.Color.TRANSPARENT
             }
         }
         BackHandler { showScanner = false }
@@ -461,7 +461,7 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> String?): () -> Unit {
                             vibrationDurationMs = vibrationDurationMs,
                         )
                         scannedCountBatch++
-                        lastScannedCodeText = scannedName!!
+                        lastScannedCodeText = scannedName
                         if (!isMultiScanMode) {
                             showScanner = false
                         }
@@ -564,7 +564,7 @@ fun rememberBarcodeScanner(onScanned: suspend (String) -> String?): () -> Unit {
                     Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = navBarHeight + 30.dp),
+                        .padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = navBarHeight + 6.dp),
                 shape = RoundedCornerShape(20.dp),
                 colors =
                     CardDefaults.cardColors(

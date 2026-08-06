@@ -212,7 +212,7 @@ fun BarcodeScannerCamera(
                                         screenTop >= boxTop && screenBottom <= boxBottom
                                 }
                             if (targetBarcode != null) {
-                                val code = targetBarcode.rawValue
+                                val code = targetBarcode.rawValue ?: return@addOnSuccessListener
                                 if (code == pendingCode) {
                                     pendingCodeCount++
                                     if (pendingCodeCount >= 2) {
