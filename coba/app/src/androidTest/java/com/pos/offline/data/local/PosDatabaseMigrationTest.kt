@@ -1,4 +1,5 @@
 package com.pos.offline.data.local
+
 import android.database.Cursor
 import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -9,17 +10,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+
 @RunWith(AndroidJUnit4::class)
 class PosDatabaseMigrationTest {
     private val testDbName = "migration-test.db"
+
     @get:Rule
     val helper: MigrationTestHelper =
         MigrationTestHelper(
             InstrumentationRegistry.getInstrumentation(),
             PosDatabase::class.java,
         )
+
     @Test
-    fun migrate1To2_preservesDataAndAddsCostColumn() {
+    fun migrateAll_1To18_preservesDataAndAppliesAllSchemaChanges() {
+        // 1. Buat database mentah di Versi 1
         val v1: SupportSQLiteDatabase = helper.createDatabase(testDbName, 1)
         v1.execSQL(
             """
@@ -30,15 +35,39 @@ class PosDatabaseMigrationTest {
             """.trimIndent(),
         )
         v1.close()
-        val v2: SupportSQLiteDatabase =
-            helper.runMigrationsAndValidate(testDbName, 2, true, Migrations.MIGRATION_1_2)
-        v2.query("SELECT name, price, stock, cost FROM products WHERE id = 1").use { cursor: Cursor ->
-            assertTrue("Baris id=1 harus tetap ada setelah migrasi", cursor.moveToFirst())
+
+        // 2. Jalankan SELURUH migrasi sekaligus (Versi 1 ke 18) menggunakan array Migrations.ALL
+        val v18: SupportSQLiteDatabase =
+            helper.runMigrationsAndValidate(
+                testDbName,
+                18, // Target versi database terbaru
+                true,
+                *Migrations.ALL
+            )
+
+        // 3. Validasi apakah data awal tetap aman dan tabel memiliki skema kolom baru
+        v18.query("SELECT * FROM products WHERE id = 1").use { cursor: Cursor ->
+            assertTrue("Baris id=1 harus tetap ada setelah migrasi ke V18", cursor.moveToFirst())
+
+            // Data Lama (Harus tidak berubah)
             assertEquals("Kopi Test", cursor.getString(cursor.getColumnIndexOrThrow("name")))
             assertEquals(8000L, cursor.getLong(cursor.getColumnIndexOrThrow("price")))
-            assertEquals(10, cursor.getInt(cursor.getColumnIndexOrThrow("stock")))
+            
+            // Di MIGRATION_14_15, tipe data stock berubah menjadi REAL (Double)
+            assertEquals(10.0, cursor.getDouble(cursor.getColumnIndexOrThrow("stock")), 0.001)
+
+            // Kolom baru dari MIGRATION_1_2 (Cost)
             assertEquals(0L, cursor.getLong(cursor.getColumnIndexOrThrow("cost")))
+
+            // Kolom baru dari MIGRATION_8_9 (Barcode)
+            assertTrue("Barcode harus null secara default", cursor.isNull(cursor.getColumnIndexOrThrow("barcode")))
+
+            // Kolom baru dari MIGRATION_9_10 (Category)
+            assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("category")))
+
+            // Kolom baru dari MIGRATION_15_16 (Damaged Stock)
+            assertEquals(0.0, cursor.getDouble(cursor.getColumnIndexOrThrow("damagedStock")), 0.001)
         }
-        v2.close()
+        v18.close()
     }
 }
