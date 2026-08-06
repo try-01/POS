@@ -1,7 +1,6 @@
 package com.pos.offline.data.local
-import androidx.room3.migration.Migration
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-
 object Migrations {
     val MIGRATION_1_2 =
         object : Migration(1, 2) {

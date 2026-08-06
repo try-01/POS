@@ -2,7 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
-    id("androidx.room3")
+    id("androidx.room")
 }
 
 room3 {
@@ -88,9 +88,10 @@ kotlin {
 
 dependencies {
     // ===== ROOM 3.0 =====
-    val room_version = "3.0.0"
-    implementation("androidx.room3:room3-runtime:$room_version")
-    ksp("androidx.room3:room3-compiler:$room_version")
+    val room_version = "2.8.4"
+    implementation("androidx.room:room-runtime:$room_version")
+    ksp("androidx.room:room-compiler:$room_version")
+    implementation("androidx.room:room-ktx:$room_version")
 
     // ===== COMPOSE & UI =====
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")

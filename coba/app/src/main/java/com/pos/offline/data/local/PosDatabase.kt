@@ -1,9 +1,9 @@
 package com.pos.offline.data.local
 import android.content.Context
-import androidx.room3.Database
-import androidx.room3.Room
-import androidx.room3.RoomDatabase
-import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.pos.offline.data.local.dao.CartDao
 import com.pos.offline.data.local.dao.CashierDao
 import com.pos.offline.data.local.dao.PrinterDao
@@ -68,9 +68,7 @@ abstract class PosDatabase : RoomDatabase() {
                         context.applicationContext,
                         PosDatabase::class.java,
                         "pos.db",
-                    )
-                    .setDriver(BundledSQLiteDriver())  // ✅ BARU - Tambahkan SQLiteDriver
-                    .addCallback(SEED_CALLBACK)
+                    ).addCallback(SEED_CALLBACK)
                     .addMigrations(*Migrations.ALL)
                     .build()
                     .also { INSTANCE = it }

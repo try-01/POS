@@ -1,5 +1,5 @@
 package com.pos.offline.data.repository
-import androidx.room3.Room
+import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pos.offline.data.local.PosDatabase

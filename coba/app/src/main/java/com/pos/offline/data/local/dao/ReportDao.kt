@@ -1,6 +1,6 @@
 package com.pos.offline.data.local.dao
-import androidx.room3.Dao
-import androidx.room3.Query
+import androidx.room.Dao
+import androidx.room.Query
 import com.pos.offline.data.local.entity.ProductEntity
 import com.pos.offline.data.local.entity.TransactionEntity
 import kotlinx.coroutines.flow.Flow

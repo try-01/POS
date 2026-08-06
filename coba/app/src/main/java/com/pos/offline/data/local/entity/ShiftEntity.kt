@@ -1,7 +1,7 @@
 package com.pos.offline.data.local.entity
-import androidx.room3.Entity
-import androidx.room3.Index
-import androidx.room3.PrimaryKey
+import androidx.room.Entity
+import androidx.room.Index
+import androidx.room.PrimaryKey
 @Entity(
     tableName = "shifts",
     indices = [Index(value = ["cashierId"]), Index(value = ["endedAt"])],
