@@ -393,17 +393,21 @@ class PosViewModel(
         }
         return true
     }
-private fun increaseQty(item: CartItemEntity) =
-    viewModelScope.launch {
-        val stock = productRepository.getById(item.productId)?.stock
-        val result = cartRepository.changeQuantity(
-            productId = item.productId, name = item.name, unitPrice = item.unitPrice,
-            delta = 1.0, maxStock = stock,
-        )
-        if (result.crossedIntoExcess && stock != null) {
-            _stockWarning.value = StockWarningInfo(item.name, stock)
+    private fun increaseQty(item: CartItemEntity) =
+        viewModelScope.launch {
+            val product = productRepository.getById(item.productId)
+            val stock = product?.stock
+            cartRepository.changeQuantity(
+                productId = item.productId,
+                name = item.name,
+                unitPrice = item.unitPrice,
+                delta = 1.0,
+                maxStock = null,
+            )
+            if (stock != null && (item.quantity + 1.0) > stock) {
+                _stockWarning.value = StockWarningInfo(item.name, stock)
+            }
         }
-    }
     private fun decreaseQty(item: CartItemEntity) =
         viewModelScope.launch {
             cartRepository.changeQuantity(

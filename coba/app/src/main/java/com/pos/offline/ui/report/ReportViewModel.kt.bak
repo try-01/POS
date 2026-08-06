@@ -23,7 +23,6 @@ import com.pos.offline.data.repository.ShiftSummary
 import com.pos.offline.data.repository.StoreProfileRepository
 import com.pos.offline.data.repository.TransactionRepository
 import com.pos.offline.data.repository.VoidOutcome
-import com.pos.offline.data.repository.ProductRemovedDuringCheckoutException
 import com.pos.offline.ui.receipt.PrintUiState
 import com.pos.offline.ui.receipt.ReceiptLine
 import com.pos.offline.ui.receipt.ReceiptManager

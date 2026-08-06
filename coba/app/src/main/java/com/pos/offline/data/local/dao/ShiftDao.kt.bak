@@ -70,13 +70,13 @@ interface ShiftDao {
         """
     )
     suspend fun cashRevenueForShift(shiftId: Long): Long
-@Query(
-    """
-    SELECT COALESCE(SUM(paidAmount - changeGiven), 0) FROM transactions
-    WHERE shiftId = :shiftId AND paymentMethod = 'QRIS' AND status = 'COMPLETED'
-    """,
-)
-suspend fun qrisRevenueForShift(shiftId: Long): Long
+    @Query(
+        """
+        SELECT COALESCE(SUM(total), 0) FROM transactions
+        WHERE shiftId = :shiftId AND paymentMethod = 'QRIS' AND status = 'COMPLETED'
+        """,
+    )
+    suspend fun qrisRevenueForShift(shiftId: Long): Long
     @Query(
         """
         SELECT COALESCE(SUM(changeGiven), 0) FROM transactions

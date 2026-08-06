@@ -14,7 +14,11 @@ private val rupiahFormatter =
                 minimumFractionDigits = 0
             }
     }
-fun Long.toRupiah(): String = "Rp " + rupiahFormatter.get()!!.format(this)
+fun Long.toRupiah(): String {
+    val formatter = rupiahFormatter.get()
+    return if (formatter != null) "Rp " + formatter.format(this) else "Rp $this"
+}
+fun formatRupiah(amount: Long): String = amount.toRupiah()
 fun Double.roundToRupiah(): Long = this.roundToLong()
 fun Double.formatQuantity(): String {
     val isWholeNumber = this % 1.0 == 0.0

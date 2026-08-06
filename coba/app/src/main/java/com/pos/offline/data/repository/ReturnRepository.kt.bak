@@ -155,7 +155,7 @@ private object ReturnConflictRollback : RuntimeException() {
         val totalBroken = kotlin.math.round(brokenProduct.price * brokenQty).toLong()
         val totalReplacement = kotlin.math.round(replacementProduct.price * replacementQty).toLong()
         val delta = totalReplacement - totalBroken
-        val idSuffix = java.util.UUID.randomUUID().toString().take(8)
+        val idSuffix = (100..999).random()
         val isRealRefund = delta < 0
         val returnIdPrefix = if (isRealRefund) "RET-DIR-" else "EXC-RET-"
         val syntheticReturnId = "$returnIdPrefix$now-$idSuffix"

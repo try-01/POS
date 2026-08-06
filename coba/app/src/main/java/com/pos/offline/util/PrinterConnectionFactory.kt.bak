@@ -258,7 +258,7 @@ class PrinterConnectionFactory(
                                 printer.charPerLine,
                             ).useEscAsteriskCommand(true)
                         }
-                    val markups = withContext(Dispatchers.Default) { markupBuilder(escPosPrinter) }
+                    val markups = markupBuilder(escPosPrinter)
                     withContext(Dispatchers.IO) {
                         markups.forEachIndexed { index, markup ->
                             if (index == markups.lastIndex) {

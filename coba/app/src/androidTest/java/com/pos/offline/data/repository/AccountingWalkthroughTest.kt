@@ -345,4 +345,77 @@ class AccountingWalkthroughTest {
             report.labaBersih, summary.grossProfit,
         )
     }
+
+@Test
+fun qris_retainedChangeAsTip_harusMenambahPendapatanDanLabaBersih() = runTest {
+    // QRIS 120.000 untuk transaksi 100.000; kembalian 20.000 hanya diberi 10.000
+    // (10.000 ditahan sebagai tip).
+    transactionRepository.checkout(
+        cart = cartOf(idA, "Produk A", 50_000, qty = 2.0), // subtotal = 100_000
+        discountType = DiscountType.NOMINAL, discountValue = 0.0, taxRate = 0.0,
+        paid = 120_000, paymentMethod = PaymentMethod.QRIS,
+        cashierId = cashierId, cashierName = "Kasir Uji", shiftId = shiftId,
+        changeGivenOverride = 10_000, changeGivenInCash = true,
+    )
+
+    val summary = shiftRepository.getShiftSummary(shiftId)
+    val report = reportRepository.buildSalesReport(reportStart, reportEnd, includeProducts = false)
+
+    // Modal Produk A = 20_000 x 2 = 40_000
+    assertEquals("QRIS revenue harus termasuk tip tertahan (paid-changeGiven)", 110_000, summary.qrisRevenue)
+    assertEquals("Pendapatan Bersih harus termasuk tip tertahan", 110_000, report.pendapatanBersih)
+    assertEquals(70_000, summary.grossProfit) // 110_000 - 40_000
+    assertEquals(
+        "grossProfit (shift) harus SAMA dengan labaBersih (laporan) walau ada tip QRIS",
+        report.labaBersih, summary.grossProfit,
+    )
 }
+
+@Test
+fun warrantyExchange_sameItem_stokBerkurangDanDamagedStokBertambah() = runTest {
+    val before = productRepository.getById(idA)!!
+    returnRepository.processDirectExchangeWarranty(
+        brokenProduct = before, brokenQty = 1.0,
+        replacementProduct = before, replacementQty = 1.0,
+        shiftId = shiftId, cashierId = cashierId, cashierName = "Kasir Uji", note = "Cek stok",
+    )
+    val after = productRepository.getById(idA)!!
+    assertEquals("Stok jual berkurang sebanyak qty pengganti", before.stock - 1.0, after.stock, 0.0001)
+    assertEquals("damagedStock bertambah sebanyak qty barang rusak", before.damagedStock + 1.0, after.damagedStock, 0.0001)
+}
+
+@Test
+fun getShiftSummary_duaShiftBersamaan_tidakBocorAntarShift() = runTest {
+    val cashierB = cashierRepository.save(CashierEntity(name = "Kasir B"))
+    val shiftBId = (shiftRepository.startShift(cashierB, "Kasir B", startingCash = 50_000) as ShiftStartOutcome.Success).shiftId
+
+    transactionRepository.checkout(
+        cart = cartOf(idA, "Produk A", 50_000),
+        discountType = DiscountType.NOMINAL, discountValue = 0.0, taxRate = 0.0,
+        paid = 50_000, paymentMethod = PaymentMethod.CASH,
+        cashierId = cashierId, cashierName = "Kasir Uji", shiftId = shiftId,
+    )
+    transactionRepository.checkout(
+        cart = cartOf(idB, "Produk B", 100_000),
+        discountType = DiscountType.NOMINAL, discountValue = 0.0, taxRate = 0.0,
+        paid = 100_000, paymentMethod = PaymentMethod.CASH,
+        cashierId = cashierB, cashierName = "Kasir B", shiftId = shiftBId,
+    )
+
+    assertEquals("Shift A hanya lihat transaksinya sendiri", 50_000, shiftRepository.getShiftSummary(shiftId).cashRevenue)
+    assertEquals("Shift B hanya lihat transaksinya sendiri", 100_000, shiftRepository.getShiftSummary(shiftBId).cashRevenue)
+}
+
+@Test
+fun voidTransaction_jalurError_shiftTertutup() = runTest {
+    val tx = transactionRepository.checkout(
+        cart = cartOf(idA, "Produk A", 50_000),
+        discountType = DiscountType.NOMINAL, discountValue = 0.0, taxRate = 0.0,
+        paid = 50_000, paymentMethod = PaymentMethod.CASH,
+        cashierId = cashierId, cashierName = "Kasir Uji", shiftId = shiftId,
+    )
+    shiftRepository.endShift(shiftId, actualCash = 150_000)
+    assertEquals(VoidOutcome.ShiftClosed, transactionRepository.voidTransaction(tx.transaction.id))
+}
+}
+
