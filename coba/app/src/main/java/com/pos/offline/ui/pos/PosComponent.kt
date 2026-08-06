@@ -89,6 +89,15 @@ import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.runtime.CompositionLocalProvider
 import io.iamjosephmj.flinger.configs.FlingConfiguration
 import io.iamjosephmj.flinger.flings.flingBehavior
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 @Composable
 internal fun ShiftIndicatorBar(
     openShift: ShiftEntity?,
@@ -302,6 +311,7 @@ internal fun ProductPane(
     cartQtyByProductId: Map<Long, Double>,
     onAdd: (ProductEntity) -> Unit,
 ) {
+    var selectedProductForDetails by remember { mutableStateOf<ProductEntity?>(null) }
     CompositionLocalProvider(
         LocalOverscrollConfiguration provides null
     ) {
@@ -326,9 +336,16 @@ internal fun ProductPane(
                 product = product,
                 remainingStock = product.stock - qtyInCart,
                 onAdd = { onAdd(product) },
+                onLongClick = { selectedProductForDetails = product }
             )
             }
         }
+    }
+    selectedProductForDetails?.let { product ->
+        ProductDetailPopup(
+            product = product,
+            onDismiss = { selectedProductForDetails = null }
+        )
     }
 }
 @Composable
@@ -340,68 +357,78 @@ private fun ProductCard(
     val outOfStock = remainingStock <= 0.0
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(6.dp),
-        onClick = onAdd,
+        contentPadding = PaddingValues(0.dp),
+        onClick = null
     ) {
-        Column {
-            Text(
-                text = product.name,
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = product.sku,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = product.price.toRupiah(),
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    Text(
-                        text = if (outOfStock) "Habis" else "Stok: ${remainingStock.formatQuantity()}",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color =
-                            if (outOfStock) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            },
-                    )
-                }
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier =
-                        Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = onAdd,
+                    onLongClick = onLongClick
+                )
+                .padding(6.dp)
+        ) {
+            Column {
+                Text(
+                    text = product.name,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = product.sku,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = product.price.toRupiah(),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = if (outOfStock) "Habis" else "Stok: ${remainingStock.formatQuantity()}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color =
                                 if (outOfStock) {
-                                    MaterialTheme.colorScheme.surfaceVariant
+                                    MaterialTheme.colorScheme.error
                                 } else {
-                                    MaterialTheme.colorScheme.primary
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                 },
-                            ),
-                ) {
-                    Icon(
-                        Icons.Rounded.Add,
-                        contentDescription = "Tambah ${product.name}",
-                        tint =
-                            if (outOfStock) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onPrimary
-                            },
-                        modifier = Modifier.size(14.dp),
-                    )
+                        )
+                    }
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier =
+                            Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (outOfStock) {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    } else {
+                                        MaterialTheme.colorScheme.primary
+                                    },
+                                ),
+                    ) {
+                        Icon(
+                            Icons.Rounded.Add,
+                            contentDescription = "Tambah ${product.name}",
+                            tint =
+                                if (outOfStock) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.onPrimary
+                                },
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
                 }
             }
         }
@@ -1455,4 +1482,129 @@ internal fun DecimalField(
             }
         },
     )
+}
+@Composable
+private fun ProductDetailPopup(
+    product: ProductEntity,
+    onDismiss: () -> Unit,
+) {
+    var visible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        visible = true
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            AnimatedVisibility(
+                visible = visible,
+                enter = fadeIn(tween(250)) + scaleIn(initialScale = 0.8f, animationSpec = tween(250)),
+                exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.8f, animationSpec = tween(200))
+            ) {
+                GlassCard(
+                    modifier = Modifier
+                        .width(320.dp)
+                        .padding(16.dp)
+                        .clickable( // Mencegah klik tembus ke background
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = {} 
+                        ),
+                    cornerRadius = 24.dp,
+                    contentPadding = PaddingValues(20.dp)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Rounded.Inventory2,
+                                contentDescription = null,
+                                modifier = Modifier.size(28.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        
+                        Text(
+                            text = product.name,
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp),
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                        
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            PopupDetailRow("Kategori", product.category.ifBlank { "-" })
+                            PopupDetailRow("SKU", product.sku)
+                            if (product.barcode?.isNotBlank() == true) {
+                                PopupDetailRow("Barcode", product.barcode)
+                            }
+                            PopupDetailRow("Harga Jual", product.price.toRupiah())
+                            PopupDetailRow("Stok Tersedia", product.stock.formatQuantity())
+                            if (product.damagedStock > 0) {
+                                PopupDetailRow("Stok Rusak", product.damagedStock.formatQuantity(), isError = true)
+                            }
+                        }
+                        
+                        Spacer(Modifier.height(8.dp))
+                        
+                        Button(
+                            onClick = onDismiss,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Tutup", fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PopupDetailRow(label: String, value: String, isError: Boolean = false) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+            fontWeight = FontWeight.SemiBold,
+            color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+        )
+    }
 }

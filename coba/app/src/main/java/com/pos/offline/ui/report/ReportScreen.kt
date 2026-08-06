@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -269,7 +270,11 @@ fun ReportScreen(
             LocalOverscrollConfiguration provides null
         ) {
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(inner).imePadding(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .consumeWindowInsets(inner)
+                    .imePadding(),
                 contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 flingBehavior = flingBehavior(

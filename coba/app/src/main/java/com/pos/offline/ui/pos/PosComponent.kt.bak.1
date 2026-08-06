@@ -84,11 +84,6 @@ import com.pos.offline.ui.components.ThousandsSeparatorTransformation
 import com.pos.offline.ui.components.formatPercentTrim
 import com.pos.offline.util.formatQuantity
 import com.pos.offline.util.toRupiah
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.LocalOverscrollConfiguration
-import androidx.compose.runtime.CompositionLocalProvider
-import io.iamjosephmj.flinger.configs.FlingConfiguration
-import io.iamjosephmj.flinger.flings.flingBehavior
 @Composable
 internal fun ShiftIndicatorBar(
     openShift: ShiftEntity?,
@@ -227,34 +222,18 @@ internal fun CompactSearchBar(
         },
     )
 }
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun CategoryChipsRow(
     categories: List<String>,
     selected: String?,
     onSelect: (String?) -> Unit,
 ) {
-    CompositionLocalProvider(
-        LocalOverscrollConfiguration provides null
-    ) {
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            flingBehavior = flingBehavior(
-                scrollConfiguration = FlingConfiguration.Builder()
-                    .scrollViewFriction(0.006f)
-                    .decelerationFriction(0.4f)
-                    .splineInflection(0.5f)
-                    .splineStartTension(0.3f)
-                    .numberOfSplinePoints(150)
-                    .build()
-            )
-        ) {
-            item(key = "__all__") {
-                CategoryChip(label = "Semua", selected = selected == null, onClick = { onSelect(null) })
-            }
-            items(items = categories, key = { it }) { cat ->
-                CategoryChip(label = cat, selected = selected == cat, onClick = { onSelect(cat) })
-            }
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        item(key = "__all__") {
+            CategoryChip(label = "Semua", selected = selected == null, onClick = { onSelect(null) })
+        }
+        items(items = categories, key = { it }) { cat ->
+            CategoryChip(label = cat, selected = selected == cat, onClick = { onSelect(cat) })
         }
     }
 }
@@ -294,7 +273,6 @@ private fun CategoryChip(
         )
     }
 }
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ProductPane(
     modifier: Modifier,
@@ -302,32 +280,20 @@ internal fun ProductPane(
     cartQtyByProductId: Map<Long, Double>,
     onAdd: (ProductEntity) -> Unit,
 ) {
-    CompositionLocalProvider(
-        LocalOverscrollConfiguration provides null
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 104.dp),
+        modifier = modifier.padding(horizontal = 12.dp),
+        contentPadding = PaddingValues(bottom = 96.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 104.dp),
-            modifier = modifier.padding(horizontal = 12.dp),
-            contentPadding = PaddingValues(bottom = 96.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            flingBehavior = flingBehavior(
-                scrollConfiguration = FlingConfiguration.Builder()
-                    .scrollViewFriction(0.006f)
-                    .decelerationFriction(0.02f)
-                    .splineInflection(0.2f)
-                    .numberOfSplinePoints(150)
-                    .build()
-            )
-        ) {
-            items(items = products, key = { it.id }, contentType = { "product" }) { product ->
+        items(items = products, key = { it.id }, contentType = { "product" }) { product ->
             val qtyInCart = cartQtyByProductId[product.id] ?: 0.0
             ProductCard(
                 product = product,
                 remainingStock = product.stock - qtyInCart,
                 onAdd = { onAdd(product) },
             )
-            }
         }
     }
 }
@@ -534,28 +500,13 @@ internal fun CartPaneContent(
             if (showFull) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 Box(
-                modifier =
-                    Modifier
-                        .weight(1f, fill = false)
-                        .fillMaxWidth()
-                        .clipToBounds(),
-            ) {
-                @OptIn(ExperimentalFoundationApi::class)
-                CompositionLocalProvider(
-                    LocalOverscrollConfiguration provides null
+                    modifier =
+                        Modifier
+                            .weight(1f, fill = false)
+                            .fillMaxWidth()
+                            .clipToBounds(),
                 ) {
-                    LazyColumn(
-                        state = listState, 
-                        modifier = Modifier.fillMaxSize(),
-                        flingBehavior = flingBehavior(
-                            scrollConfiguration = FlingConfiguration.Builder()
-                                .scrollViewFriction(0.008f)
-                                .decelerationFriction(0.4f)
-                                .splineInflection(0.05f)
-                                .numberOfSplinePoints(150)
-                                .build()
-                        )
-                    ) {
+                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                         if (cart.isEmpty) {
                             item(key = "empty_cart") {
                                 Box(
@@ -595,7 +546,6 @@ internal fun CartPaneContent(
                                 )
                             }
                         }
-                    }
                     }
                     val showTopFade by remember { derivedStateOf { listState.canScrollBackward } }
                     val showBottomFade by remember { derivedStateOf { listState.canScrollForward } }

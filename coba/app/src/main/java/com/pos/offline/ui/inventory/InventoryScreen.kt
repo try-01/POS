@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -230,6 +231,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                 Modifier
                     .fillMaxSize()
                     .padding(inner)
+                    .consumeWindowInsets(inner)
                     .imePadding(),
             ) {
                 if (products.isEmpty()) {
