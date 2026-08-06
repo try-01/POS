@@ -15,15 +15,15 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Velocity
+import androidx.compose.foundation.gestures.FlingBehavior
+import androidx.compose.runtime.Composable
+import io.iamjosephmj.flinger.configs.FlingConfiguration
+import io.iamjosephmj.flinger.flings.flingBehavior
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.sign
 
-/**
- * Modifier kustom untuk memberikan efek pantulan ujung (rubber-band) gaya iOS.
- * Dipadukan dengan animasi membesar/mengecil (scale).
- */
 fun Modifier.bouncyOverscroll(
     orientation: Orientation = Orientation.Vertical
 ): Modifier = composed {
@@ -33,7 +33,6 @@ fun Modifier.bouncyOverscroll(
     val connection = remember(orientation) {
         var animJob: Job? = null
 
-        // Fungsi terpusat untuk memantulkan kembali konten ke titik 0f
         fun springBackToZero(initialVelocity: Float = 0f) {
             animJob?.cancel()
             animJob = scope.launch {
@@ -41,7 +40,7 @@ fun Modifier.bouncyOverscroll(
                     targetValue = 0f,
                     initialVelocity = initialVelocity,
                     animationSpec = spring(
-                        dampingRatio = 0.55f, // Makin kecil = makin bouncy (0.55f sangat pas untuk iOS feel)
+                        dampingRatio = 0.55f,
                         stiffness = Spring.StiffnessMediumLow
                     )
                 )
@@ -54,9 +53,9 @@ fun Modifier.bouncyOverscroll(
                 val current = translation.value
                 val availableDelta = if (orientation == Orientation.Vertical) available.y else available.x
 
-                // 1. Jika sedang dalam posisi overscroll (mentok) dan pengguna menggeser jari balik ke 0
-                if (current != 0f && sign(availableDelta) != sign(current)) {
-                    animJob?.cancel() // Batalkan animasi mental jika ada sentuhan jari baru
+                // Gunakan threshold > 0.5f agar tidak menginterupsi scroll biasa
+                if (abs(current) > 0.5f && sign(availableDelta) != sign(current)) {
+                    animJob?.cancel()
                     
                     val maxConsumed = if (current > 0) {
                         availableDelta.coerceAtLeast(-current)
@@ -84,10 +83,9 @@ fun Modifier.bouncyOverscroll(
             ): Offset {
                 val availableDelta = if (orientation == Orientation.Vertical) available.y else available.x
 
-                // 2. Tangani tarik paksa melebihi batas (efek kelenturan karet)
                 if (availableDelta != 0f && source == NestedScrollSource.UserInput) {
                     animJob?.cancel()
-                    val resistance = availableDelta * 0.22f // Tingkat kelenturan karet
+                    val resistance = availableDelta * 0.22f
                     scope.launch {
                         val target = (translation.value + resistance).coerceIn(-280f, 280f)
                         translation.snapTo(target)
@@ -99,23 +97,18 @@ fun Modifier.bouncyOverscroll(
 
             override suspend fun onPreFling(available: Velocity): Velocity {
                 val current = translation.value
-                if (current != 0f) {
+                // HANYA interupsi jika BENAR-BENAR sedang dalam posisi overscroll (> 0.5f)
+                if (abs(current) > 0.5f) {
                     val availableVelocity = if (orientation == Orientation.Vertical) available.y else available.x
-                    
-                    // Kembalikan ke 0f dengan membawa momentum kecepatan jari
                     springBackToZero(initialVelocity = availableVelocity * 0.15f)
-
-                    // KUNCI PERBAIKAN: Kembalikan Velocity.Zero agar tidak "mencuri" momentum 
-                    // dan list utama tidak mengunci/stuck.
-                    return Velocity.Zero
                 }
+                // Selalu kembalikan Velocity.Zero agar momentum fling list TIDAK TERPOTONG
                 return Velocity.Zero
             }
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
                 val availableVelocity = if (orientation == Orientation.Vertical) available.y else available.x
 
-                // 3. Jika scroll kencang membentur dinding/ujung list
                 if (availableVelocity != 0f) {
                     val initialVel = (availableVelocity * 0.2f).coerceIn(-1500f, 1500f)
                     springBackToZero(initialVelocity = initialVel)
@@ -126,11 +119,9 @@ fun Modifier.bouncyOverscroll(
         }
     }
 
-    // SAFETY NET: Pemantau otomatis. 
-    // Jika karena suatu hal kustom animasi terhenti/nyangkut di posisi non-zero saat idle,
-    // LaunchedEffect ini menjamin konten AKAN SELALU memantul kembali ke 0f.
+    // Safety net dengan threshold
     LaunchedEffect(translation.value) {
-        if (translation.value != 0f && !translation.isRunning) {
+        if (abs(translation.value) > 0.5f && !translation.isRunning) {
             translation.animateTo(
                 targetValue = 0f,
                 animationSpec = spring(
@@ -138,6 +129,8 @@ fun Modifier.bouncyOverscroll(
                     stiffness = Spring.StiffnessMediumLow
                 )
             )
+        } else if (abs(translation.value) <= 0.5f && translation.value != 0f && !translation.isRunning) {
+            translation.snapTo(0f)
         }
     }
 
@@ -147,7 +140,6 @@ fun Modifier.bouncyOverscroll(
             val current = translation.value
             val absCurrent = abs(current)
 
-            // Efek sedikit membesar/mengecil saat ditarik mentok (maksimal 2.5%)
             val scaleFactor = 1f + (absCurrent * 0.0001f).coerceAtMost(0.025f)
             scaleX = scaleFactor
             scaleY = scaleFactor
@@ -159,3 +151,12 @@ fun Modifier.bouncyOverscroll(
             }
         }
 }
+@Composable
+fun iosGlideFlingBehavior(): FlingBehavior = flingBehavior(
+    scrollConfiguration = FlingConfiguration.Builder()
+        .scrollViewFriction(0.012f)     // Angka ideal: luncuran panjang tapi tetap terkontrol
+        .decelerationFriction(0.025f)   // Perlambatan halus tanpa remah
+        .splineInflection(0.15f)        // Kurva momentum khas iOS
+        .numberOfSplinePoints(150)
+        .build()
+)

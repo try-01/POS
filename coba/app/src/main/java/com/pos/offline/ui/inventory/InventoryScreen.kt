@@ -99,7 +99,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.runtime.CompositionLocalProvider
-import io.iamjosephmj.flinger.behaviours.FlingPresets
+import com.pos.offline.util.iosGlideFlingBehavior
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -249,7 +249,7 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                         contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 96.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.bouncyOverscroll(),
-                        flingBehavior = FlingPresets.iOSStyle()
+                        flingBehavior = iosGlideFlingBehavior()
                     ) {
                         items(
                             items = products,

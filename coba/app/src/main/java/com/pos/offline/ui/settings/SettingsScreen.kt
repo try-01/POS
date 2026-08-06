@@ -82,7 +82,7 @@ import com.pos.offline.util.bouncyOverscroll
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.runtime.CompositionLocalProvider
-import io.iamjosephmj.flinger.behaviours.FlingPresets
+import com.pos.offline.util.iosGlideFlingBehavior
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -213,7 +213,7 @@ fun SettingsScreen(
                         .bouncyOverscroll()
                         .verticalScroll(
                             state = rememberScrollState(),
-                            flingBehavior = FlingPresets.iOSStyle()
+                            flingBehavior = iosGlideFlingBehavior()
                         ),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {

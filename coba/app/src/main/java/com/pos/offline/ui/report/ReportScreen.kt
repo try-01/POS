@@ -143,7 +143,7 @@ import java.util.Locale
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.runtime.CompositionLocalProvider
-import io.iamjosephmj.flinger.behaviours.FlingPresets
+import com.pos.offline.util.iosGlideFlingBehavior
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportScreen(
@@ -278,7 +278,7 @@ fun ReportScreen(
                     .imePadding(),
                 contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                flingBehavior = FlingPresets.iOSStyle()
+                flingBehavior = iosGlideFlingBehavior()
             ) {
                 item(key = "unified_search_actions") {
                     Row(

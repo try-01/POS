@@ -90,7 +90,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.runtime.CompositionLocalProvider
-import io.iamjosephmj.flinger.behaviours.FlingPresets
+import com.pos.offline.util.iosGlideFlingBehavior
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -251,7 +251,7 @@ internal fun CategoryChipsRow(
         LazyRow(
             modifier = Modifier.bouncyOverscroll(Orientation.Horizontal),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            flingBehavior = FlingPresets.smooth()
+            flingBehavior = iosGlideFlingBehavior()
         ) {
             item(key = "__all__") {
                 CategoryChip(label = "Semua", selected = selected == null, onClick = { onSelect(null) })
@@ -318,7 +318,7 @@ internal fun ProductPane(
             contentPadding = PaddingValues(bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            flingBehavior = FlingPresets.iOSStyle()
+            flingBehavior = iosGlideFlingBehavior()
         ) {
             items(items = products, key = { it.id }, contentType = { "product" }) { product ->
             val qtyInCart = cartQtyByProductId[product.id] ?: 0.0
@@ -566,7 +566,7 @@ internal fun CartPaneContent(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         state = listState, 
-                        flingBehavior = FlingPresets.quickStop()
+                        flingBehavior = iosGlideFlingBehavior()
                     ) {
                         if (cart.isEmpty) {
                             item(key = "empty_cart") {
