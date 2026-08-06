@@ -91,11 +91,9 @@ import com.pos.offline.util.HardwareScannerInterceptor
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
-import androidx.compose.foundation.gestures.TargetedFlingBehavior
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.runtime.CompositionLocalProvider
-import io.iamjosephmj.flinger.configs.FlingConfiguration
-import io.iamjosephmj.flinger.flings.flingBehavior
+import io.iamjosephmj.flinger.behaviours.FlingPresets
 private enum class Dest(
     val label: String,
 ) {
@@ -277,15 +275,7 @@ private fun AppRoot() {
                         .fillMaxSize()
                         .graphicsLayer { alpha = pageAlpha.value },
                 userScrollEnabled = !menuExpanded && !imeVisible && !isJumping && !isRestoringDatabase,
-                flingBehavior = (flingBehavior(
-                    scrollConfiguration = FlingConfiguration.Builder()
-                        .scrollViewFriction(0.006f)
-                        .decelerationFriction(0.02f)
-                        .gravitationalForce(7.0f) // Gravitasi lebih lambat/floaty seperti di bulan
-                        .numberOfSplinePoints(150)
-                        .build()
-                ) as? TargetedFlingBehavior)
-                    ?: PagerDefaults.flingBehavior(state = pagerState)
+                flingBehavior = FlingPresets.snappy()
             ) { page ->
             val dest = Dest.entries[page]
             when (dest) {

@@ -90,7 +90,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.runtime.CompositionLocalProvider
-import io.iamjosephmj.flinger.behaviours.FlingPresets
+import io.iamjosephmj.flinger.configs.FlingConfiguration
+import io.iamjosephmj.flinger.flings.flingBehavior
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -251,7 +252,15 @@ internal fun CategoryChipsRow(
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.bouncyOverscroll(Orientation.Horizontal),
-            flingBehavior = FlingPresets.smooth()
+            flingBehavior = flingBehavior(
+                scrollConfiguration = FlingConfiguration.Builder()
+                    .scrollViewFriction(0.005f)
+                    .decelerationFriction(0.5f)
+                    .splineInflection(0.45f) // Efek lengkung pantul lebih agresif
+                    .splineStartTension(0.3f)
+                    .numberOfSplinePoints(150)
+                    .build()
+            )
         ) {
             item(key = "__all__") {
                 CategoryChip(label = "Semua", selected = selected == null, onClick = { onSelect(null) })
@@ -318,7 +327,14 @@ internal fun ProductPane(
             contentPadding = PaddingValues(bottom = 96.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
-            flingBehavior = FlingPresets.iOSStyle()
+            flingBehavior = flingBehavior(
+                scrollConfiguration = FlingConfiguration.Builder()
+                    .scrollViewFriction(0.006f)
+                    .decelerationFriction(0.02f)
+                    .splineInflection(0.2f)
+                    .numberOfSplinePoints(150)
+                    .build()
+            )
         ) {
             items(items = products, key = { it.id }, contentType = { "product" }) { product ->
             val qtyInCart = cartQtyByProductId[product.id] ?: 0.0
@@ -566,7 +582,14 @@ internal fun CartPaneContent(
                     LazyColumn(
                         state = listState, 
                         modifier = Modifier.fillMaxSize(),
-                        FlingPresets.quickStop()
+                        flingBehavior = flingBehavior(
+                            scrollConfiguration = FlingConfiguration.Builder()
+                                .scrollViewFriction(0.008f)
+                                .decelerationFriction(0.4f)
+                                .splineInflection(0.05f)
+                                .numberOfSplinePoints(150)
+                                .build()
+                        )
                     ) {
                         if (cart.isEmpty) {
                             item(key = "empty_cart") {
