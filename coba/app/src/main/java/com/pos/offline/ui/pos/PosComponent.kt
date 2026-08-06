@@ -88,6 +88,7 @@ import com.pos.offline.util.toRupiah
 import com.pos.offline.util.bouncyOverscroll
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.runtime.CompositionLocalProvider
 import io.iamjosephmj.flinger.configs.FlingConfiguration
 import io.iamjosephmj.flinger.flings.flingBehavior
