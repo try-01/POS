@@ -94,12 +94,6 @@ import com.pos.offline.util.ExcelManager
 import com.pos.offline.util.formatQuantity
 import com.pos.offline.util.toRupiah
 import kotlinx.coroutines.launch
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.LocalOverscrollConfiguration
-import androidx.compose.runtime.CompositionLocalProvider
-import io.iamjosephmj.flinger.configs.FlingConfiguration
-import io.iamjosephmj.flinger.flings.flingBehavior
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InventoryScreen(viewModel: InventoryViewModel) {
@@ -239,21 +233,9 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                         topSalesRangeLabel = topSalesRange.label,
                     )
                 } else {
-                @OptIn(ExperimentalFoundationApi::class)
-                CompositionLocalProvider(
-                    LocalOverscrollConfiguration provides null
-                ) {
                     LazyColumn(
                         contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 96.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
-                        flingBehavior = flingBehavior(
-                            scrollConfiguration = FlingConfiguration.Builder()
-                                .scrollViewFriction(0.006f)
-                                .decelerationFriction(0.02f)
-                                .splineInflection(0.2f)
-                                .numberOfSplinePoints(150)
-                                .build()
-                        )
                     ) {
                         items(
                             items = products,
@@ -268,7 +250,6 @@ fun InventoryScreen(viewModel: InventoryViewModel) {
                     }
                 }
             }
-        }
         }
         SmallFloatingActionButton(
             onClick = viewModel::startAdd,

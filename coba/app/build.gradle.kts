@@ -94,7 +94,7 @@ dependencies {
     implementation("androidx.room:room-ktx:$room_version")
 
     // ===== COMPOSE & UI =====
-    val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
+    val composeBom = platform("androidx.compose:compose-bom:2025.04.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -128,6 +128,8 @@ dependencies {
     implementation("org.dhatim:fastexcel-reader:0.20.2")
     implementation("com.fasterxml:aalto-xml:1.4.0")
     implementation("javax.xml.stream:stax-api:1.0-2")
+
+    implementation("com.github.iamjosephmj:flinger:2.1.0")
 
     // ===== TESTING =====
     testImplementation("junit:junit:4.13.2")

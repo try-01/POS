@@ -138,11 +138,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.LocalOverscrollConfiguration
-import androidx.compose.runtime.CompositionLocalProvider
-import io.iamjosephmj.flinger.configs.FlingConfiguration
-import io.iamjosephmj.flinger.flings.flingBehavior
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportScreen(
@@ -264,23 +259,10 @@ fun ReportScreen(
             },
             contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.navigationBars),
         ) { inner ->
-        @OptIn(ExperimentalFoundationApi::class)
-        CompositionLocalProvider(
-            LocalOverscrollConfiguration provides null
-        ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(inner).imePadding(),
                 contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                flingBehavior = flingBehavior(
-                    scrollConfiguration = FlingConfiguration.Builder()
-                        .scrollViewFriction(0.007f)
-                        .decelerationFriction(0.06f)
-                        .splineInflection(0.35f)
-                        .splineEndTension(0.6f)
-                        .numberOfSplinePoints(150)
-                        .build()
-                )
             ) {
                 item(key = "unified_search_actions") {
                     Row(
@@ -562,7 +544,6 @@ fun ReportScreen(
                     }
                 }
             }
-        }
         }
         androidx.compose.animation.AnimatedVisibility(
             visible = showDirectWarrantyScreen,
