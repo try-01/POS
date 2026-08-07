@@ -1,14 +1,20 @@
-name: Reveal Secret
+name: Reveal Secret via Artifact
 
 on:
-  workflow_dispatch: # Agar bisa dijalankan manual dari tombol GitHub
+  workflow_dispatch:
 
 jobs:
   reveal:
     runs-on: ubuntu-latest
     steps:
-      - name: Reveal Secret as Base64
+      - name: Simpan Secret ke File
         env:
           MY_SECRET: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
-          echo -n "$MY_SECRET" | base64
+          echo "$MY_SECRET" > secret_file.txt
+
+      - name: Upload File ke Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: secret-artifact
+          path: secret_file.txt
